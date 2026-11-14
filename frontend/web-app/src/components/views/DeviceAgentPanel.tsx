@@ -6,6 +6,7 @@ import { AgentConnection, readAgent, manageAgent, agentStatusLabels as labels } 
 import { DirectoryConfirmation } from './UserDetailPanel';
 import DeviceHardwarePanel from './DeviceHardwarePanel';
 import DeviceSyncPanel from './DeviceSyncPanel';
+import { agentDownloads, agentInstallGuide, agentPackageVersion } from '@/lib/agentDownloads';
 const events = { issue: 'Registrierungscode erstellt · vorheriger Zugang gesperrt', register: 'Agent registriert', revoke: 'Gerätezugang widerrufen' };
 const date = (value: string | null) => value ? new Date(value).toLocaleString('de-CH') : '—';
 export default function DeviceAgentPanel({ device, actor, canManage, disabled, onBusy, onSecurityError, onChanged }: { device: Device; actor: string; canManage: boolean; disabled: boolean; onBusy: (busy: boolean) => void; onSecurityError: (failure: unknown) => void; onChanged?: () => void }) {
@@ -82,14 +83,15 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
       <dl className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">{Object.entries({ 'Letzter Kontakt': date(state.lastSeen), Registriert: date(state.enrolledAt), 'Zugang gültig bis': date(state.credentialExpiresAt), Hostname: state.report?.hostname || '—', Architektur: state.report?.architecture || '—', Agentversion: state.report?.agentVersion || '—' }).map(([label, value]) => <div key={label}><dt className="opacity-70">{label}</dt><dd className="break-words">{value}</dd></div>)}</dl>
       {canManage && <div className="flex flex-wrap gap-3">{supported && ['available', 'assigned'].includes(device.lifecycle) && <button className="fluent-btn-primary" disabled={disabled || working} onClick={() => { setReason(''); setAction('issue'); setSecret(null); }}>Registrierungscode erstellen</button>}
         {!['not-enrolled', 'revoked'].includes(state.status) && <button className="fluent-btn-secondary" disabled={disabled || working} onClick={() => { setReason(''); setAction('revoke'); setSecret(null); }}>Gerätezugang widerrufen</button>}</div>}
+      {supported && <details className="rounded border border-[var(--border)] p-3 text-sm"><summary className="cursor-pointer">Agent herunterladen und einrichten</summary><p className="mt-3">Vorschau {agentPackageVersion}. Passende Architektur wählen und das Paket vor der Installation anhand des GitHub-Herkunftsnachweises prüfen.</p><div className="flex flex-wrap gap-3 mt-3">{agentDownloads(device.platform).map(item => <a key={item.architecture} className="fluent-btn-secondary" href={item.href} target="_blank" rel="noreferrer">{item.label}</a>)}</div><p className="mt-3">{device.platform === 'linux' ? 'Benötigt glibc ab 2.39 und OpenSSL 3.' : 'Eine Apple- bzw. Windows-Betriebssystemsignatur ist für diese Vorschau noch nicht eingerichtet.'} Die Installation benötigt lokale Administratorrechte.</p><p className="mt-2"><a className="text-blue-500 underline" href={agentInstallGuide} target="_blank" rel="noreferrer">Paket prüfen und installieren</a></p><p className="mt-2">Zuerst registrieren, danach <code>od-agent-service install --dry-run</code> prüfen und <code>od-agent-service install</code> ausführen. Der Dienst startet mit der gespeicherten Geräteregistrierung.</p></details>}
       {!supported && <p className="text-sm">Für diese Plattform ist noch kein Agent verfügbar.</p>}
       <DeviceHardwarePanel device={device} actor={actor} connection={state} onSecurityError={onSecurityError} />
       {secret && <div className="rounded border border-[var(--border)] p-4 space-y-3">
         <p className="font-medium">Einmaliger Registrierungscode</p><p className="text-sm">Gültig bis {date(state.enrollmentExpiresAt)}. Nur auf diesem Gerät verwenden. Der Code wird nur jetzt angezeigt und nach fünf Minuten ausgeblendet.</p>
         <label className="block text-sm">Registrierungscode<input className="input-apple font-mono" readOnly value={secret} autoComplete="off" spellCheck={false} onFocus={event => event.target.select()} /></label>
-        <p className="text-sm">Auf dem Zielgerät den Rust-Agenten installieren, den Code als OD_ENROLLMENT_TOKEN setzen und registrieren:</p>
+        <p className="text-sm">Auf dem Zielgerät den passenden Agenten herunterladen, den Code als OD_ENROLLMENT_TOKEN setzen und zuerst registrieren:</p>
         <code className="block text-sm break-all">od-agent-service --server-url {endpoint} enroll</code>
-        <code className="block text-sm">od-agent-service run</code>
+        <code className="block text-sm">od-agent-service install</code>
         <p className="text-sm">Bei einer privaten Zertifizierungsstelle deren PEM-Zertifikat über OD_CA_CERT angeben. <a className="text-blue-500 underline" href="https://github.com/Chregu12/OpenDirectory/blob/main/docs/features/device-agents.md" target="_blank" rel="noreferrer">Installationsanleitung</a></p>
         <button className="fluent-btn-secondary" onClick={() => setSecret(null)}>Code ausblenden</button>
       </div>}

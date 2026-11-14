@@ -2,6 +2,8 @@
 
 Ab Server 1.0.46 und Rust-Agent 1.2.0 erscheinen [tatsächliche CPU-, Speicher-, Datenträger- und Laufzeitmeldungen](agent-hardware.md) in den Gerätedetails. Ältere Agenten bleiben kompatibel.
 
+Web 1.0.49 bietet [native Downloads und tatsächliche Systemdienst-Installation mit Agent 1.5.0](agent-installation.md). Linux x64/ARM64, macOS Intel/Apple Silicon und Windows x64 sind als Vorschau mit Prüfsummen und GitHub-Herkunftsnachweisen verfügbar; Betriebssystemsignaturen fehlen noch.
+
 Die [Geräteübersicht ab 1.0.45](device-fleet.md) zeigt tatsächlichen Verbindungsstatus und Kontaktzeiten bereits in der Liste, mit Statusfilter, CSV-Export und automatischer Aktualisierung.
 
 Unter `/devices` lassen sich Windows-, macOS- und Linux-Inventargeräte mit dem Rust-Agenten verbinden. Inventar und Agent-Verbindung haben getrennte Versionen: Ein Heartbeat verändert weder Stammdaten noch Benutzerzuweisungen. Dieser Weg liefert Registrierung und tatsächliche Kontaktmeldungen, kein vollständiges MDM.
@@ -16,7 +18,9 @@ Unter `/devices` lassen sich Windows-, macOS- und Linux-Inventargeräte mit dem 
 
 Der Registrierungscode wird ausschließlich in der erfolgreichen Antwort ausgegeben, nach fünf Minuten ausgeblendet und weder im Browser gespeichert noch in der Historie wieder angezeigt. Wird die Antwort verloren, den Status nachlesen und ausdrücklich einen neuen Code erstellen. Keine automatische Schreibwiederholung.
 
-## Agent bauen und registrieren
+## Agent herunterladen und registrieren
+
+Im Gerät **Agent herunterladen und einrichten** öffnen und das passende Paket des [Vorschaureleases 1.5.0](https://github.com/Chregu12/OpenDirectory/releases/tag/agent-v1.5.0) wählen. Archiv und Herkunft vor der Ausführung wie in der [Installationsanleitung](agent-installation.md) prüfen. Server/Gateway ab 1.0.48 verwenden. Linux-Pakete benötigen glibc ab 2.39 und OpenSSL 3.
 
 Auf der jeweiligen Zielplattform mit installiertem Rust aus diesem Repository bauen:
 
@@ -24,9 +28,9 @@ Auf der jeweiligen Zielplattform mit installiertem Rust aus diesem Repository ba
 cargo build --locked --release --manifest-path agent-rust/Cargo.toml
 ```
 
-Die Datei ist `agent-rust/target/release/od-agent-service`, unter Windows `od-agent-service.exe`. Diese Version stellt noch keine signierten Installationspakete oder vorgefertigten Windows-/Linux-Downloads bereit. Der vollständige HTTP-Prozess wurde mit einem tatsächlich kompilierten macOS-Agenten und einer separaten PostgreSQL-Testdatenbank geprüft; Windows-/Linux-Hardware und Autostart bleiben gesondert abzunehmen.
+Die selbst gebaute Datei ist `agent-rust/target/release/od-agent-service`, unter Windows `od-agent-service.exe`. Die fünf nativen Release-Pakete werden auf den jeweiligen Plattformen gebaut und mit tatsächlichen VM-Dienststarts geprüft. Betriebssystemsignaturen und die Abnahme auf physischen Zielgeräten bleiben offen.
 
-Auf macOS/Linux den Code ohne Literal in der Shell-Historie eingeben, dann registrieren:
+Auf macOS/Linux in einer Root-Shell den Code ohne Literal in der Shell-Historie eingeben, dann registrieren:
 
 ```sh
 read -r -s OD_ENROLLMENT_TOKEN
@@ -35,7 +39,8 @@ export OD_ENROLLMENT_TOKEN
 export OD_CA_CERT=/absoluter/pfad/firmen-ca.pem
 od-agent-service --server-url https://opendirectory.heusser.local enroll
 unset OD_ENROLLMENT_TOKEN
-od-agent-service run
+od-agent-service install --dry-run
+od-agent-service install
 ```
 
 Die Standard-Konfiguration liegt unter macOS in `/Library/Application Support/OpenDirectory/agent.json`, unter Linux in `/etc/opendirectory/agent.json`; dafür können Administratorrechte erforderlich sein. Für einen Test als normaler Benutzer zuerst `OD_CONFIG_PATH` auf einen eigenen absoluten Pfad setzen. Unix-Dateien werden atomar mit Modus `0600` gespeichert. Der Bootstrap-Code wird nach erfolgreicher Registrierung aus der Konfiguration entfernt. `OD_CA_CERT` wird als Dateipfad gespeichert; die CA-Datei muss beim späteren Dienstbetrieb weiterhin lesbar sein. TLS-Prüfung und Weiterleitungsverbot bleiben aktiv; `OD_INSECURE` wird abgelehnt.
@@ -45,13 +50,14 @@ Windows: in einer administrativen PowerShell den Code über eine verdeckte Einga
 ```powershell
 $enrollment = Read-Host 'Einmaliger Registrierungscode' -AsSecureString
 $env:OD_ENROLLMENT_TOKEN = [System.Net.NetworkCredential]::new('', $enrollment).Password
-$env:OD_CA_CERT = 'C:\OpenDirectory\firmen-ca.pem' # falls erforderlich
+$env:OD_CA_CERT = "$env:PROGRAMDATA\OpenDirectory\firmen-ca.pem" # falls erforderlich
 .\od-agent-service.exe --server-url https://opendirectory.heusser.local enroll
 Remove-Item Env:OD_ENROLLMENT_TOKEN
-.\od-agent-service.exe run
+.\od-agent-service.exe install --dry-run
+.\od-agent-service.exe install
 ```
 
-Windows speichert standardmäßig unter `%PROGRAMDATA%\OpenDirectory\agent.json`; neue Credential-Dateien werden vor dem Schreiben mit `icacls` auf SYSTEM und lokale Administratoren begrenzt. Windows-Autostart muss als administrative geplante Aufgabe eingerichtet werden. `install` behauptet dort keinen funktionierenden Windows-Dienst. Unter macOS/Linux erstellt `install` die vorhandene LaunchDaemon-/systemd-Konfiguration; beim Autostart muss derselbe geschützte Konfigurationspfad verwendet werden. Den Agenten zunächst interaktiv prüfen; `heartbeat` führt genau eine Meldung aus und beendet sich bei HTTP-Fehlern mit Fehlerstatus.
+Windows speichert standardmäßig unter `%PROGRAMDATA%\OpenDirectory\agent.json`; neue Credential-Dateien werden vor dem Schreiben mit `icacls` auf SYSTEM und lokale Administratoren begrenzt. Agent 1.5.0 richtet mit `install` die tatsächliche SYSTEM-Aufgabe beim Systemstart ein. Unter macOS/Linux startet er den tatsächlichen LaunchDaemon-/systemd-Dienst mit der gespeicherten Registrierung. Konfiguration und CA müssen dauerhaft geschützt bleiben; Windows verlangt beide unter `%PROGRAMDATA%\OpenDirectory`. `--config-path` verwendet denselben absoluten Pfad im Vordergrund und als Dienst. Abweichende bestehende Dienstdefinitionen werden ohne ausdrückliches `--replace-existing` abgelehnt. Details, Vorschau, Fehlerverhalten und Entfernung stehen in der [Installationsanleitung](agent-installation.md). `run` bleibt für den bewussten Vordergrundbetrieb verfügbar; `heartbeat` führt genau eine Meldung aus und beendet sich bei HTTP-Fehlern mit Fehlerstatus.
 
 ## API und Datenhoheit
 
@@ -64,9 +70,9 @@ Device-Migration `008_device_agents.sql` ergänzt zwei Tabellen. Je Gerät beste
 
 Private ownergebundene SQL-Befehle, Row-/Truncate-Guards, Geräte-Locks, endgültiger Live-Checkpoint und Deferred-Commit-Prüfung schützen den Schreibweg. Ein fehlender Receiver, abgelaufene ursprüngliche Autorisierung oder verschwundene Command-Bindung verhindert den Commit. Der privilegierte Datenbankbetreiber bleibt eine Vertrauensgrenze, wie beim bestehenden Inventar.
 
-Der Gateway leitet ausschließlich die beiden exakten POST-Maschinenpfade an den unabhängig prüfenden Device-Service. Gerätecredentials gelten nicht für Personen-, Inventar-, PIM- oder andere Verwaltungs-APIs. Unbekannte Pfade, Methoden und Query-Overrides werden nicht durch diesen Proxy freigegeben. Der Service bleibt zusätzlich rate-limitiert; große Flotten benötigen eine gesonderte Lastabnahme.
+Der Gateway leitet ausschließlich die drei exakten POST-Maschinenpfade für Registrierung, Heartbeat und Synchronisierungsabfrage an den unabhängig prüfenden Device-Service. Gerätecredentials gelten nicht für Personen-, Inventar-, PIM- oder andere Verwaltungs-APIs. Unbekannte Pfade, Methoden und Query-Overrides werden nicht durch diesen Proxy freigegeben. Der Service bleibt zusätzlich rate-limitiert; große Flotten benötigen eine gesonderte Lastabnahme.
 
-Apple-/Android-MDM, Intune, Compliance-Auswertung, LAPS/BitLocker, Softwareverteilung, Wipe und Fernbefehle sind nicht Bestandteil dieses Agent-Protokolls. Geräteberichte sind nicht attestiert. Eine Zuweisung oder Registrierung erteilt keinen Benutzerzugang. Es gibt hier keine bestätigte externe Providerwirkung oder ausgelieferte Ereignis-Outbox.
+Die [eigene Compliance-Auswertung](device-compliance.md) und [befristete Synchronisierungsaufträge](device-sync.md) ergänzen das Protokoll. Apple-/Android-MDM, Intune, LAPS-/BitLocker-Verwaltung, Softwareverteilung, Wipe und weitere Fernbefehle bleiben offen. Geräteberichte sind nicht attestiert. Eine Zuweisung oder Registrierung erteilt keinen Benutzerzugang. Es gibt hier keine bestätigte externe Providerwirkung oder ausgelieferte Ereignis-Outbox.
 
 
 Ab Agent 1.4.0 ergänzt [Gerät synchronisieren](device-sync.md) den tatsächlichen Verbindungsweg um befristete eigene Aufträge. Agent 1.4 benötigt den Server/Gateway ab 1.0.48. Der jeweilige Produktivstand steht im [Liefernachweis](../deployment/device-sync-2026-11-14.json).

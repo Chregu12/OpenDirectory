@@ -1,0 +1,528 @@
+{
+  "checkedAt": "2026-11-14T18:04:20.308740+00:00",
+  "status": "deployed",
+  "appVersion": "1.0.49",
+  "chart": "opendirectory-lite-0.1.52",
+  "rustAgentVersion": "1.5.0",
+  "baselineCommit": "790d8b948f988189af20455835be3f155a958944",
+  "agentSourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+  "url": "https://opendirectory.heusser.local/devices",
+  "features": [
+    "Five native platform/CPU-specific archives with binary manifests, SHA-256 and verified GitHub provenance",
+    "Actual protected systemd, LaunchDaemon and Windows SYSTEM scheduled-task installation using the saved enrollment",
+    "Read-free dry-run, explicit config path, private configuration, safe parameter serialization and refusal/explicit backup of different service definitions",
+    "Responsive device detail download guidance bound to the immutable preview release tag"
+  ],
+  "release": {
+    "tag": "agent-v1.5.0",
+    "url": "https://github.com/Chregu12/OpenDirectory/releases/tag/agent-v1.5.0",
+    "prerelease": true,
+    "assets": [
+      {
+        "fileName": "opendirectory-agent-1.5.0-windows-x86_64.zip",
+        "sha256": "0dd2282bce9dcd28e8ad1b3197a846a8d75053edace807a1ce2f33bbdf8e26ff",
+        "manifest": {
+          "schemaVersion": 1,
+          "version": "1.5.0",
+          "platform": "windows",
+          "architecture": "x86_64",
+          "target": "x86_64-pc-windows-msvc",
+          "sourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+          "binary": "od-agent-service.exe",
+          "binarySha256": "18afeaf665fac7c9bf5eef06030444ae00084421adc96376121c4dc41fb4e108",
+          "osCodeSigning": "not-configured",
+          "minimumServerVersion": "1.0.48",
+          "linuxRuntime": null
+        },
+        "provenanceVerified": true
+      },
+      {
+        "fileName": "opendirectory-agent-1.5.0-macos-aarch64.tar.gz",
+        "sha256": "aaf29edd1fa8cd0897b82428571a1c96d2fb8667ac473dadcef0d440e5ee6cb7",
+        "manifest": {
+          "schemaVersion": 1,
+          "version": "1.5.0",
+          "platform": "macos",
+          "architecture": "aarch64",
+          "target": "aarch64-apple-darwin",
+          "sourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+          "binary": "od-agent-service",
+          "binarySha256": "a138a20fbf15914b0d04ce0eb68870657172c19c6500741bdbfb84cbb0b8465a",
+          "osCodeSigning": "not-configured",
+          "minimumServerVersion": "1.0.48",
+          "linuxRuntime": null
+        },
+        "provenanceVerified": true
+      },
+      {
+        "fileName": "opendirectory-agent-1.5.0-linux-x86_64.tar.gz",
+        "sha256": "939bb16ddb870139ff41587be162eea4020919d68245cc9215afe1ca6c6c465e",
+        "manifest": {
+          "schemaVersion": 1,
+          "version": "1.5.0",
+          "platform": "linux",
+          "architecture": "x86_64",
+          "target": "x86_64-unknown-linux-gnu",
+          "sourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+          "binary": "od-agent-service",
+          "binarySha256": "4848a3f3900a30dde027fd36a644091c0f6ce227e5bc2ed2d17fd7acd1ea05c7",
+          "osCodeSigning": "not-configured",
+          "minimumServerVersion": "1.0.48",
+          "linuxRuntime": "glibc 2.39 or newer and OpenSSL 3 runtime libraries"
+        },
+        "provenanceVerified": true
+      },
+      {
+        "fileName": "opendirectory-agent-1.5.0-linux-aarch64.tar.gz",
+        "sha256": "c9ef48bf106ddee295e958804d6f662ae0f5f32c8abaafaeeff0b7955ceb8297",
+        "manifest": {
+          "schemaVersion": 1,
+          "version": "1.5.0",
+          "platform": "linux",
+          "architecture": "aarch64",
+          "target": "aarch64-unknown-linux-gnu",
+          "sourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+          "binary": "od-agent-service",
+          "binarySha256": "c3d1571c58ebed20a4a94eba984aa36f27906f6ec3c71fe82e67fbf0c05b1260",
+          "osCodeSigning": "not-configured",
+          "minimumServerVersion": "1.0.48",
+          "linuxRuntime": "glibc 2.39 or newer and OpenSSL 3 runtime libraries"
+        },
+        "provenanceVerified": true
+      },
+      {
+        "fileName": "opendirectory-agent-1.5.0-macos-x86_64.tar.gz",
+        "sha256": "4c230152948e34823d29a53a51fd20cad1eb1e5b89ba8bbccb004dca6b750763",
+        "manifest": {
+          "schemaVersion": 1,
+          "version": "1.5.0",
+          "platform": "macos",
+          "architecture": "x86_64",
+          "target": "x86_64-apple-darwin",
+          "sourceCommit": "7767146c4fa6e4ccf357c99ef23e154b765f0e53",
+          "binary": "od-agent-service",
+          "binarySha256": "62c0de9f0b7d09393d43d241f48a3cbe156d2184f61ad28a832f99ea1be56e7a",
+          "osCodeSigning": "not-configured",
+          "minimumServerVersion": "1.0.48",
+          "linuxRuntime": null
+        },
+        "provenanceVerified": true
+      }
+    ],
+    "publicDownloads": [
+      {
+        "name": "opendirectory-agent-1.5.0-linux-aarch64.tar.gz",
+        "sha256": "c9ef48bf106ddee295e958804d6f662ae0f5f32c8abaafaeeff0b7955ceb8297",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-linux-aarch64.tar.gz.sha256",
+        "sha256": "1f04bf0bb3a7524536709ee21115ab5bfffbc648ec5c00b8af25ffb0f0753e02",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-linux-x86_64.tar.gz",
+        "sha256": "939bb16ddb870139ff41587be162eea4020919d68245cc9215afe1ca6c6c465e",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-linux-x86_64.tar.gz.sha256",
+        "sha256": "1bce5a191b0d7efcbd8e4cbdd560c4d6f06fd99cf6cd9d28b2f135455c89ec61",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-macos-aarch64.tar.gz",
+        "sha256": "aaf29edd1fa8cd0897b82428571a1c96d2fb8667ac473dadcef0d440e5ee6cb7",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-macos-aarch64.tar.gz.sha256",
+        "sha256": "4a4cbac715be4c8cd2ac646699054bcd1384edb82197d67a4898dc3ba60d5259",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-macos-x86_64.tar.gz",
+        "sha256": "4c230152948e34823d29a53a51fd20cad1eb1e5b89ba8bbccb004dca6b750763",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-macos-x86_64.tar.gz.sha256",
+        "sha256": "f657a03d6e59e31e4b2bc331f0b449b7aaac5b294913370b5d169ba06a2fb9b6",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-windows-x86_64.zip",
+        "sha256": "0dd2282bce9dcd28e8ad1b3197a846a8d75053edace807a1ce2f33bbdf8e26ff",
+        "publicDownloadVerified": true
+      },
+      {
+        "name": "opendirectory-agent-1.5.0-windows-x86_64.zip.sha256",
+        "sha256": "2c13beb0a5206068e63b742f1931ee6acbe58751b275a9cee4540769bd3499f2",
+        "publicDownloadVerified": true
+      }
+    ]
+  },
+  "nativeCi": {
+    "mainWorkflowRunId": 43622001219,
+    "releaseWorkflowRunId": 43622676274,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43622676274",
+    "sourceRef": "refs/tags/agent-v1.5.0",
+    "fiveJobsSucceeded": true,
+    "nativeGitHubHostedRunnersOnly": true,
+    "reports": [
+      {
+        "platform": "macos",
+        "architecture": "x86_64",
+        "version": "1.5.0",
+        "nativeManagerStarted": true,
+        "actualHeartbeats": 3,
+        "customConfigPathWithSpacesAndPercent": true,
+        "idempotentReinstall": true,
+        "differentDefinitionRefused": true,
+        "explicitReplacementStarted": true,
+        "privateConfiguration": true
+      },
+      {
+        "platform": "linux",
+        "architecture": "aarch64",
+        "version": "1.5.0",
+        "nativeManagerStarted": true,
+        "actualHeartbeats": 3,
+        "customConfigPathWithSpacesAndPercent": true,
+        "idempotentReinstall": true,
+        "differentDefinitionRefused": true,
+        "explicitReplacementStarted": true,
+        "privateConfiguration": true
+      },
+      {
+        "platform": "linux",
+        "architecture": "x86_64",
+        "version": "1.5.0",
+        "nativeManagerStarted": true,
+        "actualHeartbeats": 3,
+        "customConfigPathWithSpacesAndPercent": true,
+        "idempotentReinstall": true,
+        "differentDefinitionRefused": true,
+        "explicitReplacementStarted": true,
+        "privateConfiguration": true
+      },
+      {
+        "platform": "macos",
+        "architecture": "arm64",
+        "version": "1.5.0",
+        "nativeManagerStarted": true,
+        "actualHeartbeats": 3,
+        "customConfigPathWithSpacesAndPercent": true,
+        "idempotentReinstall": true,
+        "differentDefinitionRefused": true,
+        "explicitReplacementStarted": true,
+        "privateConfiguration": true
+      },
+      {
+        "platform": "windows",
+        "architecture": "AMD64",
+        "version": "1.5.0",
+        "nativeManagerStarted": true,
+        "actualHeartbeats": 3,
+        "customConfigPathWithSpacesAndPercent": true,
+        "idempotentReinstall": true,
+        "differentDefinitionRefused": true,
+        "explicitReplacementStarted": true,
+        "privateConfiguration": true
+      }
+    ],
+    "provenanceVerifiedAgainstWorkflowSourceRefAndDigest": true
+  },
+  "validation": {
+    "frontendUnit": {
+      "suites": 157,
+      "passed": 3223
+    },
+    "frontendTypecheck": true,
+    "focusedFrontendUnit": {
+      "suites": 2,
+      "passed": 11
+    },
+    "localRustUnit": {
+      "passed": 14,
+      "lockedDependencies": true,
+      "platform": "macos"
+    },
+    "pythonPackageUnit": {
+      "passed": 3
+    },
+    "actualCompiledRustPostgresHttp": {
+      "passed": 1,
+      "agentVersion": "1.5.0",
+      "enrollmentHardwareComplianceSyncAndRevocation": true
+    },
+    "developmentBrowser": {
+      "passed": 8,
+      "scope": "device inventory and sync"
+    },
+    "productionImageBrowser": {
+      "passed": 14,
+      "scope": "device inventory, fleet, compliance, sync and native downloads"
+    },
+    "productionImageHttpRouting": {
+      "isolatedHttpReceiver": true,
+      "checks": [
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/cancel",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/history",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/device-agent/sync/claim",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/compliance",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/compliance/history?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance?status=unknown&platform=linux",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/capabilities",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies/linux/history?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies/linux",
+          "method": "PUT",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/device-agent/heartbeat",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/inventory",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/fleet/export?connectionStatus=offline",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/export?platform=linux",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/lifecycle",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        }
+      ]
+    },
+    "gitDiffCheck": true
+  },
+  "deployment": {
+    "baselineRevision": 83,
+    "revision": 84,
+    "readyDeployments": 11,
+    "changedServices": [
+      "web-app"
+    ],
+    "unrelatedDeploymentCount": 10,
+    "unrelatedDeploymentSpecsUnchanged": true,
+    "reviewedResourceCount": 49,
+    "databaseMigrationRequired": false,
+    "status": "deployed"
+  },
+  "publishedImages": {
+    "web-app": {
+      "image": "harbor.heusser.local/opendirectory/web-app:1.0.49",
+      "digest": "sha256:fe98b819a2cbf4cb17d146190e21629a22c207f903245d1a2b8b375261fa476b"
+    }
+  },
+  "runtimeArtifacts": {
+    "web-app": {
+      "pod": "opendirectory-web-app-755d9c65bc-9x8zx",
+      "image": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.49",
+        "digest": "sha256:fe98b819a2cbf4cb17d146190e21629a22c207f903245d1a2b8b375261fa476b"
+      },
+      "arch": "x64",
+      "uid": 1001,
+      "buildId": "Xpxsp__vDklUenoe4CoEO",
+      "hashes": {
+        "src/components/views/DeviceInventoryView.tsx": "058ca084da0f8a99203130df94abec128ffbaed9b0b4552b8b31cf60c8d7b472",
+        "src/components/views/DeviceAgentPanel.tsx": "6848ceaca870a0b275195886129f6ed9398a57c0b9bd2eca7d4829693f1404ea",
+        "src/lib/deviceAgents.ts": "61a93f332855ee7c9d8d0ecb3248d8f483e0522c00702aeade0845936ca671dd",
+        "src/lib/deviceInventory.ts": "712d76f255e4c2c32025c49bdf89bc3bc103ac470793efe9bf12dc68bc5d749b",
+        "src/components/views/DeviceHardwarePanel.tsx": "cbd64eebc487790777f4a6a674c1cf88938da617e364f6dcf6de1daffdc40806",
+        "src/lib/agentInventory.ts": "70c60c9d3629bb3a96d87a69ad93f764c51995a35feb80777b7d32395bad1ae8",
+        "next.config.js": "f93010276173a7bec2ac7507e40731c6f2562f4d43a5a0a42a921f5718fdf301",
+        "src/app/[view]/page.tsx": "61c72b45df2ea116cf0cfe987f737c660336af8bd2a57dfede3399845bb7363b",
+        "src/components/views/DeviceCompliancePanel.tsx": "d687b5c11a989607155fe321ab9107eeb50426c6744a6740948ea2cbf213c8dd",
+        "src/components/views/DeviceComplianceView.tsx": "de0ce44d7a793d338c8991530f15cc090cf9322d086cffff92b10561d5af0d7b",
+        "src/lib/deviceCompliance.ts": "7776043c957820b5ca6f86300af91221ca68c43ea88019469abb2fff2be01a11",
+        "src/components/views/DeviceSyncPanel.tsx": "06063e5760257b3d9ee4503f05d21be45a8ad250d81445da457ec507575c61be",
+        "src/lib/deviceSync.ts": "6be0ce4779fb4158d3bd0f6a2d2117258fde30f025eb9fcba9d960edff4b4c96",
+        "src/lib/agentDownloads.ts": "b97b158ad7b6fc5f73e3fe0f617b2aa3dff6e260978a3d77d2b1c8fb5b8f3c51"
+      }
+    }
+  },
+  "publicChecks": {
+    "devicesPage": 200,
+    "compliancePage": 200,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/history": 401,
+    "/api/identity/device-compliance": 401,
+    "/api/devices/compliance": 401,
+    "/api/devices/compliance/capabilities": 401,
+    "/api/devices/compliance/policies": 401,
+    "/api/devices/compliance/policies/linux/history": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/compliance": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/compliance/history": 401,
+    "/api/devices": 401,
+    "/api/devices/fleet": 401,
+    "/api/devices/fleet/export": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/inventory": 401,
+    "/api/device-agent/register": 401,
+    "/api/device-agent/heartbeat": 401,
+    "/api/device-agent/register?tenantId=foreign": 400,
+    "lifecycleUnauthenticated": 401,
+    "policyWriteUnauthenticated": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync POST": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/cancel POST": 401,
+    "/api/device-agent/sync/claim POST": 401,
+    "cssSha256": "af006d9c602b440a019b155457cdab9a3b4f1a5c6fae209bdf1c6db9abaf3e55",
+    "tlsVerified": true,
+    "productionHumanLoginPerformed": false
+  },
+  "publicDeviceJavascript": {
+    "checkedScripts": 10,
+    "verified": [
+      {
+        "path": "/_next/static/chunks/305uu_cp9-hbm.js",
+        "sha256": "f8af888b616436ab92215c2fb9b9de9d2a95670cd2582c65dec163badd454416",
+        "matchesRunningPod": true,
+        "releaseDownloadGuidancePresent": true
+      }
+    ]
+  },
+  "deviceAndComplianceDataMatchesPriorRevision83Evidence": true,
+  "deviceAndComplianceData": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_requests": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_connections": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policies": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policy_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policy_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "productionTestUsersDevicesOrPersonalGrantsCreated": false,
+  "serviceInstalledOnDeveloperMac": false,
+  "limitations": [
+    "Preview packages have verified GitHub build provenance; Apple Developer ID/notarization and Windows Authenticode are not configured",
+    "Native manager startup and real telemetry were tested on five disposable native VMs; physical-device reboot, encryption and firewall calibration remain open",
+    "Linux GNU binaries require glibc 2.39 or newer and OpenSSL 3 runtime libraries",
+    "Agent-reported data is not hardware attestation; package build provenance does not attest device state",
+    "Installation failures are reported; complete automatic rollback of every local installation step is not implemented",
+    "Further remote commands, app deployment, vendor MDM, full BR-001–012, WF-001–005 and implementation worklist remain open"
+  ]
+}

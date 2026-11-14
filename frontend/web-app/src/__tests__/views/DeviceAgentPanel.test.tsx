@@ -46,3 +46,7 @@ test('a response from an old selected device cannot expose a new credential', as
 test('stale command errors never retry or retain the enrollment dialog', async () => {
  (manageAgent as jest.Mock).mockRejectedValue({ response: { status: 412 } }); mount(); await issue(); await screen.findByRole('alert'); expect(manageAgent).toHaveBeenCalledTimes(1); expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 });
+
+test('native package links and installation guidance remain distinct from enrollment secrets',async()=>{
+ mount();fireEvent.click(await screen.findByText('Agent herunterladen und einrichten'));expect(screen.getByRole('link',{name:'Linux · x64'})).toHaveAttribute('href',expect.stringContaining('/agent-v1.5.0/opendirectory-agent-1.5.0-linux-x86_64.tar.gz'));expect(screen.getByRole('link',{name:'Linux · ARM64'})).toBeInTheDocument();expect(screen.getByText('Vorschau 1.5.0.',{exact:false})).toBeInTheDocument();expect(screen.queryByLabelText('Registrierungscode')).not.toBeInTheDocument();
+});
