@@ -19,8 +19,8 @@ RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-
 RUN addgroup -g 1001 -S appstore && \
     adduser -S appstore -u 1001 -G appstore
 
-RUN mkdir -p /app/uploads /app/logs && \
-    chown -R appstore:appstore /app
+RUN mkdir -p /app/uploads /app/logs /data/packages && \
+    chown -R appstore:appstore /app /data
 
 USER appstore
 

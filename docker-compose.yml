@@ -1118,8 +1118,8 @@ services:
   # ── App Store ──────────────────────────────────────────────────────────────
   app-store:
     build:
-      context: ./services/enterprise/app-store
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/enterprise/app-store/Dockerfile
     container_name: opendirectory-app-store
     environment:
       PORT: 3906

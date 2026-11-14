@@ -3,8 +3,8 @@ set -e
 
 REALM="${KRB5_REALM:-OPENDIRECTORY.LOCAL}"
 KDC_HOST="${KDC_HOST:-localhost}"
-ADMIN_PASSWORD="${KRB5_ADMIN_PASSWORD:-changeme}"
-DB_PASSWORD="${KRB5_DB_PASSWORD:-changeme}"
+KDC_ADMIN_PASSWORD="${KRB5_ADMIN_PASSWORD:-changeme}"
+KDC_MASTER_PASSWORD="${KRB5_DB_PASSWORD:-changeme}"
 
 echo "=== Configuring Kerberos KDC ==="
 echo "Realm: $REALM"
@@ -59,10 +59,10 @@ EOF
 # Initialize KDB if not already done
 if [ ! -f /var/lib/krb5kdc/principal ]; then
     echo "Initializing Kerberos database..."
-    echo -e "${DB_PASSWORD}\n${DB_PASSWORD}" | kdb5_util create -s -r "${REALM}"
+    echo -e "${KDC_MASTER_PASSWORD}\n${KDC_MASTER_PASSWORD}" | kdb5_util create -s -r "${REALM}"
 
     # Create admin principal
-    kadmin.local -q "addprinc -pw ${ADMIN_PASSWORD} admin/admin@${REALM}"
+    kadmin.local -q "addprinc -pw ${KDC_ADMIN_PASSWORD} admin/admin@${REALM}"
 
     # Create host principal
     kadmin.local -q "addprinc -randkey host/${KDC_HOST}@${REALM}"
@@ -83,7 +83,4 @@ kadmind -P /var/run/kadmind.pid
 echo "KDC and kadmind started."
 
 # Start the REST admin API
-node /app/src/index.js &
-
-# Keep container running
-tail -f /var/log/syslog 2>/dev/null || tail -f /dev/null
+exec node /app/src/index.js

@@ -35,12 +35,12 @@ for (const width of [390, 1440]) {
     await page.getByLabel('Darstellung').selectOption('light');
     const row = page.getByRole('row', { name: 'PIM-Gruppe Lizenzen' }); const activate = row.getByRole('button', { name: 'Aktivieren' });
     await expect(row).toBeVisible(); await expect(page.getByRole('row', { name: 'PIM-Gruppe Global Security' })).toHaveCount(0);
-    await page.screenshot({ path: `/private/tmp/od-pim-entra-${width}-light.png` });
+    await page.screenshot({ path: test.info().outputPath(`od-pim-entra-${width}-light.png`) });
     await activate.click(); const dialog = page.getByRole('dialog', { name: 'Aktivieren – Lizenzen' }); await expect(dialog).toBeVisible();
     const box = await dialog.locator('.od-pim-blade').boundingBox(); expect(box && box.x >= 0 && box.x + box.width <= width + 1).toBeTruthy();
     await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0); await expect(activate).toBeFocused(); expect(writes).toEqual([]);
     await activate.click(); await dialog.getByLabel('Dauer (Stunden)').fill('10'); await dialog.getByLabel('Begründung').fill('Lizenzzuweisungen für Engineering bearbeiten');
-    await page.screenshot({ path: `/private/tmp/od-pim-entra-${width}-activate.png` });
+    await page.screenshot({ path: test.info().outputPath(`od-pim-entra-${width}-activate.png`) });
     await dialog.getByRole('button', { name: 'Aktivieren', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('wartet auf eine unabhängige Freigabe');
     expect(writes).toHaveLength(1); expect(writes[0].path).toBe('/api/identity/pim/requests');
@@ -49,7 +49,7 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await page.getByRole('tab', { name: 'Aktiv', exact: true }).click(); await expect(page.getByRole('row', { name: 'PIM-Gruppe Global Security' })).toContainText('Direkt aktiv');
     await expect(page.getByRole('row', { name: 'PIM-Gruppe Lizenzen' })).toHaveCount(0);
-    await page.getByLabel('Darstellung').selectOption('dark'); await page.screenshot({ path: `/private/tmp/od-pim-entra-${width}-dark.png` });
+    await page.getByLabel('Darstellung').selectOption('dark'); await page.screenshot({ path: test.info().outputPath(`od-pim-entra-${width}-dark.png`) });
     expect(await page.locator('body').evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(width);
   });
 }
@@ -74,5 +74,5 @@ test('dashboard presents one set of verified metrics and keeps the simplified PI
   await expect(dashboard.getByRole('heading', { name: 'Letzte Anmeldungen' })).toHaveCount(1);
   await expect(dashboard.getByText('Letzte Aktivitäten', { exact: true })).toHaveCount(0);
   await expect(dashboard.getByText('Apps verbunden', { exact: true })).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/od-pim-entra-dashboard.png' });
+  await page.screenshot({ path: test.info().outputPath('od-pim-entra-dashboard.png') });
 });

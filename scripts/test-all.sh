@@ -26,6 +26,7 @@ cd "$ROOT"
 
 # service_dir | invocation
 GATING=(
+  "packages/grpc-event-bus|npm test -- --runInBand"
   "services/core/device-service|npm test -- --forceExit"
   "services/core/conditional-access|npm test -- --forceExit"
   "services/core/api-gateway|npm test -- --forceExit"

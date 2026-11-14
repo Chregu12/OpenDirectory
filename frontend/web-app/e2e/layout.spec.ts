@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {mockApi,seedAuth} from './fixtures/api';
 for(const width of [320,768,1280,1920])test(`navigation remains usable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:900});await seedAuth(page);await mockApi(page);await page.goto('/devices');
- await expect(page.getByRole('heading',{name:'Geräteinventar'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Geräte',exact:true})).toBeVisible();
  if(width<1024)await page.getByRole('button',{name:'Navigation öffnen'}).click();
  const nav=page.getByRole('navigation',{name:'Hauptbereiche'});await expect(nav.getByRole('button',{name:'Devices'})).toHaveAttribute('aria-current','true');
  await expect(nav.getByRole('button',{name:'People'})).toBeVisible();

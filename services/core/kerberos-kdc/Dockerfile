@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     krb5-kdc \
@@ -8,19 +8,16 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     curl \
-    nodejs \
-    npm \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy configuration templates
-COPY config/ /etc/krb5/templates/
+# The entrypoint generates the Kerberos configuration from environment values.
 COPY scripts/ /app/scripts/
 
 # Install Node.js admin API wrapper
 COPY package.json ./
-RUN npm install --production
+RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 COPY src/ ./src/
 

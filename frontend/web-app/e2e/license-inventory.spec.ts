@@ -32,7 +32,7 @@ test('filters renewals and exports only the visible inventory', async ({ page })
  await expect(page.getByText('Overdue Suite',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Filter zurücksetzen'}).click();
  await page.setViewportSize({width:1440,height:1000});
- await page.screenshot({path:'/private/tmp/opendirectory-license-renewals.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('opendirectory-license-renewals.png'),fullPage:true});
 });
 
 test('catalog deletion waits for confirmation', async ({ page }) => {

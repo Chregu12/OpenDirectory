@@ -119,6 +119,9 @@ jobs:
       - name: Install identity integration dependencies
         working-directory: services/core/identity-service
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Install device integration dependencies
+        working-directory: services/core/device-service
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test authoritative group snapshots
         working-directory: services/core/identity-service
         run: npm run test:groups:integration
@@ -191,6 +194,7 @@ jobs:
             services/enterprise/security-scanner \
             services/enterprise/compliance-engine \
             services/core/monitoring-service \
+            packages/grpc-event-bus \
             frontend/web-app ; do
             if ! node -e 'const p=require(process.cwd()+"/"+process.argv[1]+"/package.json"); if(typeof p.scripts?.test!=="string" || !p.scripts.test.trim()) process.exit(1)' "$d"; then
               echo "::error::Expected real test script missing: $d/package.json"
@@ -333,9 +337,22 @@ jobs:
         id: test_frontend_jest
         run: cd frontend/web-app && npm ci && npm test
 
+      - name: Test shared event bus
+        id: test_event_bus
+        run: npm test --workspace @opendirectory/grpc-event-bus -- --runInBand
+
       - name: Frontend e2e tests (Playwright)
         id: test_frontend_e2e
         run: cd frontend/web-app && npm ci && npx playwright install --with-deps chromium && npm run test:e2e
+
+      - name: Preserve browser test evidence
+        if: ${{ !cancelled() && (steps.test_frontend_e2e.outcome == 'success' || steps.test_frontend_e2e.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-evidence
+          path: frontend/web-app/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Test summary
         if: always()
@@ -369,6 +386,7 @@ jobs:
           echo "quick-actions            : ${{ steps.test_quick_actions.outcome }}"
           echo "authentication-service   : ${{ steps.test_authentication.outcome }}"
           echo "frontend unit (jest)     : ${{ steps.test_frontend_jest.outcome }}"
+          echo "shared event bus         : ${{ steps.test_event_bus.outcome }}"
           echo "frontend e2e (playwright): ${{ steps.test_frontend_e2e.outcome }}"
           echo ""
           echo "compliance-engine        : ${{ steps.test_compliance_engine.outcome }}"
@@ -399,6 +417,18 @@ jobs:
       - name: Run npm audit
         run: |
           npm audit --audit-level=high
+
+  runtime-images:
+    name: App Store and Kerberos image startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build and exercise isolated service images
+        run: npm run test:runtime-images
 
   # ===================
   # Docker Build Check

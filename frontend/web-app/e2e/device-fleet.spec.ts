@@ -34,8 +34,8 @@ test('fleet filters real status, exports the selection and refreshes on desktop 
   const exported = page.waitForRequest(request => request.url().includes('/api/devices/fleet/export'));
   await page.getByRole('button', { name: 'CSV exportieren' }).click(); expect(new URL((await exported).url()).searchParams.get('connectionStatus')).toBe('offline'); await expect(page.getByText('CSV-Export bereitgestellt.')).toBeVisible();
   await page.getByLabel('Verbindung filtern').selectOption(''); fixture.connect(); const before = fixture.reads(); await page.clock.fastForward(31000); await expect.poll(() => fixture.reads()).toBeGreaterThan(before); await expect(overview).toContainText('Online2'); await expect(overview).toContainText('Registrierung ausstehend0');
-  await page.screenshot({ path: '/private/tmp/od-device-fleet-desktop.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: '/private/tmp/od-device-fleet-mobile.png', fullPage: true }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('od-device-fleet-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: test.info().outputPath('od-device-fleet-mobile.png'), fullPage: true }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
 test('expiry during automatic refresh clears device data and keeps a return link', async ({ page }) => {

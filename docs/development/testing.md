@@ -63,6 +63,21 @@ including optional profiles, with their configured Dockerfile build contexts.
 build commands or prove that an application starts. Image build/deployment and
 live application verification remain separate checks.
 
+`npm run test:runtime-images` builds the App Store and Kerberos images through their
+actual full-Compose contexts and starts them on an isolated Docker network with
+fresh PostgreSQL databases. The separate CI startup job checks database-backed
+health, denied anonymous catalog/principal requests, non-root writable package
+storage, the patched gRPC dependency, preserved independent PostgreSQL/KDC
+passwords, the foreground Kerberos API and a real native `kinit`/`klist` ticket.
+It removes only its randomly named containers, network and image tags. It requires
+Node 20, Docker and Compose; it does not deploy or prove every other service image.
+
+The App Store image owns its default `/data/packages` directory. Its Compose build
+context must be the repository root because it copies shared packages. Kerberos
+generates its configuration in the entrypoint, uses the same Node 20 runtime as
+CI, preserves the PostgreSQL `DB_PASSWORD`, and runs its REST API in the foreground
+so a crashed API cannot be hidden by an unrelated `tail` process.
+
 The root `npm audit --audit-level=high` now fails on findings and runs independently
 of application tests. Its scope is the root lock and its npm workspaces; nested
 service dependencies outside those workspaces need their own audit. A failed
@@ -81,6 +96,19 @@ empty. It restores retention triggers transactionally and checks their receiver;
 nonempty role history refuses cleanup. `fixtureReset.postgres.cjs` covers retained
 history, rollback, rejected namespaces/commands and historical pre-role schemas.
 Production retention guards are unchanged.
+
+Browser screenshots use `test.info().outputPath(...)`, never a host-specific
+`/private/tmp` path. CI retains the per-test screenshots and failure traces as the
+`frontend-browser-evidence` artifact for seven days. Shared read-only device
+fixtures include the current agent and hardware response contracts, so layout
+and inventory-only checks do not depend on obsolete labels or missing endpoints.
+
+Identity fixture files run serially: each repeatedly creates/drops a complete
+protected schema, and unrelated fixture DDL must not compete against a different
+file's one-second authorization query budget on the same PostgreSQL container.
+Coordinated multi-connection races inside the individual tests remain enabled.
+The integration job installs Device dependencies separately because its real
+Identity/Device company-role checks run in a different runner from Service Tests.
 
 Migration replay tests must run the complete ordered migration set, as service
 startup does. A hand-maintained subset can overwrite a function without updating
