@@ -1,3 +1,5 @@
+# check=skip=SecretsUsedInArgOrEnv
+# AUTH_SERVICE_URL contains a public service endpoint; no credentials belong in build args.
 FROM node:20-alpine
 
 WORKDIR /app/frontend/web-app

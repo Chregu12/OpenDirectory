@@ -69,7 +69,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/local/samba /usr/local/samba
 
 ENV PATH="/usr/local/samba/bin:/usr/local/samba/sbin:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/local/samba/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/samba/lib"
 
 # Symlinks so existing code using /usr/bin/samba-tool and /usr/sbin/samba still works
 RUN ln -s /usr/local/samba/bin/samba-tool  /usr/bin/samba-tool  \

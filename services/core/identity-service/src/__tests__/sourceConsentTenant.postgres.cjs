@@ -31,7 +31,7 @@ before(async()=>{
  const migrations=path.join(__dirname,'../../migrations');
  for(const file of fs.readdirSync(migrations).filter(file=>file.endsWith('.sql')).sort())await pool.query(fs.readFileSync(path.join(migrations,file),'utf8'));
 });
-beforeEach(async()=>{queries=[];await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_group_source_grants,identity_role_review_policies CASCADE');});
+beforeEach(async()=>{queries=[];await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_group_source_grants,identity_role_review_policies CASCADE');});
 after(async()=>{await pool.end();await administration.query('DROP SCHEMA '+schema+' CASCADE');await administration.end();});
 async function person(role='license-scope-administrator',tenant){
  if(tenant===undefined)tenant=await provisionTenant(database,schema,{enabled:true});

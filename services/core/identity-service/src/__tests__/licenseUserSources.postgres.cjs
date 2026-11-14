@@ -21,8 +21,8 @@ let databaseUrl;
 
 before(async () => {
   const files = fs.readdirSync(migrations).filter(filename => filename.endsWith('.sql')).sort();
-  assert.equal(files.length, 55);
-  assert.deepEqual(files.map(filename => filename.slice(0, 3)), Array.from({ length: 55 }, (_, index) => String(index + 1).padStart(3, '0')));
+  assert.equal(files[43], '044_license_user_sources.sql');
+  assert.deepEqual(files.map(filename => filename.slice(0, 3)), Array.from({ length: files.length }, (_, index) => String(index + 1).padStart(3, '0')));
   await administration.query('CREATE SCHEMA ' + schema);
   const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL);
   address.searchParams.set('options', '-c search_path=' + schema + ',public');
@@ -30,7 +30,7 @@ before(async () => {
   process.env.DATABASE_URL = databaseUrl;
   database = require('../db');
   assert.equal(await database.initDb(), true);
-  await database.query('TRUNCATE identity_tenants,users,groups,ous CASCADE');
+  await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(database.pool,'TRUNCATE identity_tenants,users,groups,ous CASCADE');
 });
 
 after(async () => {
@@ -372,12 +372,12 @@ test('physical limited SQL login, inherited owner membership and SET ROLE cannot
   const quotedOwner = '"' + owner.replaceAll('"', '""') + '"';
   let limited;
   try {
-    await administration.query('CREATE ROLE ' + role + ' LOGIN');
+    const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN PASSWORD \'' + loginPassword + '\'');
     await administration.query('GRANT ' + quotedOwner + ' TO ' + role);
     await database.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT SELECT ON identity_license_user_sources TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_license_user_source_change(jsonb),identity_license_user_source_valid(identity_license_user_sources) TO ' + role);
     const address = new URL(databaseUrl);
-    address.username = role;
-    limited = new Pool({ connectionString: address.toString(), max: 1 });
+    address.username = role; address.password = loginPassword;
+    limited = new Pool({ connectionString: address.toString(), max: 1 }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     assert.equal((await read(input, limited)).valid, true);
     assert.equal((await limited.query('SELECT pg_has_role(session_user,$1,\'USAGE\') AS inherited', [owner])).rows[0].inherited, true);
     for (const [pool, assumed] of [[limited, null], [limited, quotedOwner], [database.pool, role]]) {

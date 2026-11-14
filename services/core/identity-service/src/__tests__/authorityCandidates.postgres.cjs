@@ -36,7 +36,7 @@ before(async () => {
     } };
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
 });
-beforeEach(async () => { await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE'); });
+beforeEach(async () => { await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE'); });
 after(async () => { await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 
 async function person(role = 'user', tenant) {
@@ -229,10 +229,10 @@ test('observed owned-user lock waits reject a source changed after the reviewed 
 
 test('limited real SQL logins and assumed roles cannot launder offline review through definer functions', async () => {
   const actor = await person(); const body = await manifest(actor); const role = 'authority_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_inventory(uuid,text),identity_authority_stage(jsonb) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) { const client = await (assumed ? pool : limited).connect(); try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await client.query("SELECT set_config('opendirectory.authority_review','explicit-offline-authority-review',true)"); await assert.rejects(client.query('SELECT identity_authority_stage($1::jsonb)', [JSON.stringify(body)]), error => error.code === '42501' && error.message === 'Actual database owner required for offline authority review'); } finally { await client.query('ROLLBACK'); client.release(); } }
   } finally { await limited?.end(); await pool.query('DROP OWNED BY ' + role); await administration.query('DROP ROLE ' + role); }
   assert.equal(await countCandidates(), 0);
@@ -418,10 +418,10 @@ test('a real committed draft and its owned snapshot expire on the original physi
 
 test('a real low-privilege login and SET ROLE cannot obtain the owner-only source graph through a definer', async () => {
   const actor = await person(); const candidate = await stage(await manifest(actor)); const role = 'plan_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_candidate_snapshot(uuid,uuid,text) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) {
       const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await assert.rejects(sourceSnapshot(candidate, actor, client), error => error.code === '42501' && error.message === 'Actual database owner required for offline authority review'); }

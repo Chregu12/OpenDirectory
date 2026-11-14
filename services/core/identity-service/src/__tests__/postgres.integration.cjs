@@ -273,7 +273,7 @@ beforeEach(async () => {
   await database.query('CREATE OR REPLACE FUNCTION identity_membership_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp(); $$');
   await database.query('TRUNCATE identity_role_review_audit,identity_role_review_leases,identity_role_review_policies CASCADE');
   await database.query('CREATE OR REPLACE FUNCTION identity_role_review_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp(); $$');
-  await database.query('TRUNCATE group_members, users, groups, ous, identity_deleted_groups, identity_group_audit, identity_group_outbox,identity_user_audit,identity_user_outbox,identity_deleted_users CASCADE');
+  await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(database.pool,'TRUNCATE group_members, users, groups, ous, identity_deleted_groups, identity_group_audit, identity_group_outbox,identity_user_audit,identity_user_outbox,identity_deleted_users CASCADE');
 });
 
 after(async () => {

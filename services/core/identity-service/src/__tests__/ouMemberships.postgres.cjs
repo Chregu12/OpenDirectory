@@ -20,7 +20,7 @@ before(async () => {
   } };
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
 });
-beforeEach(async () => { beforeCommit = null; await pool.query('TRUNCATE identity_tenants,users,groups,ous CASCADE'); });
+beforeEach(async () => { beforeCommit = null; await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous CASCADE'); });
 after(async () => { await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 async function actor(role = 'ou-administrator', tenant) {
   tenant ||= await provisionTenant(database, schema, { enabled: true }); const id = randomUUID(); const subject = 'ou-operator-' + id;
@@ -183,8 +183,8 @@ test('raw writes and an actual limited SQL login or SET ROLE cannot substitute a
   await assert.rejects(pool.query('INSERT INTO identity_directory_ou_members VALUES($1,$2,$3,$4,clock_timestamp())', [randomUUID(), fixture.tenant, unit.id, userId]), error => error.code === '42501');
   const role = 'member_limited_' + randomUUID().replaceAll('-', ''); let limited;
   try {
-    await administration.query('CREATE ROLE ' + role + ' LOGIN'); await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_directory_ou_membership_change(jsonb) TO ' + role);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 });
+    const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN PASSWORD \'' + loginPassword + '\''); await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_directory_ou_membership_change(jsonb) TO ' + role);
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) { const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await assert.rejects(client.query('SELECT identity_directory_ou_membership_change($1::jsonb)', ['{}']), error => error.code === '42501' && error.message.includes('Actual database owner required')); }
       finally { await client.query('ROLLBACK'); client.release(); }

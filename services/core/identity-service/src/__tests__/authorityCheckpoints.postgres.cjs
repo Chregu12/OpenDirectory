@@ -31,7 +31,7 @@ before(async () => {
   } };
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
 });
-beforeEach(async () => { afterCheckpoint = null; checks = []; await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies,identity_role_review_audit CASCADE'); });
+beforeEach(async () => { afterCheckpoint = null; checks = []; await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies,identity_role_review_audit CASCADE'); });
 after(async () => { afterCheckpoint = null; await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 async function person(role = 'user', tenant) {
   tenant = tenant || await provisionTenant(database, schema, { enabled: true }); const id = randomUUID(); const subject = 'checkpoint-' + randomUUID();
@@ -132,10 +132,10 @@ test('migration replay preserves every original checkpoint and does not activate
 });
 test('SQL-only checkpoint definers do not let a real limited login or assumed role impersonate the receiving owner', async () => {
   const current = await fixture(); const role = 'limited_checkpoint_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_command_context(jsonb),identity_authority_command_checkpoint(uuid,jsonb,jsonb,bigint) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     const proof = { ...current.actor.user.identity_authorization, issuer, subject: current.actor.user.sub };
     await assert.rejects(limited.query('SELECT identity_authority_command_context($1)', [proof]), error => error.code === '42501');
     const client = await pool.connect(); try { await client.query('BEGIN'); await client.query('SET LOCAL ROLE ' + role); await assert.rejects(client.query('SELECT identity_authority_command_context($1)', [proof]), error => error.code === '42501'); }

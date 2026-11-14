@@ -34,7 +34,7 @@ beforeEach(async () => {
   const guarded = [['identity_company_offboarding_receipts', 'identity_company_offboarding_no_truncate'], ['identity_company_offboarding_outbox', 'identity_company_offboarding_no_truncate'],
     ...['identity_company_offboarding_group_receipts', 'identity_company_offboarding_group_outbox', 'identity_company_offboarding_group_checks'].map(table => [table, 'identity_company_offboarding_groups_no_truncate'])];
   for (const [table, trigger] of guarded) await pool.query('ALTER TABLE ' + table + ' DISABLE TRIGGER ' + trigger);
-  try { await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_deleted_users,identity_directory_user_events,identity_directory_group_events,identity_company_offboarding_receipts CASCADE'); }
+  try { await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_deleted_users,identity_directory_user_events,identity_directory_group_events,identity_company_offboarding_receipts CASCADE'); }
   finally { for (const [table, trigger] of guarded) await pool.query('ALTER TABLE ' + table + ' ENABLE TRIGGER ' + trigger); }
 });
 after(async () => { await pool?.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });

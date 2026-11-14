@@ -33,7 +33,7 @@ before(async () => {
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
   store = new CompanyRegistrations(database);
 });
-beforeEach(async () => { beforeCommit = null; await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies CASCADE'); });
+beforeEach(async () => { beforeCommit = null; await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies CASCADE'); });
 after(async () => { beforeCommit = null; await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 async function counts() { return (await pool.query('SELECT (SELECT count(*)::int FROM identity_company_registrations) AS registrations,(SELECT count(*)::int FROM identity_company_registration_events) AS events,(SELECT count(*)::int FROM identity_company_registration_outbox) AS outbox,(SELECT count(*)::int FROM identity_tenants) AS tenants,(SELECT count(*)::int FROM users) AS users')).rows[0]; }
 test('registration persists a real disabled tenant, canonical first-person candidate, exact verified subject and original pending event/outbox without granting authority', async () => {
@@ -119,10 +119,10 @@ test('raw writes cannot rewrite immutable registration evidence and missing reta
 test('an actual limited SQL login or SET ROLE cannot launder a captured registration proof through a granted security definer', async () => {
   const role = 'company_limited_' + randomUUID().replaceAll('-', ''); const value = input(); const claims = proof(value); let limited;
   const descriptor = { issuer, subject: value.subject, nonce: claims.jti, issuedAt: claims.iat, expiresAt: claims.exp, requestSha256: claims.body_sha256 };
-  await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS');
+  const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD \'' + loginPassword + '\'');
   try {
     await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_company_registration_submit(jsonb,jsonb) TO ' + role);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) { const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role);
         await assert.rejects(client.query('SELECT identity_company_registration_submit($1::jsonb,$2::jsonb)', [JSON.stringify(descriptor), JSON.stringify(value)]), error => error.code === '42501' && error.message.includes('Actual database owner required'));
@@ -444,10 +444,10 @@ test('activation migration replay preserves owner evidence and missing receiving
 });
 test('a limited SQL login and SET ROLE cannot launder the original activation proof through a granted definer', async () => {
   const value = await approvedRegistration(); const body = { registrationId: value.registrationId, subject: value.subject, consoleClientId: 'web-app' }; const claims = proof(body, 'activate'); const descriptor = { issuer, subject: value.subject, nonce: claims.jti, issuedAt: claims.iat, expiresAt: claims.exp, requestSha256: claims.body_sha256 };
-  const role = 'activation_limited_' + randomUUID().replaceAll('-', ''); let limited; await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS');
+  const role = 'activation_limited_' + randomUUID().replaceAll('-', ''); let limited; const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD \'' + loginPassword + '\'');
   try {
     await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_company_activate(jsonb,jsonb) TO ' + role);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) { const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await assert.rejects(client.query('SELECT identity_company_activate($1::jsonb,$2::jsonb)', [JSON.stringify(descriptor), JSON.stringify(body)]), error => error.code === '42501' && error.message.includes('Actual database owner required')); }
       finally { await client.query('ROLLBACK'); client.release(); }

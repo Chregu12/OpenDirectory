@@ -144,8 +144,8 @@ test('a child creation racing parent deletion commits the child before the waiti
 test('an actual limited SQL login or SET ROLE cannot launder the private OU mutation receiver', async () => {
   const role = 'ou_limited_' + randomUUID().replaceAll('-', ''); let limited;
   try {
-    await administration.query('CREATE ROLE ' + role + ' LOGIN'); await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_directory_ou_change(jsonb) TO ' + role);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 });
+    const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN PASSWORD \'' + loginPassword + '\''); await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_directory_ou_change(jsonb) TO ' + role);
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), options: `-c search_path=${schema},public`, max: 1 }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) { const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await assert.rejects(client.query('SELECT identity_directory_ou_change($1::jsonb)', ['{}']), error => error.code === '42501' && error.message.includes('Actual database owner required')); }
       finally { await client.query('ROLLBACK'); client.release(); }

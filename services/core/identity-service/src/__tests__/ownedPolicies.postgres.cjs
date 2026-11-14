@@ -30,7 +30,7 @@ before(async () => {
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
 });
 beforeEach(async () => {
-  await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE');
+  await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE');
   await database.transaction(async client => {
     await client.query("SELECT set_config('opendirectory.authentication_reason','Explicit isolated legacy policy fixture reset',true),set_config('opendirectory.activation_reason','Explicit isolated legacy policy fixture reset',true)");
     await client.query("UPDATE identity_role_authentication SET mfa_required=false,max_age_seconds=3600,version=version+1 WHERE role='license-manager' AND (mfa_required OR max_age_seconds<>3600)");
@@ -197,10 +197,10 @@ test('physical expiry after owned-policy DML rolls back the namespace, all compo
 });
 test('a real limited login and an assumed role cannot seal or read owner-only policy content through a definer', async () => {
   const actor = await person(); const staged = await candidate(actor); const namespace = await seal(staged, actor); const role = 'owned_policy_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_seal(uuid,uuid,text),identity_authority_owned_policy(uuid,uuid,text,text) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) for (const read of [false, true]) {
       const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await client.query("SELECT set_config('opendirectory.authority_seal_review','explicit-offline-owned-policy-seal',true)");
@@ -396,10 +396,10 @@ test('source SQL replay, real session time zones and above-safe-integer namespac
 });
 test('a real limited login cannot launder owned source reads through either granted security definer', async () => {
   const actor = await person('license-manager'); const namespace = await seal(await candidate(actor, adoptReviewed), actor); const role = 'owned_source_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_owned_role_evidence(uuid,uuid,text,uuid),identity_authority_source_observation(text,uuid,uuid,timestamptz) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     await assert.rejects(evidence(namespace, actor, actor.userId, limited), error => error.code === '42501' && error.message === 'Actual database owner required for offline authority review');
     await assert.rejects(limited.query("SELECT identity_authority_source_observation('assignment',$1,$2,clock_timestamp())", [randomUUID(), actor.tenant]), error => error.code === '42501');
     await database.transaction(async client => { await client.query('SET LOCAL ROLE ' + role); await assert.rejects(evidence(namespace, actor, actor.userId, client), error => error.code === '42501'); throw Object.assign(new Error('Rollback expected failed assumed-role transaction'), { code: 'expected_rollback' }); }).catch(error => { assert.equal(error.code, 'expected_rollback'); });
@@ -559,10 +559,10 @@ test('owned source inspection refuses uncommitted materialization and detects lo
 });
 test('a granted definer cannot launder a real limited login or SET ROLE into source materialization or inspection', async () => {
   const actor = await person('license-manager'); const namespace = await seal(await candidate(actor, adoptReviewed), actor, undefined, false); const role = 'source_base_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT EXECUTE ON FUNCTION identity_authority_bind_sources(uuid,uuid,text),identity_authority_owned_source_data(uuid,uuid,text),identity_authority_source_set_rows(uuid) TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) for (const operation of ['materialize', 'inspect', 'rows']) {
       const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role); await client.query("SELECT set_config('opendirectory.authority_source_review','explicit-offline-owned-source-review',true)");

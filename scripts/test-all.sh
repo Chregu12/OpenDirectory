@@ -26,39 +26,39 @@ cd "$ROOT"
 
 # service_dir | invocation
 GATING=(
-  "services/core/device-service|npm test -- --passWithNoTests --forceExit"
-  "services/core/conditional-access|npm test -- --passWithNoTests --forceExit"
-  "services/core/api-gateway|npm test -- --passWithNoTests --forceExit"
-  "services/core/printer-service|npm test -- --passWithNoTests --forceExit"
+  "services/core/device-service|npm test -- --forceExit"
+  "services/core/conditional-access|npm test -- --forceExit"
+  "services/core/api-gateway|npm test -- --forceExit"
+  "services/core/printer-service|npm test -- --forceExit"
   "services/core/samba-ad-dc|npm test"
-  "services/platform/api-backend|npm test -- --passWithNoTests --forceExit"
-  "services/platform/api-gateway|npm test -- --passWithNoTests --forceExit"
+  "services/platform/api-backend|npm test -- --forceExit"
+  "services/platform/api-gateway|npm test -- --forceExit"
   "services/core/apple-mdm|npm test"
-  "services/core/certificate-authority|npm test -- --passWithNoTests --forceExit"
-  "services/core/identity-service|npm test -- --passWithNoTests --forceExit"
+  "services/core/certificate-authority|npm test -- --forceExit"
+  "services/core/identity-service|npm test -- --forceExit"
   "services/core/identity-service|npm run test:groups:integration"
   "services/core/kerberos-kdc|npm test"
-  "services/core/least-privilege|npm test -- --passWithNoTests --forceExit"
-  "services/core/network-infrastructure|npm test -- --passWithNoTests --forceExit"
-  "services/core/oauth-provider|npm test -- --passWithNoTests --forceExit"
+  "services/core/least-privilege|npm test -- --forceExit"
+  "services/core/network-infrastructure|npm test -- --forceExit"
+  "services/core/oauth-provider|npm test -- --forceExit"
   "services/core/oauth-provider|npm run test:revocations:integration"
   "frontend/web-app|npm run test:browser-auth"
   "services/core/oauth-provider|npm run test:browser:integration"
-  "services/platform/integration-service|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/antivirus-protection|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/app-store|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/auto-remediation|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/device-lifecycle|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/graph-explorer|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/policy-simulator|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/security-scanner|npm test -- --passWithNoTests --forceExit"
-  "services/enterprise/compliance-engine|npm test -- --passWithNoTests --forceExit"
-  "services/core/monitoring-service|npm test -- --passWithNoTests --forceExit"
-  "services/core/policy-service|npm test -- --passWithNoTests --forceExit"
+  "services/platform/integration-service|npm test -- --forceExit"
+  "services/enterprise/antivirus-protection|npm test -- --forceExit"
+  "services/enterprise/app-store|npm test -- --forceExit"
+  "services/enterprise/auto-remediation|npm test -- --forceExit"
+  "services/enterprise/device-lifecycle|npm test -- --forceExit"
+  "services/enterprise/graph-explorer|npm test -- --forceExit"
+  "services/enterprise/policy-simulator|npm test -- --forceExit"
+  "services/enterprise/security-scanner|npm test -- --forceExit"
+  "services/enterprise/compliance-engine|npm test -- --forceExit"
+  "services/core/monitoring-service|npm test -- --forceExit"
+  "services/core/policy-service|npm test -- --forceExit"
   "services/core/license-management|npm test"
   "services/core/policy-service|npm run test:licenses:integration"
-  "services/platform/quick-actions|npm test -- --passWithNoTests --forceExit"
-  "services/core/authentication-service|npm test -- --passWithNoTests --forceExit"
+  "services/platform/quick-actions|npm test -- --forceExit"
+  "services/core/authentication-service|npm test -- --forceExit"
   "frontend/web-app|npm test"
   "frontend/web-app|npm run test:e2e"
 )
@@ -83,7 +83,15 @@ run_suite() {
     [ "$gating" = 1 ] && failed=1
     return
   fi
-  ( cd "$dir" && npm install --ignore-scripts >/dev/null 2>&1 || npm ci >/dev/null 2>&1; eval "$cmd" )
+  (
+    cd "$dir" || exit 1
+    if [ -f package-lock.json ]; then
+      npm ci --ignore-scripts --no-audit --no-fund || exit 1
+    else
+      npm install --ignore-scripts --no-audit --no-fund --package-lock=false || exit 1
+    fi
+    eval "$cmd"
+  )
   local rc=$?
   if [ $rc -ne 0 ]; then
     echo "RESULT: $dir FAILED (exit $rc)"

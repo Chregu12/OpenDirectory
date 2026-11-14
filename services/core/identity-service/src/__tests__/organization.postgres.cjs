@@ -32,7 +32,7 @@ before(async () => {
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
   store = new OrganizationProfile(database, { revalidate: async (user, authorization) => { checks.push([user.jti, authorization]); if (rejectFinal && checks.length === 2) throw Object.assign(new Error('withdrawn_original_bearer'), { status: 401 }); } });
 });
-beforeEach(async () => { checks = []; afterCheckpoint = null; rejectFinal = false; await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies CASCADE'); });
+beforeEach(async () => { checks = []; afterCheckpoint = null; rejectFinal = false; await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_assignments,identity_pim_eligibilities,identity_role_review_policies CASCADE'); });
 after(async () => { afterCheckpoint = null; await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 async function person(role = 'admin', tenant) {
   tenant = tenant || await provisionTenant(database, schema, { enabled: true }); const id = randomUUID(); const subject = 'organization-' + id;
@@ -139,10 +139,10 @@ test('lost prior pending evidence makes the profile unavailable rather than sile
 });
 test('a granted definer cannot turn a real limited login or SET ROLE into organization-write authority', async () => {
   const actor = await person(); const recipient = await person('user', actor.tenant); const page = await store.get(actor.user); const role = 'organization_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS');
+  const loginPassword = randomUUID(); await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD \'' + loginPassword + '\'');
   try {
     await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role + ';GRANT EXECUTE ON FUNCTION identity_organization_save(jsonb,text,text,jsonb,text,bigint),identity_organization_delegation_change(jsonb,text,text,uuid,integer,text,bigint) TO ' + role);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const command of ['profile', 'delegation']) for (const assumed of [false, true]) {
       const client = await (assumed ? pool : limited).connect();
       try { await client.query('BEGIN'); if (assumed) await client.query('SET LOCAL ROLE ' + role);

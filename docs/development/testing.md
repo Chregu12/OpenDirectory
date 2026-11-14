@@ -36,15 +36,10 @@ cd services/core/device-service
 npx jest --no-coverage --forceExit
 ```
 
-### All services and packages
+### Repository gating suites
 
 ```bash
-for dir in packages/grpc-event-bus services/core/* services/enterprise/* services/platform/*; do
-  if [ -f "$dir/package.json" ]; then
-    echo "=== $dir ==="
-    (cd "$dir" && npx jest --no-coverage --forceExit 2>&1) || true
-  fi
-done
+npm test
 ```
 
 ### Frontend
@@ -53,6 +48,43 @@ done
 cd frontend/web-app
 npx jest --no-coverage --forceExit
 ```
+
+## CI checks
+
+`.github/workflows/ci.yml` validates workflows with checksum-pinned actionlint 1.7.12,
+checks workflow formatting without rewriting files, validates tracked manifests,
+and runs service and PostgreSQL/browser suites. Missing test scripts or Jest suites
+fail the run. Services with committed locks use `npm ci`; installation failures also
+stop the local `scripts/test-all.sh` runner before it can reuse stale dependencies.
+
+The two Docker matrix entries validate the full and lite Compose configurations,
+including optional profiles, with their configured Dockerfile build contexts.
+`docker compose build --check` is a static BuildKit check: it does not execute image
+build commands or prove that an application starts. Image build/deployment and
+live application verification remain separate checks.
+
+The root `npm audit --audit-level=high` now fails on findings and runs independently
+of application tests. Its scope is the root lock and its npm workspaces; nested
+service dependencies outside those workspaces need their own audit. A failed
+security scan must not be presented as an application test failure.
+
+PostgreSQL integration fixtures need an actual disposable database owner. CI uses
+PostgreSQL 16 with SCRAM password authentication and
+`max_locks_per_transaction=256`, matching the local harness lock budget. Restricted
+SQL-login tests set their own random passwords and assert `session_user` before
+checking the original permission denial. They must not pass merely because login
+itself failed.
+
+Legacy fixture cleanup uses `scripts/lib/reset-directory-fixture.cjs` only in
+explicit UUID-named disposable schemas and only while new company-role storage is
+empty. It restores retention triggers transactionally and checks their receiver;
+nonempty role history refuses cleanup. `fixtureReset.postgres.cjs` covers retained
+history, rollback, rejected namespaces/commands and historical pre-role schemas.
+Production retention guards are unchanged.
+
+The release workflow validates version input as data, shares the exact normalized
+tag with its archive job, and creates the archive outside its source directory.
+Validating these steps locally does not publish or prove a GitHub Release.
 
 ## Unit tests
 

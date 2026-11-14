@@ -32,7 +32,7 @@ before(async () => {
   for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
   roles = new DirectoryRoles(database, { revalidate: async () => {} }); pim = new PrivilegedActivation(database, { revalidate: async () => {} });
 });
-beforeEach(async () => { await pool.query('TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE'); });
+beforeEach(async () => { await require('../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(pool,'TRUNCATE identity_tenants,users,groups,ous,identity_role_review_policies,identity_role_assignments,identity_pim_eligibilities CASCADE'); });
 after(async () => { await pool.end(); await administration.query('DROP SCHEMA ' + schema + ' CASCADE'); await administration.end(); });
 function actor(person) { return JSON.stringify({ issuer, subject: person.user.sub, ...person.user.identity_authorization }); }
 async function person(role = 'user', tenant) {
@@ -129,10 +129,10 @@ test('source-fence replay preserves actual role IDs, existing authority generati
 });
 test('an actual limited login or assumed role cannot launder a raw offline write or canonical proof through the receiving trigger', async () => {
   const operator = await person('admin'); const recipient = await person('user', operator.tenant); const role = 'authority_target_limited_' + randomUUID().replaceAll('-', ''); let limited;
-  await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+  const loginPassword = randomUUID(); await administration.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${loginPassword}'`);
   try {
     await pool.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role};GRANT INSERT ON identity_role_assignments TO ${role}`);
-    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` });
+    const address = new URL(process.env.IDENTITY_TEST_DATABASE_URL); address.username = role; address.password = loginPassword; limited = new Pool({ connectionString: address.toString(), max: 1, options: `-c search_path=${schema},public` }); assert.equal((await limited.query('SELECT session_user AS name')).rows[0].name, role);
     for (const assumed of [false, true]) for (const proof of ['database', actor(operator)]) {
       const client = await (assumed ? pool : limited).connect();
       try {
