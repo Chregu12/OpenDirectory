@@ -5,6 +5,7 @@ import { createGroupClient } from './lib/license-groups.mjs';
 import { createAutomationClient, runAutomationWorker } from './lib/company-automation.mjs';
 import { createGroupRuleClient } from './lib/company-group-rules.mjs';
 import { createCompanyAppClient } from './lib/company-apps.mjs';
+import { createEmployeeInvitationClient, createEmployeeInvitationFile } from './lib/employee-invitations.mjs';
 
 const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
 
@@ -19,6 +20,10 @@ const usage = `OpenDirectory app accounts and API automation (Node.js 20+)
   node scripts/od.mjs company-app rename CLIENT_ID "Name" "Reason"
   node scripts/od.mjs company-app purpose CLIENT_ID none|company-automation "Reason"
   node scripts/od.mjs company-app history CLIENT_ID [PAGE]
+  node scripts/od.mjs employee-invitation list [PAGE]
+  node scripts/od.mjs employee-invitation get INVITATION_UUID
+  node scripts/od.mjs employee-invitation create request.json --result-file new-private-result.json
+  node scripts/od.mjs employee-invitation revoke request.json
   node scripts/od.mjs group create "Name"
   node scripts/od.mjs group member add|remove GROUP_ID USER_ID
   node scripts/od.mjs group-rule get|preview GROUP_ID
@@ -52,9 +57,14 @@ OPENDIRECTORY_API_URL     API origin; defaults to the issuer
 OPENDIRECTORY_CLIENT_ID   App client ID
 OPENDIRECTORY_CLIENT_SECRET App secret from your secret store
 OPENDIRECTORY_SCOPES      Approved scopes for this run; defaults to empty
-OPENDIRECTORY_ADMIN_ACCESS_TOKEN Original human token for app/group management
+OPENDIRECTORY_ADMIN_ACCESS_TOKEN Original human token for app/group/invitation management
 
-Creation starts disabled and prints the secret once. Activation is separate.
+Employee invitations require the actual company Owner with fresh MFA.
+Create/revoke JSON must explicitly confirm the original IDs and versions.
+The one-time invitation token is saved only in a new mode-0600 result file.
+provider_accepted confirms Graph's send request, not delivery to the recipient.
+
+App-account creation starts disabled and prints the secret once. Activation is separate.
 No automatic write retries. Inspect the current state after an uncertain result.
 Workload tokens do not inherit human, tenant, Graph or mailbox permissions.`;
 
@@ -68,6 +78,7 @@ try {
   const automation = createAutomationClient(client);
   const groupRules = createGroupRuleClient(client);
   const companyApps = createCompanyAppClient(client);
+  const invitations = createEmployeeInvitationClient(client);
   if (command === 'app' && action === 'create' && args.length >= 1 && args.length <= 2) result = await client.createApp(args[0], (args[1] || '').split(/\s+/).filter(Boolean));
   else if (command === 'app' && ['enable', 'disable'].includes(action) && args.length === 1) result = await client.enableApp(args[0], action === 'enable');
   else if (command === 'app' && action === 'rotate' && args.length === 1) result = await client.rotateApp(args[0]);
@@ -78,6 +89,13 @@ try {
   else if(command==='company-app'&&['rotate','delete'].includes(action)&&args.length===2)result=await companyApps[action==='rotate'?'rotate':'remove'](...args);
   else if(command==='company-app'&&['rename','purpose'].includes(action)&&args.length===3)result=await companyApps.update(args[0],{[action==='rename'?'name':'purpose']:args[1]},args[2]);
   else if(command==='company-app'&&action==='history'&&args.length>=1&&args.length<=2)result=await companyApps.history(args[0],Number(args[1]||1));
+  else if (command === 'employee-invitation' && action === 'list' && args.length <= 1) result = await invitations.list(Number(args[0] || 1));
+  else if (command === 'employee-invitation' && action === 'get' && args.length === 1) result = await invitations.get(args[0]);
+  else if (command === 'employee-invitation' && (action === 'create' && args.length === 3 && args[1] === '--result-file' || action === 'revoke' && args.length === 1)) {
+    const file = await readFile(args[0]); if (file.length > 32768) throw new Error('Employee invitation input exceeds 32 KiB');
+    const input = JSON.parse(file.toString('utf8'));
+    result = action === 'create' ? await createEmployeeInvitationFile(invitations, input, args[2]) : await invitations.revoke(input);
+  }
   else if (command === 'group' && action === 'create' && args.length === 1) result = await groups.create(args[0]);
   else if (command === 'group' && action === 'member' && args.length === 3) result = await groups.member(args[0], args[1], args[2]);
   else if (command === 'group-rule' && ['get','preview'].includes(action) && args.length === 1) result = await groupRules[action](args[0]);

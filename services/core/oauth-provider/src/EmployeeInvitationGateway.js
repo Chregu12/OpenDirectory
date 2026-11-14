@@ -60,7 +60,7 @@ class EmployeeInvitationGateway {
       const response = await this.fetch(new URL(path, receiver), { method: 'POST', headers,
         body: JSON.stringify(body), redirect: 'error', cache: 'no-store', signal: controller.signal });
       if (![200, 201].includes(response.status) || !response.headers.get('content-type')?.includes('application/json')) {
-        if ([400, 401, 403, 404, 409, 412, 429].includes(response.status)) fail(response.status, response.status === 401 || response.status === 404 ? 'invalid_employee_invitation' : 'employee_invitation_rejected');
+        if ([400, 401, 403, 404, 409, 412, 428, 429].includes(response.status)) fail(response.status, response.status === 401 || response.status === 404 ? 'invalid_employee_invitation' : 'employee_invitation_rejected');
         fail(503, 'employee_invitation_unavailable');
       }
       const chunks = []; let length = 0;

@@ -6,6 +6,7 @@ const {activeCompany}=require('../../../../../scripts/lib/company-owner-fixture.
 const {AuthorizationState}=require('../../../identity-service/src/AuthorizationState');const {EmployeeInvitationAuthority}=require('../../../identity-service/src/EmployeeInvitationAuthority');
 const {invitationRequest}=require('../../../identity-service/src/EmployeeInvitationRequest');const {employeeEnrollmentRoutes}=require('../../../identity-service/src/EmployeeEnrollmentRoutes');const {EmployeeCredentialSource}=require('../../../identity-service/src/EmployeeCredentialSource');
 const {startAuthenticationService}=require('./fixtures/server.cjs');const contract=require('../../../../../packages/employee-invitation-contract');
+const {execFile}=require('node:child_process');const {promisify}=require('node:util');const os=require('node:os');
 const administration=new Pool({connectionString:process.env.AUTH_TEST_DATABASE_URL,max:1});const issuer='https://employee.http.native';
 const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});const signingKey=privateKey.export({type:'pkcs8',format:'pem'});
 let authPool,identityPool,identityServer,service,employee,owner,authorization,authSchema,identitySchema,environment,databaseUrl,identityBodies,identityOrigin;
@@ -68,6 +69,42 @@ test('the shipped withdrawal receiver proves actual revocation before disabling 
 afterEach(async()=>{if(service)await service.stop();if(identityServer)await new Promise(resolve=>identityServer.close(resolve));await authPool.end();await identityPool.end();await administration.query('DROP SCHEMA '+authSchema+' CASCADE');await administration.query('DROP SCHEMA '+identitySchema+' CASCADE');});after(()=>administration.end());
 async function create(){const request={id:randomUUID(),userId:employee.id,userRevision:employee.revision,loginName:'http-'+randomUUID(),durationHours:24,reason:'Explicit invitation through the actual credential service',confirm:true};
  const result=await call('create',request,{ownerAuthorization:authorization});assert.equal(result.status,201,JSON.stringify(result.body));return{request,...result.body};}
+
+test('the Owner CLI drives the actual Gateway, Auth SQL and independent Identity receivers with private one-time results',{timeout:60000},async()=>{
+ const {EmployeeInvitationGateway}=require('../../../oauth-provider/src/EmployeeInvitationGateway');
+ const gateway=new EmployeeInvitationGateway({signingKeys:{privateKey:signingKey,kid:'employee-http-key'},issuer,authEndpoint:service.url,identityEndpoint:identityOrigin,mailer:{send:async()=>({status:'not_configured'})}});
+ const app=express();app.use(express.json({limit:'32kb'}));
+ app.post('/oauth/employee-invitations/owner/:operation',async(req,res)=>{
+  try{const user=jwt.verify(req.headers.authorization?.slice(7),publicKey,{issuer,algorithms:['RS256']});
+   if(user.actor_type!=='user'||!user.identity_authorization?.userId)return res.status(403).json({error:'original_employee_invitation_owner_required'});
+   const value=await gateway.manage(req.params.operation,req.body,req.headers.authorization,user.identity_authorization.userId);
+   res.status(req.params.operation==='create'&&value.created?201:200).json(value);
+  }catch(error){res.status(error.status||401).json({error:error.code||'owner_rejected'});}
+ });
+ const server=app.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'actual-owner-cli-'));const command=path.join(__dirname,'../../../../../scripts/od.mjs');
+ const run=(args,bearer=authorization)=>promisify(execFile)(process.execPath,[command,'employee-invitation',...args],{timeout:30000,env:{...process.env,OPENDIRECTORY_ISSUER:origin,OPENDIRECTORY_API_URL:'https://unused-api.invalid',OPENDIRECTORY_ADMIN_ACCESS_TOKEN:bearer.slice(7),OPENDIRECTORY_CLIENT_ID:'must-not-be-used',OPENDIRECTORY_CLIENT_SECRET:'must-not-be-used'}});
+ try{
+  const request={id:randomUUID(),userId:employee.id,userRevision:employee.revision,loginName:'actual-cli-'+randomUUID(),durationHours:24,reason:'Original own employee invitation from the real CLI',confirm:true};
+  const requestFile=path.join(folder,'request.json'),resultFile=path.join(folder,'result.json');fs.writeFileSync(requestFile,JSON.stringify(request));
+  const created=await run(['create',requestFile,'--result-file',resultFile]);const summary=JSON.parse(created.stdout),saved=JSON.parse(fs.readFileSync(resultFile,'utf8'));
+  assert.equal(summary.created,true);assert.equal(summary.invitationToken,undefined);assert.equal(summary.mailRequestStatus,'not_configured');assert.equal(saved.invitationToken.length,80);assert.equal(fs.statSync(resultFile).mode&0o777,0o600);
+  assert.equal(created.stdout.includes(saved.invitationToken),false);assert.equal(created.stderr.includes(saved.invitationToken),false);
+  const actual=(await authPool.query('SELECT * FROM auth_employee_invitations WHERE id=$1',[request.id])).rows[0];assert.equal(actual.status,'pending');assert.notEqual(actual.token_hash,saved.invitationToken);
+  assert.equal((await authPool.query('SELECT count(*)::int AS n FROM users')).rows[0].n,0);assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+  const replay=JSON.parse((await run(['create',requestFile,'--result-file',path.join(folder,'replay.json')])).stdout);assert.equal(replay.created,false);assert.equal(JSON.parse(fs.readFileSync(path.join(folder,'replay.json'),'utf8')).invitationToken,null);
+  assert.equal(JSON.parse((await run(['get',request.id])).stdout).invitation.id,request.id);assert.equal(JSON.parse((await run(['list'])).stdout).invitations.length,1);
+  const stale={...owner.user,auth_time:Math.floor(Date.now()/1000)-301,mfa_authorization:{...owner.user.mfa_authorization,authTime:Math.floor(Date.now()/1000)-301}};
+  const old='Bearer '+jwt.sign(stale,signingKey,{algorithm:'RS256',keyid:'employee-http-key'});
+  await assert.rejects(run(['list'],old),error=>error.code===1&&error.stderr.includes('HTTP 428'));
+  const revoke={id:request.id,revision:'1',reason:'Explicit original invitation withdrawal from the real CLI',confirm:true};const revokeFile=path.join(folder,'revoke.json');fs.writeFileSync(revokeFile,JSON.stringify(revoke));
+  const withdrawn=JSON.parse((await run(['revoke',revokeFile])).stdout);assert.equal(withdrawn.invitation.status,'revoked');assert.equal(withdrawn.partialEnrollmentWithdrawn,true);
+  const recovered=JSON.parse((await run(['revoke',revokeFile])).stdout);assert.deepEqual(recovered,withdrawn);
+  assert.equal((await authPool.query('SELECT count(*)::int AS n FROM auth_employee_invitation_events')).rows[0].n,2);
+  const evidence=(await authPool.query('SELECT * FROM auth_employee_invitation_events')).rows;assert.ok(evidence.every(event=>!JSON.stringify(event).includes(saved.invitationToken)));
+  assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(folder,{recursive:true,force:true});}
+});
 test('actual production Auth HTTP verifies both original signatures and retains the locked invitation across restart',{timeout:45000},async()=>{
  const created=await create();assert.equal(created.invitationToken.length,80);assert.equal(created.invitation.status,'pending');
  const replay=await call('create',created.request,{ownerAuthorization:authorization});assert.equal(replay.status,200);assert.equal(replay.body.invitationToken,null);assert.equal(replay.cache,'no-store');

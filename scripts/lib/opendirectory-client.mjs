@@ -11,17 +11,21 @@ export class ApiError extends Error {
   constructor(status, code) { super(`${code} (HTTP ${status})`); this.name = 'ApiError'; this.status = status; this.code = code; }
 }
 
-async function json(url, options, maximumBody = MAX_BODY) {
-  const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000), cache: 'no-store' });
-  if (response.status === 204) return { status: 204, data: null, etag: response.headers.get('etag') };
-  if (!response.headers.get('content-type')?.includes('application/json')) throw new ApiError(response.status, 'unexpected_response');
-  const chunks = []; let length = 0;
-  for await (const chunk of response.body) {
-    length += chunk.length; if (length > maximumBody) throw new ApiError(response.status, 'response_too_large'); chunks.push(Buffer.from(chunk));
-  }
-  const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  if (!response.ok) throw new ApiError(response.status, typeof data?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(data.error) ? data.error : 'request_failed');
-  return { status: response.status, data, etag: response.headers.get('etag') };
+async function json(url, options, maximumBody = MAX_BODY, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, redirect: 'error', signal: controller.signal, cache: 'no-store' });
+    if (response.status === 204) return { status: 204, data: null, etag: response.headers.get('etag') };
+    if (!response.headers.get('content-type')?.includes('application/json')) throw new ApiError(response.status, 'unexpected_response');
+    const chunks = []; let length = 0;
+    for await (const chunk of response.body) {
+      length += chunk.length; if (length > maximumBody) throw new ApiError(response.status, 'response_too_large'); chunks.push(Buffer.from(chunk));
+    }
+    const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (!response.ok) throw new ApiError(response.status, typeof data?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(data.error) ? data.error : 'request_failed');
+    return { status: response.status, data, etag: response.headers.get('etag') };
+  } finally { clearTimeout(timer); }
 }
 
 export function createClient({ issuer, apiUrl = issuer, clientId, clientSecret, scopes = '', adminToken }) {
@@ -62,6 +66,13 @@ export function createClient({ issuer, apiUrl = issuer, clientId, clientSecret, 
   }
   return {
     request,
+    async employeeInvitation(operation, body) {
+      if (!['create', 'list', 'get', 'revoke'].includes(operation)) throw new Error('Supported employee invitation owner operation required');
+      if (typeof adminToken !== 'string' || !adminToken) throw new Error('An original company Owner access token is required');
+      return json(new URL('/oauth/employee-invitations/owner/' + operation, authority), {
+        method: 'POST', headers: { Authorization: 'Bearer ' + adminToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }, 32768, operation === 'create' ? 45000 : 15000);
+    },
     async check() {
       const accessToken = await token();
       const result = await json(new URL('/oauth/introspect', authority), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

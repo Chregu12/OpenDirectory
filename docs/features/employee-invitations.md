@@ -1,6 +1,6 @@
 # Mitarbeiteraufnahme: Einladungen, Zugangsdaten und MFA
 
-Stand: 23. Oktober 2026. Der Eintrittsablauf verbindet Originaleinladungen, gesperrte Passwortkonten, kanonische Identity-Aktivierung, Graph-Mail und die erste MFA-Anmeldung. Firmeninhaber können unter `/employee-invitations` Gruppenmitgliedschaften zusammen mit einer Einladung setzen. Eine konfigurierte Microsoft-Graph-App verschickt den Einmal-Link an die verifizierte Zieladresse. Mitarbeitende setzen ihr Passwort unter `/employees/accept`; wenn die erste angemeldete App MFA verlangt, richtet die OAuth-Anmeldeseite den appgebundenen Faktor ein und setzt danach den Login fort. Owner-CLI, kontrollierte Credential-Namespace-Wiederverwendung, Review geänderter Teilaufnahmen und SCIM bleiben offen. Die internen Empfänger werden ausschliesslich durch eng gebundene Issuer-Workload-Tokens aufgerufen; ein normaler Benutzer- oder App-Token erteilt diese Befugnis nicht.
+Stand: 14. November 2026. Der Eintrittsablauf verbindet Originaleinladungen, gesperrte Passwortkonten, kanonische Identity-Aktivierung, Graph-Mail und die erste MFA-Anmeldung. Firmeninhaber können unter `/employee-invitations` Gruppenmitgliedschaften zusammen mit einer Einladung setzen und Einladungen auch über die Owner-CLI verwalten. Eine konfigurierte Microsoft-Graph-App übergibt den Einmal-Link an die verifizierte Zieladresse zum Versand. Mitarbeitende setzen ihr Passwort unter `/employees/accept`; wenn die erste angemeldete App MFA verlangt, richtet die OAuth-Anmeldeseite den appgebundenen Faktor ein und setzt danach den Login fort. Kontrollierte Credential-Namespace-Wiederverwendung, Review geänderter Teilaufnahmen und SCIM bleiben offen. Die internen Empfänger werden ausschliesslich durch eng gebundene Issuer-Workload-Tokens aufgerufen; ein normaler Benutzer- oder App-Token erteilt diese Befugnis nicht.
 
 ## Ursprüngliche Einladung
 
@@ -17,6 +17,48 @@ Der Firmeninhaber wählt einen deaktivierten eigenen Verzeichniseintrag aus. Ide
 Ein Widerruf ist nur für `pending` und `credential_pending` möglich. Nach dem tatsächlichen Auth-Widerruf prüft OAuth den aktuellen negativen Auth-Beleg bei Identity und nimmt eine unveränderte angefangene Teilaufnahme zurück. Ein bereits `accepted` Mitarbeiter wird über das reguläre Offboarding entfernt. Verlorene Antworten werden nicht automatisch wiederholt; dieselbe stabile Create-UUID kann den Originalstatus wiederfinden.
 
 Die öffentliche API ist `GET /oauth/employee-invitations`, `POST /oauth/employee-invitations/inspect` und `POST /oauth/employee-invitations/accept`. Firmeninhaber verwenden `POST /oauth/employee-invitations/owner/{create,list,get,revoke}` mit ihrem normalen menschlichen OAuth-Zugriffstoken. Alternativ bietet das Web-Frontend gleichursprüngliche BFF-Routen unter `/api/employee-invitations`. Die Secret-POSTs sind begrenzt und ohne Cache; die Oberfläche hält Passwort und Bestätigung ausschliesslich im Arbeitsspeicher.
+
+## Owner-CLI
+
+`node scripts/od.mjs employee-invitation` verwendet dieselben öffentlichen Owner-Routen und die bestehenden Auth-/Identity-Prüfungen wie die Oberfläche. Setze `OPENDIRECTORY_ISSUER` auf den tatsächlichen OAuth-Origin und `OPENDIRECTORY_ADMIN_ACCESS_TOKEN` aus deinem Secret-Store auf das ursprüngliche menschliche Zugriffstoken des aktuellen Firmeninhabers. Die MFA darf höchstens fünf Minuten alt sein. App-Zugangsdaten oder eine globale Rolle ersetzen diese Voraussetzung nicht. `OPENDIRECTORY_API_URL` ändert den Empfänger dieser Befehle nicht.
+
+```sh
+node scripts/od.mjs employee-invitation list 1
+node scripts/od.mjs employee-invitation get INVITATION_UUID
+node scripts/od.mjs employee-invitation create invitation.json --result-file new-private-result.json
+node scripts/od.mjs employee-invitation revoke revocation.json
+```
+
+`invitation.json` enthält den ausdrücklich bestätigten Originalauftrag. Die Beispiel-IDs sind Platzhalter; `userId`, `userRevision` und `loginName` müssen dem ausgewählten eigenen deaktivierten Verzeichniseintrag entsprechen. Lege eine neue stabile Einladungs-UUID fest, bevor du den Auftrag abschickst.
+
+```json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "userId": "22222222-2222-4222-8222-222222222222",
+  "userRevision": "1",
+  "loginName": "employee.example",
+  "durationHours": 24,
+  "reason": "Bestätigter Eintritt dieser Mitarbeiterin",
+  "confirm": true
+}
+```
+
+Die CLI reserviert die neue Ergebnisdatei vor dem HTTP-Auftrag mit exklusivem POSIX-Modus `0600`. Vorhandene Dateien werden nicht überschrieben. Nur diese Datei erhält das einmalige `invitationToken`; stdout zeigt Metadaten, `resultFile`, `mailRequestStatus` und `deliveryConfirmed:false`. Bei `provider_accepted` hat Graph den Versandauftrag angenommen; eine Empfängerzustellung ist damit nicht bestätigt. Ohne Graph-Konfiguration bleibt das Token für den vertraulichen manuellen Versand in der Datei verfügbar. Der Client benötigt dafür ein Dateisystem mit POSIX-Zugriffsrechten.
+
+Nach Timeout oder Verbindungsfehler erfolgt keine automatische Wiederholung. Eine leere private Ergebnisdatei kann zurückbleiben. Prüfe zuerst mit `get` und der ursprünglichen UUID, ob die Einladung gespeichert wurde. Ein identischer Create-Auftrag mit einem neuen Ergebnisdateinamen liefert nur den ursprünglichen Status und kein zweites Token. Ein verlorenes Einmal-Secret verlangt bewussten Widerruf und eine neue Einladungs-UUID. Die CLI ändert weder Auftrag noch Version automatisch.
+
+Für `revocation.json` liest du die tatsächliche Einladungsrevision und bestätigst genau diesen Auftrag:
+
+```json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "revision": "1",
+  "reason": "Eintritt abgesagt und Originaleinladung widerrufen",
+  "confirm": true
+}
+```
+
+Ein erfolgreicher Widerruf bestätigt auch den unabhängigen Identity-Receiver für die Rücknahme einer unveränderten Teilaufnahme. Eine unveränderte Wiederholung desselben Widerrufs erzeugt kein zweites Ereignis. Geänderte Teilaufnahmen und bereits angenommene Mitarbeiter verlangen weiterhin Review beziehungsweise reguläres Offboarding. Gruppenmitgliedschaften werden separat mit `group member add|remove GROUP_ID USER_ID` verwaltet; diese Befehle bilden keine gemeinsame Transaktion mit der Einladung.
 
 ## Graph-Mail und Gruppen für den Eintritt
 
@@ -55,7 +97,7 @@ Nach Annahme führt die Oberfläche zur normalen `/login`-Anmeldung. Die OAuth-A
 
 Widerruf verwendet exakt `{id,revision,reason,confirm:true}`. Eine Wiederholung muss denselben Auftrag verwenden. Bereits angenommene Mitarbeiter benötigen den regulären Offboarding-Prozess. Nach tatsächlichem Auth-Widerruf kann `withdraw` eine unveränderte Teilaufnahme kanonisch deaktivieren und genau ihre ursprüngliche Subject-Verknüpfung entfernen. Identity prüft dafür direkt den tatsächlichen negativen Auth-Beleg. Die Tenant-Bindung und alle historischen Ereignisse bleiben erhalten. Spätere berechtigte Änderungen werden nicht automatisch entfernt; ein Konflikt benötigt Review. Bei später gesperrtem Parent werden ausschliesslich dessen exakt belegte automatische User-Generationsänderung und die dazugehörigen kanonischen Audit-/Outbox-Belege toleriert. Eine weitere unabhängige Benutzerversion verlangt Review. Ohne ursprüngliches Aktivierungszertifikat lautet das Ergebnis `changed:false, receipt:null`.
 
-Das widerrufene unfertige Credential bleibt gesperrt und behält Login/E-Mail und Belege. Dessen kontrollierte Namespace-Freigabe/Wiederverwendung und ein Review geänderter Teilaufnahmen sind **noch offen**. Die UI nimmt bisher keine Gruppen, Lizenzgruppen, Apps oder Mailkonten automatisch auf.
+Das widerrufene unfertige Credential bleibt gesperrt und behält Login/E-Mail und Belege. Dessen kontrollierte Namespace-Freigabe/Wiederverwendung und ein Review geänderter Teilaufnahmen sind **noch offen**. Gruppenmitgliedschaften bleiben separate Verzeichnisoperationen; eine Herstellerlizenz oder ein Mailkonto wird durch die Einladung nicht angelegt.
 
 Die eigene `users.security_revision` steigt bei Passwort-, Sperr- oder Credential-MFA-Änderungen, nicht bei gewöhnlichen Loginzählern. Der private `state`-Leser liefert für ein bekanntes Credential nur bei gültigem, entsperrtem Konto eine aktuelle Revision; angenommene Mitarbeiterkonten müssen ausserdem ihr tatsächliches Identity-Zertifikat erfüllen. Ein neuer RS256-Reader ist auf `POST /internal/auth/credential-state` verfügbar. Zentrale Tokens ohne gespeicherte Bindung werden für bekannte lokale Konten nicht nachträglich hochgestuft. Bei unerreichbarem Auth-Reader wird die Prüfung verweigert. Bestehende lokale OAuth-Sitzungen ohne die neue Claim-Bindung müssen sich erneut anmelden.
 
@@ -69,7 +111,7 @@ Auth benötigt alle elf vorhandenen SQL-Dateien bis **010**, einschliesslich bei
 
 Identity benötigt zusätzlich **055** und `AUTH_SERVICE_URL` als gepinnten tatsächlichen Auth-Origin. Beide Compose-Dateien setzen ihn. Nach Replay älterer Directory-/Gruppen-/Automationsmigrationen zuletzt **055_employee_enrollments.sql** anwenden. Die Migration erweitert die vorhandenen Transaktionsfences auch auf ihre neuen Tabellen und pinnt die tatsächlich beteiligten Routinen/Trigger. Einträge entstehen nur durch den tatsächlichen Aktivierungsvorgang; bestehende Verzeichnisbenutzer werden nicht adoptiert. Keine neue Runtime-Dependency wird in diesem Schritt eingeführt.
 
-Der generierte [OpenAPI-Vertrag](../api/openapi.yaml) **1.31.0** beschreibt Owner- und Empfänger-OAuth-Routen, öffentliche Minimalantworten, Graph-Versandstatus, interne Originalproofs, separate Owner-Header, Witness-/Receipt-Schemas, kanonische `employeeBinding` und privaten Credential-State-Reader.
+Der generierte [OpenAPI-Vertrag](../api/openapi.yaml) **1.39.0** beschreibt Owner- und Empfänger-OAuth-Routen, öffentliche Minimalantworten, Graph-Versandstatus, interne Originalproofs, separate Owner-Header, Witness-/Receipt-Schemas, kanonische `employeeBinding` und privaten Credential-State-Reader.
 
 ## Prüfung
 
@@ -79,6 +121,6 @@ npm run test:credentials:integration --prefix services/core/authentication-servi
 npm test --prefix services/core/identity-service -- --runInBand
 ```
 
-Der Auth-Native-Runner umfasst bestehende Credential-Fälle, tatsächliche gekoppelte PostgreSQL-Transitionsfälle und vier HTTP-Definitionen mit tatsächlich gestarteten Produktions-Auth-/Redis-Prozessen. Der Identity-HTTP-Teil montiert den ausgelieferten privaten Router, die tatsächlichen Source-/Receiver-Klassen und separat migriertes SQL unter einem lokalen Testserver; die beiden Dienste prüfen die ursprünglichen signierten Proofs über tatsächliche HTTP-Callbacks. Das ist kein vollständig gestarteter produktiver Identity-/OAuth-/Browserablauf. Identity führt die vier eigenen ursprünglichen Source-Fälle ausserdem im vorhandenen nativen Runner mit. [Ergebnisse und offene Grenzen](../testing/test-results.md#23-oktober-2026--kanonische-mitarbeiteraktivierung), [vollständiger Auftrag](../implementation-worklist.md).
+Der Auth-Native-Runner umfasst bestehende Credential-Fälle, tatsächliche gekoppelte PostgreSQL-Transitionsfälle und fünf HTTP-Definitionen mit tatsächlich gestarteten Produktions-Auth-/Redis-Prozessen. Der Identity-HTTP-Teil montiert den ausgelieferten privaten Router, die tatsächlichen Source-/Receiver-Klassen und separat migriertes SQL unter einem lokalen Testserver; die beiden Dienste prüfen die ursprünglichen signierten Proofs über tatsächliche HTTP-Callbacks. Der neue CLI-Fall verwendet zusätzlich den tatsächlichen Invitation-Gateway, signierte Owner-Testtokens, neue private Ergebnisdateien, SQL-Lesekontrollen, identische Wiederholung und Widerruf. Das ist kein vollständig gestarteter produktiver Identity-/OAuth-/Browserablauf und kein echter OTP-Login. Identity führt die vier eigenen ursprünglichen Source-Fälle ausserdem im vorhandenen nativen Runner mit. [Ergebnisse und offene Grenzen](../testing/test-results.md#23-oktober-2026--kanonische-mitarbeiteraktivierung), [vollständiger Auftrag](../implementation-worklist.md).
 
-Die Erweiterungen in diesem Änderungsschritt wurden nicht durch Jest, PostgreSQL-Integration, Browserabnahme oder Live-Graph-Tenant geprüft. Eine Graph-`202`-Antwort bestätigt nur die Annahme des Versandauftrags; lokale Poolzuteilung ist kein Beleg für eine Herstellerlizenz oder Mailbox.
+Am 14. November liefen lokal unter Node.js 20 alle 49 Skriptfälle, alle 56 Credential-/Einladungs-PostgreSQL-/HTTP-Fälle und alle 524 OAuth-Jest-Fälle erfolgreich. Actionlint 1.7.12 und die read-only Workflow-Formatprüfung liefen ebenfalls erfolgreich. Die HTTP-Regression reproduzierte vor der Korrektur eine irreführende `503` bei veralteter Owner-MFA; der Gateway reicht jetzt die tatsächliche `428` weiter. Die CI erhält einen eigenen PostgreSQL-/Redis-Job für diesen bisher fehlenden nativen Runner. Dessen GitHub-Abnahme sowie eine neue Browserabnahme und ein Live-Graph-Tenant-Test für diesen CLI-Schritt stehen noch aus. Eine Graph-`202`-Antwort bestätigt nur die Annahme des Versandauftrags; lokale Poolzuteilung ist kein Beleg für eine Herstellerlizenz oder Mailbox.
