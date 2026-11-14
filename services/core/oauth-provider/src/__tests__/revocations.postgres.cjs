@@ -4324,6 +4324,15 @@ test('Engineering PIM inventory maintenance works through original OAuth and the
   const csv=await fetch(base+'/api/devices/export?search=PIM-ENGINEERING',{headers:{Authorization:'Bearer '+token}});assert.equal(csv.status,200);assert.equal(csv.headers.get('x-inventory-tenant'),cap.body.tenantId);assert.ok((await csv.text()).includes('Reviewed corporate laptop'));
   const restored=await request(base,route+'/lifecycle',{method:'POST',token,headers:{'If-Match':deviceEtag(retired.body)},body:{lifecycle:'available',reason:'Restore the retained asset after a completed review',confirm:true}});assert.equal(restored.status,200);assert.equal(restored.body.lifecycle,'available');
   const history=await request(base,route+'/history',{token});assert.equal(history.status,200,JSON.stringify(history.body));assert.equal(history.body.events.length,6);assert.ok(history.body.events.some(event=>event.type==='device.updated'&&event.changes.some(change=>change.field==='model')));
+  const agentState=await request(base,route+'/agent',{token});assert.equal(agentState.status,200,JSON.stringify(agentState.body));assert.equal(agentState.body.status,'not-enrolled');
+  const issuedAgent=await request(base,route+'/agent/issue',{method:'POST',token,headers:{'If-Match':`"agent-${registered.body.id}-0"`},body:{reason:'Connect the actual device during the approved Engineering duty',confirm:true}});assert.equal(issuedAgent.status,201,JSON.stringify(issuedAgent.body));
+  const agentReport={hostname:'actual-signed-gateway-fixture',platform:'linux',architecture:'x86_64',osVersion:'Linux fixture',agentVersion:'1.1.0'};
+  const agentRegistered=await request(base,'/api/device-agent/register',{method:'POST',body:{token:issuedAgent.body.enrollmentToken,report:agentReport}});assert.equal(agentRegistered.status,201,JSON.stringify(agentRegistered.body));
+  const deviceCredential=agentRegistered.body.deviceToken;assert.equal((await request(base,'/api/device-agent/heartbeat',{method:'POST',token:deviceCredential,body:{deviceId:registered.body.id,report:agentReport}})).status,200);
+  assert.equal((await request(base,route+'/agent',{token:deviceCredential})).status,401);
+  const connected=await request(base,route+'/agent',{token});assert.equal(connected.body.status,'connected');
+  assert.equal((await request(base,route+'/agent/revoke',{method:'POST',token,headers:{'If-Match':`"agent-${registered.body.id}-${connected.body.revision}"`},body:{reason:'Explicitly revoke the tested device credential',confirm:true}})).status,200);
+  assert.equal((await request(base,'/api/device-agent/heartbeat',{method:'POST',token:deviceCredential,body:{deviceId:registered.body.id,report:agentReport}})).status,401);
   assert.equal((await request(base,'/api/users',{token})).status,403);
   assert.equal((await request(identityBase,groups+'/'+created.body.id+'/disable',{method:'POST',token:admin.access_token,body:{reason:'Withdraw the actual Engineering authority and its issued tokens',confirm:true}})).status,200);
   assert.equal((await request(base,route,{token})).status,401);

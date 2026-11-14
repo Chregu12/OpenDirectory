@@ -1,0 +1,8 @@
+'use strict';
+const express = require('express'); const request = require('supertest'); const { deviceAgentProxy } = require('../middleware/deviceAgentProxy');
+let receiver, app, calls;
+beforeEach(async () => { calls=[]; const backend=express();backend.use(express.json());backend.use((req,res)=>{calls.push({url:req.originalUrl,body:req.body,authorization:req.headers.authorization});res.status(401).json({error:'Device authentication required'});});receiver=backend.listen(0,'127.0.0.1');await new Promise(resolve=>receiver.once('listening',resolve));app=express();app.use(deviceAgentProxy('http://127.0.0.1:'+receiver.address().port));app.use((_req,res)=>res.status(403).json({error:'Human authentication required'})); });
+afterEach(()=>new Promise(resolve=>receiver.close(resolve)));
+test.each(['register','heartbeat'])('only the exact machine %s request reaches its independently authenticating receiver',async action=>{const response=await request(app).post('/api/device-agent/'+action).set('Authorization','Bearer device-only').send({deviceId:'fixture'});expect(response.status).toBe(401);expect(calls).toEqual([{url:'/api/device-agent/'+action,body:{deviceId:'fixture'},authorization:'Bearer device-only'}]);});
+test.each(['/api/device-agent/heartbeat?token=secret','/api/device-agent/register/','/api/device-agent/../devices','/api/device-agent-evil','/api/device-agent/commands'])('no broader machine proxy is created (%s)',async path=>{const response=await request(app).post(path).send({});expect([403,404]).toContain(response.status);expect(calls).toHaveLength(0);});
+test('normal inventory still passes through human authorization',async()=>{expect((await request(app).get('/api/devices')).status).toBe(403);expect(calls).toHaveLength(0);});

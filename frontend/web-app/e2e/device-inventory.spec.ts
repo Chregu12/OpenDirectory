@@ -42,3 +42,23 @@ test('device UI saves metadata, assignments, lifecycle, CSV and audit with exact
 test('stale writes stop without retry and keep a return link to devices',async({page})=>{
  const writes=await fixture(page,true);await create(page);await page.getByRole('button',{name:'Archivieren',exact:true}).click();const confirm=page.getByRole('alertdialog');await confirm.getByLabel('Begründung').fill('Veraltete Geräteversion nicht überschreiben');await confirm.getByRole('button',{name:'Bestätigen'}).click();await expect(page.getByRole('alert').filter({hasText:'Das Gerät'})).toContainText('geändert');await expect(page.getByRole('link',{name:'Erneut anmelden'})).toHaveAttribute('href','/api/auth/oidc/login?returnTo=%2Fdevices');expect(writes).toHaveLength(2);
 });
+
+test('device agent enrollment and revocation require confirmation and show the actual connection status',async({page})=>{
+ await fixture(page);let connection:any={schemaVersion:1,agentProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,revision:'0',status:'not-enrolled',enrolledAt:null,lastSeen:null,credentialExpiresAt:null,enrollmentExpiresAt:null,report:null,history:{total:0,page:1,limit:25,events:[]}};
+ const writes:any[]=[];const token='odae_'+'a'.repeat(43);
+ await page.route(/\/api\/devices\/[^/]+\/agent(?:\/|\?|$)/,async route=>{
+  const request=route.request();if(request.method()==='GET')return route.fulfill({json:connection});
+  const action=new URL(request.url()).pathname.endsWith('/issue')?'issue':'revoke';const body=request.postDataJSON();writes.push({action,body,etag:request.headers()['if-match']});
+  if(request.headers()['if-match']!==`"agent-${deviceId}-${connection.revision}"`)return route.fulfill({status:412,json:{error:'stale'}});
+  const expiresAt=new Date(Date.now()+600000).toISOString();connection={...connection,revision:String(Number(connection.revision)+1),status:action==='issue'?'pending':'revoked',enrollmentExpiresAt:action==='issue'?expiresAt:null};
+  return route.fulfill({status:action==='issue'?201:200,json:action==='issue'?{connection,enrollmentToken:token,expiresAt}:connection});
+ });
+ await create(page);const panel=page.getByRole('region',{name:'Geräteverbindung'});await expect(panel.getByText('Nicht verbunden',{exact:true})).toBeVisible();
+ await panel.getByRole('button',{name:'Registrierungscode erstellen'}).click();let dialog=page.getByRole('alertdialog');await expect(dialog.getByRole('button',{name:'Bestätigen'})).toBeDisabled();await dialog.getByLabel('Begründung').fill('Erste Registrierung des Firmenlaptops');await dialog.getByRole('button',{name:'Bestätigen'}).click();
+ await expect(panel.getByLabel('Registrierungscode',{exact:true})).toHaveValue(token);await expect(panel.getByText('Registrierung ausstehend',{exact:true})).toBeVisible();await panel.getByRole('button',{name:'Code ausblenden'}).click();await expect(panel.getByLabel('Registrierungscode',{exact:true})).toHaveCount(0);
+ connection={...connection,status:'connected',revision:'3',enrolledAt:new Date().toISOString(),lastSeen:new Date().toISOString(),credentialExpiresAt:new Date(Date.now()+86400000).toISOString(),enrollmentExpiresAt:null,report:{hostname:'registered-laptop',platform:'linux',architecture:'x86_64',osVersion:'Linux',agentVersion:'1.1.0'}};
+ await panel.getByRole('button',{name:'Verbindungsstatus aktualisieren'}).click();await expect(panel.getByText('Online',{exact:true})).toBeVisible();await expect(panel.getByText('registered-laptop')).toBeVisible();await page.screenshot({path:'/private/tmp/opendirectory-agent-desktop.png',fullPage:true});
+ await panel.getByRole('button',{name:'Gerätezugang widerrufen'}).click();dialog=page.getByRole('alertdialog');await dialog.getByLabel('Begründung').fill('Verbindung nach bestätigtem Test widerrufen');await dialog.getByRole('button',{name:'Bestätigen'}).click();await expect(panel.getByText('Zugang widerrufen',{exact:true})).toBeVisible();
+ expect(writes.map(write=>write.etag)).toEqual([`"agent-${deviceId}-0"`,`"agent-${deviceId}-3"`]);expect(writes.every(write=>write.body.confirm===true&&write.body.reason.length>=10)).toBe(true);
+ await page.setViewportSize({width:390,height:844});await panel.getByRole('heading',{name:'Geräteverbindung',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'/private/tmp/opendirectory-agent-mobile.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});

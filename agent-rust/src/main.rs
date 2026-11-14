@@ -1,17 +1,18 @@
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
 use std::time::Duration;
-use tokio::time::sleep;
 
 mod config;
 mod enrollment;
-mod commands;
-mod compliance;
 
 use config::AgentConfig;
 
 #[derive(Parser)]
-#[command(name = "od-agent-service", version = "1.0.0", about = "OpenDirectory MDM Agent")]
+#[command(
+    name = "od-agent-service",
+    version = "1.1.0",
+    about = "OpenDirectory MDM Agent"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -31,6 +32,8 @@ enum Commands {
     Run,
     /// Check device compliance and report
     Compliance,
+    /// Send one authenticated heartbeat
+    Heartbeat,
     /// Show current configuration
     Status,
     /// Install as system service
@@ -39,13 +42,17 @@ enum Commands {
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info")
-    ).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let cli = Cli::parse();
 
-    let mut cfg = AgentConfig::load().unwrap_or_default();
+    let mut cfg = match AgentConfig::load() {
+        Ok(cfg) => cfg,
+        Err(_) => {
+            error!("Cannot read agent configuration");
+            std::process::exit(1);
+        }
+    };
 
     if let Some(url) = cli.server_url {
         cfg.server_url = url;
@@ -57,10 +64,16 @@ async fn main() {
     let result = match cli.command.unwrap_or(Commands::Run) {
         Commands::Enroll => enrollment::enroll(&mut cfg).await,
         Commands::Run => run_daemon(cfg).await,
-        Commands::Compliance => compliance::check_and_report(&cfg).await,
+        Commands::Compliance => {
+            Err("Compliance policies are not configured for agent protocol 1".into())
+        }
+        Commands::Heartbeat => enrollment::heartbeat(&cfg).await,
         Commands::Status => {
             println!("Server URL: {}", cfg.server_url);
-            println!("Device ID:  {}", cfg.device_id.as_deref().unwrap_or("(not enrolled)"));
+            println!(
+                "Device ID:  {}",
+                cfg.device_id.as_deref().unwrap_or("(not enrolled)")
+            );
             println!("Enrolled:   {}", cfg.device_token.is_some());
             Ok(())
         }
@@ -78,80 +91,30 @@ async fn run_daemon(cfg: AgentConfig) -> Result<(), Box<dyn std::error::Error>> 
         return Err("Device not enrolled. Run: od-agent-service enroll".into());
     }
 
-    info!("OpenDirectory Agent starting. Device: {}",
-        cfg.device_id.as_deref().unwrap_or("unknown"));
+    info!(
+        "OpenDirectory Agent starting. Device: {}",
+        cfg.device_id.as_deref().unwrap_or("unknown")
+    );
 
-    let cfg = std::sync::Arc::new(cfg);
-
-    // Start concurrent tasks
-    let hb_cfg = cfg.clone();
-    let cmd_cfg = cfg.clone();
-    let comp_cfg = cfg.clone();
-
-    let heartbeat_task = tokio::spawn(async move {
-        loop {
-            if let Err(e) = send_heartbeat(&hb_cfg).await {
-                warn!("Heartbeat failed: {}", e);
+    let mut ticker = tokio::time::interval(Duration::from_secs(
+        cfg.heartbeat_interval_secs.clamp(30, 300),
+    ));
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                if let Err(error) = enrollment::heartbeat(&cfg).await { warn!("Heartbeat failed: {}", error); }
             }
-            sleep(Duration::from_secs(60)).await;
-        }
-    });
-
-    let commands_task = tokio::spawn(async move {
-        loop {
-            sleep(Duration::from_secs(30)).await;
-            if let Err(e) = commands::poll_and_execute(&cmd_cfg).await {
-                warn!("Command poll failed: {}", e);
-            }
-        }
-    });
-
-    let compliance_task = tokio::spawn(async move {
-        loop {
-            if let Err(e) = compliance::check_and_report(&comp_cfg).await {
-                warn!("Compliance check failed: {}", e);
-            }
-            sleep(Duration::from_secs(300)).await;
-        }
-    });
-
-    tokio::select! {
-        _ = heartbeat_task => {},
-        _ = commands_task => {},
-        _ = compliance_task => {},
-        _ = tokio::signal::ctrl_c() => {
-            info!("Received Ctrl-C, shutting down.");
+            _ = tokio::signal::ctrl_c() => { info!("Agent stopped."); break; }
         }
     }
 
     Ok(())
 }
 
-async fn send_heartbeat(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(cfg.insecure_skip_verify)
-        .timeout(Duration::from_secs(15))
-        .build()?;
-
-    let payload = serde_json::json!({
-        "deviceId": cfg.device_id,
-        "platform": std::env::consts::OS,
-        "arch": std::env::consts::ARCH,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "agentVersion": "1.0.0",
-    });
-
-    let url = format!("{}/api/enrollment/heartbeat", cfg.server_url);
-    client.post(&url)
-        .bearer_auth(cfg.device_token.as_deref().unwrap_or(""))
-        .json(&payload)
-        .send()
-        .await?;
-
-    Ok(())
-}
-
 fn install_service() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    return Err("Use an elevated scheduled task to run od-agent-service run at startup; Windows service installation is not supported".into());
+    #[cfg(not(windows))]
     let exe_path = std::env::current_exe()?;
 
     #[cfg(target_os = "linux")]

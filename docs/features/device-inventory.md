@@ -1,5 +1,7 @@
 # Eigenes Geräteinventar und Mitarbeitenden-Zuweisung
 
+Seit Version 1.0.40 ergänzt die [Geräteverbindung über den Rust-Agenten](device-agents.md) das weiterhin getrennte lokale Inventar. Registrierung, Heartbeats und Widerruf ändern die Inventarzuweisung nicht. Aktive Verbindungen müssen vor Plattformänderung, Wartung oder Archivierung widerrufen werden.
+
 Stand: 10. November 2026. Begrenzter vertikaler Slice für BR-003: reale Unternehmensgeräte erfassen, eigene Mitarbeitende auswählen, genau eine aktuelle Benutzerzuweisung verwalten und die tatsächliche Historie sehen. Keine MDM-, Enrollment-, Compliance- oder Lizenzwirkung wird aus einer Inventarzeile abgeleitet.
 
 Der anschliessende [Geräterückgabe-Teilprozess](device-returns.md) verbindet echte negative Account-Checkpoints mit ausdrücklichen Rückgabeanforderungen. Erst eine gesonderte manuelle Bestätigung verwendet denselben kanonischen Inventar-Entzug. Anfordern oder Abbrechen allein ändert die Zuweisung nicht; normale Neuzuweisung wird nie als physische Rückgabe ausgegeben.

@@ -10,14 +10,26 @@ const { createAccessStateClient } = require('../../../../packages/oidc-access-st
 const { deviceEtag, deviceReturnEtag } = require('../../../../packages/device-inventory-contract');
 const { DeviceInventory } = require('./DeviceInventory');
 const { DeviceReturns } = require('./DeviceReturns');
+const { DeviceAgents, agentEtag } = require('./DeviceAgents');
 const database = require('./db');
 
-function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }) } = {}) {
+function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }) } = {}) {
   const app=express();const issuer=process.env.OIDC_ISSUER || 'http://localhost:3001';const jwks=createRemoteJWKSet(new URL(process.env.JWKS_URI || 'http://localhost:3001/jwks'));const accessState=createAccessStateClient();
   app.disable('x-powered-by');app.use(helmet());app.use(cors({origin:(process.env.CORS_ORIGINS || 'http://localhost:3000').split(',')}));
   app.use(express.json({limit:'16kb',strict:true}));app.use(rateLimit({windowMs:60000,max:1000,standardHeaders:true,legacyHeaders:false}));
   app.use((req,res,next)=>{req.correlationId=randomUUID();res.set('Cache-Control','no-store').set('X-Correlation-ID',req.correlationId);next();});
   app.get('/health',async(req,res)=>{const health=await db.healthCheck();res.status(health.status==='healthy'?200:503).json({service:'device-service',mode:'inventory-only',storage:health.status});});
+  // Only these two machine endpoints accept device credentials; human APIs still require OIDC.
+  const agentLimit=rateLimit({windowMs:60000,max:120,standardHeaders:true,legacyHeaders:false});
+  app.post('/api/device-agent/register',agentLimit,route(async(req,res)=>{
+    if(req.headers.authorization || req.headers['x-api-key'] || req.headers['x-enrollment-token'])throw Object.assign(new Error('Exact agent enrollment required'),{status:401});
+    res.status(201).json(await agents.register(req.body,req.correlationId));
+  }));
+  app.post('/api/device-agent/heartbeat',agentLimit,route(async(req,res)=>{
+    if(req.headers['x-api-key'] || req.headers['x-enrollment-token'])throw Object.assign(new Error('Device credential required'),{status:401});
+    res.json(await agents.heartbeat(req.body,req.headers.authorization));
+  }));
+  app.use('/api/device-agent',(_req,res)=>res.status(404).json({error:'Agent operation not found'}));
   app.use(async(req,res,next)=>{
     const authorization=req.headers.authorization;
     if(req.headers['x-api-key'] || req.headers['x-enrollment-token'] || typeof authorization!=='string' || authorization.length>16384 || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization))return res.status(401).json({error:'Original inventory access token required'});
@@ -48,6 +60,11 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.get('/api/devices',route(async(req,res)=>res.json(await inventory.list(req.query,req.user,req.headers.authorization))));
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
   app.get('/api/devices/export',route(async(req,res)=>{const value=await inventory.exportCsv(req.query,req.user,req.headers.authorization);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
+  app.get('/api/devices/:id/agent',route(async(req,res)=>{const value=await agents.get(req.params.id,req.query,req.user,req.headers.authorization);res.set('ETag',agentEtag(value.deviceId,value.revision)).json(value);}));
+  for(const action of ['issue','revoke'])app.post('/api/devices/:id/agent/'+action,route(async(req,res)=>{
+    const value=await agents.manage(req.params.id,action,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);
+    const connection=value.connection || value;res.set('ETag',agentEtag(connection.deviceId,connection.revision)).status(action==='issue'?201:200).json(value);
+  }));
   app.get('/api/devices/:id/history',route(async(req,res)=>res.json(await inventory.history(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/:id',route(async(req,res)=>{
     if(Object.keys(req.query).length)throw Object.assign(new Error('No inventory device selectors'),{status:400});result(res,await inventory.get(req.params.id,req.user,req.headers.authorization));
@@ -57,12 +74,12 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.post('/api/devices/:id/lifecycle',route(async(req,res)=>result(res,await inventory.lifecycle(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId))));
   app.use('/api',(req,res)=>res.status(501).json({error:'unsupported',managementMode:'inventory-only',message:'No enrolled provider or remote device action is implemented by this inventory receiver.'}));
   app.use((error,req,res,_next)=>{
-    const status=error.status || ({23505:409,23514:409,23503:409,42501:503,'22P02':400,'22003':409,'55P03':409,'57014':503}[error.code]) || 503;
+    const status=error.status || ({23505:409,23514:409,23503:409,28000:401,42501:503,'22P02':400,'22003':409,'55P03':409,'57014':503}[error.code]) || 503;
     res.status(status).json({error:status===503?'Persistent inventory or receiving evidence unavailable':status>=500?'Inventory operation unavailable':error.message,correlationId:req.correlationId});
   });
   return app;
 }
-async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
+async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_agent_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
 if(require.main===module)start().then(server=>{
   const close=()=>{server.closeAllConnections();server.close(()=>database.pool.end().then(()=>process.exit(0)));};process.once('SIGTERM',close);process.once('SIGINT',close);
 }).catch(()=>{process.stderr.write('Device inventory startup requires migrated PostgreSQL and configured receiving dependencies.\n');process.exitCode=1;database.pool.end().catch(()=>{});});

@@ -7,6 +7,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Device, DeviceCapabilities, DeviceHistoryPage, DeviceInput, DeviceInventoryClient, DevicePage, DeviceFilters, devicePlatforms, deviceLifecycles, deviceInventoryError } from '@/lib/deviceInventory';
 import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
+import DeviceAgentPanel from './DeviceAgentPanel';
 
 const eventLabels = { 'device.registered': 'Gerät erfasst', 'device.assigned': 'Benutzer zugewiesen', 'device.assignment.released': 'Zuweisung aufgehoben', 'device.updated': 'Stammdaten geändert', 'device.lifecycle.changed': 'Lebenszyklus geändert' };
 
@@ -184,7 +185,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
     rightContent={canRead ? <a className="fluent-btn-secondary" href="/device-returns">Geräterückgaben öffnen</a> : undefined}
     actions={[{ label: 'CSV exportieren', onClick: () => void exportCsv(), disabled: busy || !enhanced || !devices }, { label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); setReload(value => value + 1); }, disabled: busy }]}>
     <div className="space-y-5" style={{ color: 'var(--text-primary)' }}>
-      <details className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}><summary className="cursor-pointer">Inventar und Geräteverwaltung</summary><p className="mt-2">Nur Inventar · Nicht registriert · Compliance unbekannt. Eine Inventarzuweisung richtet keine Geräteverwaltung ein.</p></details>
+      <details className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}><summary className="cursor-pointer">Inventar und Geräteverwaltung</summary><p className="mt-2">Inventar erfassen, Personen zuweisen und Windows-, macOS- oder Linux-Geräte über den OpenDirectory-Agenten verbinden. Compliance bleibt bis zur Richtlinienprüfung unbekannt.</p></details>
       {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3"><p>{error}</p><div className="flex gap-3">{needsMfa && <a className="fluent-btn-secondary" href="/mfa?returnTo=%2Fdevices">MFA einrichten</a>}<a className="fluent-btn-primary" href="/api/auth/oidc/login?returnTo=%2Fdevices">Erneut anmelden</a></div></div> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
         {notice && !selected && <p role="status">{notice}</p>}
         <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); clearSelection(); setPage(1); setSearch(searchDraft.trim()); setListVersion(value => value + 1); }}>
@@ -226,7 +227,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
             Plattform: platformLabels[selected.platform], Betriebssystemversion: selected.osVersion || '—', Eigentum: ownershipLabels[selected.ownership],
             Kaufdatum: selected.purchaseDate || '—', Garantieende: selected.warrantyEnd || '—', Beschreibung: selected.description || '—',
             Benutzerzuordnung: selected.assignedUserId || 'Nicht zugewiesen', 'Zuweisungs-ID': selected.assignmentId || '—', Datensatzversion: selected.revision,
-            'Erfasst am': selected.createdAt, 'Geändert am': selected.updatedAt, 'Zuletzt gesehen': 'Keine Telemetrie',
+            'Erfasst am': selected.createdAt, 'Geändert am': selected.updatedAt,
           }).map(([label, value]) => <div key={label}><dt className="opacity-70">{label}</dt><dd className="break-words">{value}</dd></div>)}</dl>
           {canAssign && ['available', 'assigned'].includes(selected.lifecycle) && <section aria-label="Benutzerzuweisung" className="border-t border-[var(--border)] pt-4 space-y-4">
             <h3 className="font-semibold">Benutzerzuweisung</h3>
@@ -254,6 +255,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
             </>}
           </section>}
           {!selected.assignedUserId && ['maintenance', 'retired'].includes(selected.lifecycle) && <p className="text-sm">Für eine neue Benutzerzuweisung das Gerät zuerst wieder bereitstellen.</p>}
+          <DeviceAgentPanel key={selected.id} device={selected} actor={access!.userId} canManage={Boolean(canCreate)} disabled={busy} onBusy={setBusy} onSecurityError={failure => fail(failure, generation.current)} />
           <section aria-label="Gerätehistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Gerätehistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">

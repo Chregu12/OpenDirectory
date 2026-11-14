@@ -1,0 +1,169 @@
+{
+  "checkedAt": "2026-11-14T10:34:24.084413+00:00",
+  "url": "https://opendirectory.heusser.local/devices",
+  "namespace": "opendirectory",
+  "release": "opendirectory",
+  "chart": "opendirectory-lite-0.1.43",
+  "appVersion": "1.0.40",
+  "baselineCommit": "f9a4c14622fefd13a686d3087054b486a715895a",
+  "features": [
+    "Per-device single-use ten-minute registration code, replaced codes and credentials revoked immediately",
+    "Separate hashed device-only ninety-day credentials; actual Rust heartbeat and server receipt time",
+    "Device detail UI with connection status, original actor and paginated retained control audit",
+    "Explicit reason and exact agent ETag for original Engineering PIM, administrator or own company owner management",
+    "Agent connection must be revoked before maintenance, archival or platform change"
+  ],
+  "validation": {
+    "frontendUnit": {
+      "suites": 148,
+      "passed": 3164
+    },
+    "deviceUnit": {
+      "suites": 22,
+      "passed": 628
+    },
+    "gatewayUnit": {
+      "suites": 12,
+      "passed": 207
+    },
+    "deviceNativeCombined": {
+      "passed": 111
+    },
+    "finalAgentNative": {
+      "passed": 13,
+      "overlapWithCombined": 11,
+      "includesActualCompiledRustHttpGatewayClient": true
+    },
+    "rustUnit": {
+      "passed": 2
+    },
+    "signedOAuthPimGatewayPostgres": {
+      "passed": 1,
+      "scenario": "Engineering duty eligibility/review/MFA activation, inventory maintenance, agent issuance, registration, heartbeat, revocation and rejection of device credentials on human APIs"
+    },
+    "developmentBrowser": {
+      "passed": 3
+    },
+    "productionImageBrowser": {
+      "passed": 3
+    },
+    "productionVisualRecheck": {
+      "passed": 1,
+      "desktopAndMobileInspected": true
+    },
+    "typeCheck": "passed",
+    "gitDiffCheck": "passed",
+    "helmLint": "passed"
+  },
+  "rollout": {
+    "resourceCount": 49,
+    "phase1": {
+      "phase": 1,
+      "revision": 62,
+      "readyDeployments": 11,
+      "unrelatedDeploymentSpecsUnchanged": true,
+      "runtime": {
+        "device-service": {
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/device-service:1.0.40",
+            "digest": "sha256:dddcf9135800cde054ecf086e8a47c71af3441d6abf8707cba418f6b0ec8e0eb"
+          },
+          "pod": "opendirectory-device-service-7b94f56cfc-ml6jn",
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceAgents.js": "efbb032def303db90b2802b80f49515dc4619ba909169ef425157f300b112948",
+            "/app/src/inventoryServer.js": "b64ac54db5aad75ffd4a865f87626766d7f5331dae49b4bf8e515aa6e0485172",
+            "/app/migrations/008_device_agents.sql": "cb936e99b2d1fdd6f80b16e2650429970e9ce14e903cb538ac24946b1eca9747"
+          }
+        }
+      }
+    },
+    "phase2": {
+      "phase": 2,
+      "revision": 63,
+      "readyDeployments": 11,
+      "unrelatedDeploymentSpecsUnchanged": true,
+      "runtime": {
+        "device-service": {
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/device-service:1.0.40",
+            "digest": "sha256:dddcf9135800cde054ecf086e8a47c71af3441d6abf8707cba418f6b0ec8e0eb"
+          },
+          "pod": "opendirectory-device-service-7b94f56cfc-ml6jn",
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceAgents.js": "efbb032def303db90b2802b80f49515dc4619ba909169ef425157f300b112948",
+            "/app/src/inventoryServer.js": "b64ac54db5aad75ffd4a865f87626766d7f5331dae49b4bf8e515aa6e0485172",
+            "/app/migrations/008_device_agents.sql": "cb936e99b2d1fdd6f80b16e2650429970e9ce14e903cb538ac24946b1eca9747"
+          }
+        },
+        "api-gateway": {
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.40",
+            "digest": "sha256:d841e2798ada65e7cb58473f93e9030c95ce88e5c3478d9473358dcd9bffe6d2"
+          },
+          "pod": "opendirectory-api-gateway-98d8db544-hcdfk",
+          "arch": "x64",
+          "uid": 1001,
+          "hashes": {
+            "/app/src/index.js": "aa508399340fc1d5d44f0e303bc8f62a586cd3ea3fef1141725c5f49318d9bb0",
+            "/app/src/middleware/deviceAgentProxy.js": "0c297fb2f87a8466414d4d3bb2e15e76f988b28805a7fab8fd4ab171adac5713"
+          }
+        },
+        "web-app": {
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.40",
+            "digest": "sha256:8ef985c8c2ffd7b75e529a177f2ac6bea7a84aecdbcf2a684a7a6bbbea089a74"
+          },
+          "pod": "opendirectory-web-app-576d9d7868-64mt5",
+          "arch": "x64",
+          "uid": 1001,
+          "hashes": {
+            "/app/frontend/web-app/src/components/views/DeviceAgentPanel.tsx": "1af0b84b100ddb48b85a94ac4c31f219b9e398f0678ea3b331aa547067a1aed4",
+            "/app/frontend/web-app/src/lib/deviceAgents.ts": "250ead5b458c9714b706bc6adc6031895a44920f911b48bdc5914dcaf0d38308",
+            "/app/frontend/web-app/next.config.js": "6890191bdc2fa19bda0097623ccbc8e80a129ad40bf0e64d478d46408c654b6f"
+          }
+        }
+      }
+    }
+  },
+  "backup": {
+    "database": "devices",
+    "sha256": "5531ff5036260807e159c06655664618721384680965ec5a4e415dd2b7d6c616",
+    "bytes": 90678,
+    "tocVerified": true
+  },
+  "publicChecks": {
+    "devicesPage": 200,
+    "/api/devices": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent": 401,
+    "/api/device-agent/register": 401,
+    "/api/device-agent/heartbeat": 401,
+    "/api/device-agent/register?tenantId=foreign": 400,
+    "cssSha256": "d24ec5fc5c80163709cd8c2707c3c7eec88f4112c8cd4317d39f2af42a61b2c5",
+    "tlsVerified": true,
+    "productionHumanLoginPerformed": false
+  },
+  "dataBefore": {
+    "devices": 0,
+    "events": 0,
+    "assignments": 0,
+    "returns": 0
+  },
+  "dataAfter": {
+    "devices": 0,
+    "events": 0,
+    "assignments": 0,
+    "returns": 0
+  },
+  "limits": [
+    "No personal production login, MFA or PIM grant created; positive end-to-end tests use disposable accounts and databases",
+    "Actual Rust host test is macOS; Windows/Linux hardware and autostart not accepted",
+    "No signed installers or prebuilt cross-platform downloads",
+    "Compliance, Apple/Android MDM, Intune, provider actions, software deployment and remote commands remain open",
+    "Agent reports are not hardware-attested; privilege of the database operator remains a trust boundary",
+    "Large-fleet load and credential lifecycle operations require separate operational acceptance"
+  ]
+}

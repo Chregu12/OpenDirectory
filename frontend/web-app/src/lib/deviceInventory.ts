@@ -77,7 +77,9 @@ export function deviceInventoryError(error: unknown) {
   if (status === 401) return 'Die Sitzung ist nicht mehr gültig. Bitte erneut anmelden und neu laden.';
   if (status === 403) return 'Keine Berechtigung für diese Geräteaktion. Bitte neu laden.';
   if (status === 412) return 'Das Gerät wurde zwischenzeitlich geändert. Bitte neu laden; die Aktion wird nicht automatisch wiederholt.';
-  if (status === 409) return 'Inventarnummer oder Seriennummer bereits vergeben oder Zuweisung geändert. Bitte neu laden.';
+  if (status === 409) return (error as { response?: { data?: { error?: string } } })?.response?.data?.error === 'Revoke the agent connection before changing its platform or retiring the device'
+    ? 'Bitte zuerst den Gerätezugang widerrufen, bevor du die Plattform änderst oder das Gerät in Wartung nimmst beziehungsweise archivierst.'
+    : 'Inventarnummer oder Seriennummer bereits vergeben oder Zuweisung geändert. Bitte neu laden.';
   if (status === 413) return 'Der Export ist zu groß. Bitte auf höchstens 5.000 Geräte eingrenzen.';
   if (status === 400) return 'Die Eingaben wurden abgelehnt. Bitte prüfen und neu laden.';
   if (status === 428) return 'Für das Geräteinventar ist eine höchstens fünf Minuten alte MFA-Anmeldung erforderlich. Richte MFA ein und melde dich mit Passwort und aktuellem Einmalcode erneut an.';

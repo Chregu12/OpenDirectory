@@ -96,9 +96,9 @@ async function creationForm() {
 
 test('renders actual inventory and audit records without provider controls or invented telemetry', async () => {
   await openDevice(); const details = within(screen.getByRole('article', { name: 'Gerätedetails' }));
-  expect(details.getByText(deviceId)).toBeInTheDocument(); expect(details.getByText('SER-001')).toBeInTheDocument(); expect(details.getByText('Keine Telemetrie')).toBeInTheDocument();
+  expect(details.getByText(deviceId)).toBeInTheDocument(); expect(details.getByText('SER-001')).toBeInTheDocument();
   await details.findByText('Gerät erfasst'); expect(details.getByText(/Korrelations-ID:/)).toHaveTextContent(otherId);
-  expect(screen.getByText(/Nur Inventar · Nicht registriert · Compliance unbekannt/)).toBeInTheDocument();
+  expect(screen.getByText(/Compliance bleibt bis zur Richtlinienprüfung unbekannt/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /enroll|wipe|remote|intune|jamf|registrieren/i })).not.toBeInTheDocument();
 });
 

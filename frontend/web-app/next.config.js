@@ -61,6 +61,8 @@ const nextConfig = {
       { source: '/api/devices/users/:userId/offboarding-returns/:path*', destination: `${deviceServiceUrl}/api/devices/users/:userId/offboarding-returns/:path*` },
       { source: '/api/devices/:id/assignment',                destination: `${deviceServiceUrl}/api/devices/:id/assignment` },
       { source: '/api/devices/:id/history',                   destination: `${deviceServiceUrl}/api/devices/:id/history` },
+      { source: '/api/devices/:id/agent/:path*',               destination: `${deviceServiceUrl}/api/devices/:id/agent/:path*` },
+      { source: '/api/device-agent/:path*',                   destination: `${deviceServiceUrl}/api/device-agent/:path*` },
       { source: '/api/devices/:id',                          destination: `${deviceServiceUrl}/api/devices/:id` },
       // App Store routes -> app-store service
       { source: '/api/store/:path*',        destination: `${appStoreUrl}/api/store/:path*` },

@@ -201,6 +201,9 @@ class APIGateway {
 
     // Custom middleware
     this.app.use(this.apiClientLimiter);
+    if ((this.enabledModules || configManager.getEnabledModules()).includes('device-management')) {
+      this.app.use(require('./middleware/deviceAgentProxy').deviceAgentProxy(process.env.DEVICE_SERVICE_URL || 'http://device-service:3003'));
+    }
     this.app.use(this.authentication.middleware);
     this.app.use((req, res, next) => {
       const limiter = this.getRateLimiter(req);
