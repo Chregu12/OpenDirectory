@@ -128,6 +128,36 @@ The release workflow validates version input as data, shares the exact normalize
 tag with its archive job, and creates the archive outside its source directory.
 Validating these steps locally does not publish or prove a GitHub Release.
 
+## Verifying canonical database backups
+
+`deploy/k8s/verify-postgres-restore.py` takes read-only backups from an explicitly
+selected PostgreSQL pod and restores them in a disposable Docker PostgreSQL with
+no network access. It requires Python 3.11+, POSIX, kubectl and Docker:
+
+```bash
+python3 deploy/k8s/verify-postgres-restore.py \
+  --context default --namespace opendirectory --pod opendirectory-postgres-0 \
+  --database identity --database devices --database app_store \
+  --docker-context desktop-linux \
+  --output-dir "$HOME/Library/Application Support/OpenDirectory/backups/new-rehearsal"
+```
+
+Choose the actual contexts and a new output directory. The directory must not
+exist; backups are never overwritten. It retains sensitive database archives and
+diagnostics with directory mode 0700 and file mode 0600, and removes only its own
+randomly named Docker container.
+
+Each database uses one exported read-only snapshot for both its archive and row
+checksums. A successful `verification.json` confirms that full archive restore,
+table counts, per-table row checksums and selected receiving guards passed.
+Ownership and privileges are restored without skipping archive errors. The tool
+supports the canonical public-schema databases with one common database owner;
+additional schemas or missing roles fail verification.
+
+These are separate consistent snapshots, not a coordinated platform recovery.
+Cluster roles, signing keys, other services, recovery time and physical agent
+reconnection need separate recovery checks.
+
 ## Unit tests
 
 ### Domain aggregates

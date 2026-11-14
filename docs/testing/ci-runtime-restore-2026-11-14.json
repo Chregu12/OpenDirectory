@@ -1,0 +1,144 @@
+{
+  "checkedAt": "2026-11-14T21:09:50.061418+00:00",
+  "status": "restore-rehearsals-passed-rollout-prepared",
+  "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00",
+  "ci": {
+    "runId": 43635936047,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43635936047",
+    "serviceTests": "success",
+    "runtimeImages": "success",
+    "securityScan": "success",
+    "nativeAndBrowserIntegration": "in_progress",
+    "browserArtifact": {
+      "id": 14129954741,
+      "name": "frontend-browser-evidence",
+      "sha256": "be88ad4d317a848050d9033d334d45b269ae5ad0ea12334d4a103fa01c202d7f"
+    },
+    "nativeIdentityPostgreSQL": "success"
+  },
+  "preparedAppStore": {
+    "version": "1.0.51",
+    "digest": "sha256:a2a7344c7a678e6e977f6448eed4fb4558f63eab75ae869d69aa07c533cd35cc",
+    "architecture": "linux/amd64",
+    "verifiedSourceFiles": 16,
+    "packageDirectoryOwner": 1001,
+    "deploymentSpecComparison": {
+      "checkedDeployments": 11,
+      "changedDeployments": [
+        "opendirectory-app-store"
+      ]
+    },
+    "databaseBackup": {
+      "bytes": 19958,
+      "sha256": "84e52a7e4178f8a6f9be4551c0afce34f3e83d9e735f0b400cb90cf72efa4252",
+      "tocEntries": 39
+    },
+    "uploadedPackageBackup": {
+      "bytes": 169,
+      "sha256": "e88abf51cf1ac06a3e3eb0fde1ba55ce83a211f4708c39e260734481d040ae50",
+      "regularFiles": 0,
+      "archiveEntries": 3
+    },
+    "restoreTest": {
+      "fullArchiveRestored": true,
+      "tablesVerified": 9,
+      "sameRowCountsAndSha256ByTable": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "productionPostgreSQL": "15.19",
+      "testPostgreSQLMajor": 16,
+      "comparison": "Exact table-name mapping; result order differs with database collation"
+    }
+  },
+  "platformRestore": {
+    "productionPostgreSQL": "15.19",
+    "restorePostgreSQLMajor": 16,
+    "results": {
+      "identity": {
+        "archiveBytes": 3735048,
+        "archiveSha256": "136cb1cafb0aaa0fd2df34ad2822ec006ed2b31a9339433a4b4de70ea12b95e1",
+        "tableCount": 133,
+        "sameRowCountsAndSha256ByTable": true,
+        "transactionSnapshotSharedWithDump": true,
+        "receiversPassed": [
+          "identity_company_role_receiving",
+          "identity_company_group_rule_live_receiving",
+          "identity_company_activation_receiving"
+        ],
+        "ownershipAndPrivilegesRestoredFromArchive": true
+      },
+      "devices": {
+        "archiveBytes": 180853,
+        "archiveSha256": "652953486a9877c5cb89c0f84be5cd03bb53b6f22b937baeecb6e21b99797455",
+        "tableCount": 17,
+        "sameRowCountsAndSha256ByTable": true,
+        "transactionSnapshotSharedWithDump": true,
+        "receiversPassed": [
+          "device_inventory_receiving",
+          "device_compliance_receiving",
+          "device_sync_receiving",
+          "device_returns_receiving"
+        ],
+        "ownershipAndPrivilegesRestoredFromArchive": true
+      }
+    },
+    "separateConsistentSnapshotPerDatabase": true
+  },
+  "limits": [
+    "Native/cross-service integration CI remains running at this observation.",
+    "Prepared image is not yet rolled out.",
+    "Rehearsals cover these three database archives and selected receiving guards; they do not prove coordinated complete-platform disaster recovery, signing-key recovery, RTO/RPO, or physical agent reconnection."
+  ],
+  "repeatableRestoreVerification": {
+    "tool": "deploy/k8s/verify-postgres-restore.py",
+    "toolSha256": "ad53c79a3125a17320815d2108a8aab47e5e6288666d072d5b96c390067e5409",
+    "completedAt": "2026-11-14T20:59:28.108499+00:00",
+    "sourcePostgreSQL": "15.19",
+    "restorePostgreSQL": "16.16 (Debian 16.16-1.pgdg13+1)",
+    "restoreImageId": "sha256:2e7ed4ea03deedbb45c26c68bf2a7090dc68dd8518a9c75928c4b9b0f59bc411",
+    "privateDirectoryAndFilePermissionsVerified": true,
+    "negativeCliChecksPassed": [
+      "missing database",
+      "invalid database",
+      "duplicate database",
+      "existing output directory preserved"
+    ],
+    "databases": {
+      "identity": {
+        "archiveBytes": 3735048,
+        "archiveSha256": "d6c23045ec2a220ecf9263a6c994d70303f3fab7eec84fa037e9e3d4438e90a6",
+        "tables": 133,
+        "sameRowCountsAndSha256ByTable": true,
+        "transactionSnapshotSharedWithDump": true,
+        "ownershipAndPrivilegesRestoredFromArchive": true,
+        "receiversPassed": [
+          "identity_company_role_receiving",
+          "identity_company_group_rule_live_receiving",
+          "identity_company_activation_receiving"
+        ]
+      },
+      "devices": {
+        "archiveBytes": 180853,
+        "archiveSha256": "58c0c8e46c4951251b71917bfd70ef1eb0ba9b246e1d83113e49a046ff5f16b2",
+        "tables": 17,
+        "sameRowCountsAndSha256ByTable": true,
+        "transactionSnapshotSharedWithDump": true,
+        "ownershipAndPrivilegesRestoredFromArchive": true,
+        "receiversPassed": [
+          "device_inventory_receiving",
+          "device_compliance_receiving",
+          "device_sync_receiving",
+          "device_returns_receiving"
+        ]
+      },
+      "app_store": {
+        "archiveBytes": 19958,
+        "archiveSha256": "6adcbcea0c7d65e6dfaf285142a33c6e15757c05cd23334942e6ccd16d704677",
+        "tables": 9,
+        "sameRowCountsAndSha256ByTable": true,
+        "transactionSnapshotSharedWithDump": true,
+        "ownershipAndPrivilegesRestoredFromArchive": true,
+        "receiversPassed": []
+      }
+    }
+  }
+}
