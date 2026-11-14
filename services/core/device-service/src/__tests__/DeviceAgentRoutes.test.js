@@ -34,7 +34,7 @@ test('only exact machine registration reaches the device kernel without invoking
 test.each(['/api/device-agent/register?tenantId=foreign','/api/device-agent/heartbeat?force=true'])('machine selectors cannot override device scope (%s)', async path => { expect((await request(app).post(path).send({})).status).toBe(400); expect(agents.register).not.toHaveBeenCalled(); expect(agents.heartbeat).not.toHaveBeenCalled(); });
 test('device credential is forwarded only to heartbeat, never to human inventory', async () => {
  const header = 'Bearer odad_' + 'b'.repeat(43); expect((await request(app).post('/api/device-agent/heartbeat').set('Authorization', header).send({ deviceId: id, report: {} })).status).toBe(200);
- expect(agents.heartbeat).toHaveBeenCalledWith({ deviceId: id, report: {} }, header);
+ expect(agents.heartbeat).toHaveBeenCalledWith({ deviceId: id, report: {} }, header, expect.any(String));
  jwtVerify.mockRejectedValueOnce(new Error('Not a human JWT')); expect((await request(app).get('/api/devices/' + id + '/agent').set('Authorization', header)).status).toBe(401); expect(agents.get).not.toHaveBeenCalled();
 });
 test.each(['X-API-Key','X-Enrollment-Token','Authorization'])('alternate credentials cannot enroll (%s)', async header => { expect((await request(app).post('/api/device-agent/register').set(header, 'alternate').send({})).status).toBe(401); expect(agents.register).not.toHaveBeenCalled(); });

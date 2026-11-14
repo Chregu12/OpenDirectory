@@ -2,7 +2,7 @@ use crate::config::AgentConfig;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: &str = "1.2.0";
+pub const VERSION: &str = "1.3.0";
 pub fn client(cfg: &AgentConfig) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let url = reqwest::Url::parse(&cfg.server_url)?;
     if url.scheme() != "https"
@@ -140,21 +140,30 @@ struct HeartbeatResponse {
     agent_protocol: u8,
     device_id: String,
     received_at: String,
+    compliance: ComplianceResult,
 }
-pub async fn heartbeat(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ComplianceResult {
+    status: String,
+    policy_revision: String,
+    evaluated_at: String,
+}
+async fn transmit(cfg: &AgentConfig) -> Result<ComplianceResult, Box<dyn std::error::Error>> {
     let id = cfg.device_id.as_deref().ok_or("Device not enrolled")?;
     let credential = cfg.device_token.as_deref().ok_or("Device not enrolled")?;
     if !device_id(id) || !token(credential, "odad_") {
         return Err("Invalid saved device credential".into());
     }
     let inventory = tokio::task::spawn_blocking(crate::inventory::collect).await?;
+    let security = crate::compliance::collect().await;
     let response = client(cfg)?
         .post(format!(
             "{}/api/device-agent/heartbeat",
             cfg.server_url.trim_end_matches('/')
         ))
         .bearer_auth(credential)
-        .json(&serde_json::json!({"deviceId": id, "report": report(), "inventory": inventory}))
+        .json(&serde_json::json!({"deviceId": id, "report": report(), "inventory": inventory, "security": security}))
         .send()
         .await?;
     if response.status() != reqwest::StatusCode::OK {
@@ -168,7 +177,41 @@ pub async fn heartbeat(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Erro
     {
         return Err("Unconfirmed heartbeat response".into());
     }
-    Ok(())
+    if !["compliant", "non-compliant", "unknown", "not-configured"]
+        .contains(&result.compliance.status.as_str())
+        || result
+            .compliance
+            .policy_revision
+            .parse::<u64>()
+            .ok()
+            .filter(|value| {
+                value.to_string() == result.compliance.policy_revision && *value <= i64::MAX as u64
+            })
+            .is_none()
+        || chrono::DateTime::parse_from_rfc3339(&result.compliance.evaluated_at)?.timestamp() <= 0
+    {
+        return Err("Unconfirmed compliance assessment".into());
+    }
+    Ok(result.compliance)
+}
+pub async fn heartbeat(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Error>> {
+    transmit(cfg).await.map(|_| ())
+}
+pub async fn check_compliance(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let assessment = transmit(cfg).await?;
+    if assessment.status == "compliant" {
+        info!(
+            "Server compliance assessment: compliant, policy revision {}",
+            assessment.policy_revision
+        );
+        Ok(())
+    } else {
+        Err(format!(
+            "Server compliance assessment: {} (policy revision {})",
+            assessment.status, assessment.policy_revision
+        )
+        .into())
+    }
 }
 #[cfg(test)]
 mod tests {

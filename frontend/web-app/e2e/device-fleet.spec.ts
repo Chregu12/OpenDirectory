@@ -10,6 +10,7 @@ async function fleetFixture(page: Page) {
   const statusAt = (i: number) => connected && i === 3 ? 'connected' : ['connected', 'offline', 'not-enrolled', 'pending'][i];
   await page.route(/\/api\/devices(?:\/|\?|$)/, async route => {
     const url = new URL(route.request().url()), json = (data: unknown, status = 200) => route.fulfill({ json: data, status });
+    if (url.pathname.includes('/compliance')) return route.fallback();
     if (url.pathname.endsWith('/capabilities')) return json({ schemaVersion: 1, inventoryProtocol: 2, userId: actor, tenantId: tenant, permissions: ['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign'], managementMode: 'inventory-only', supportedActions: [] });
     if (url.pathname === '/api/devices/fleet' || url.pathname === '/api/devices/fleet/export') {
       reads += 1; if (denied) return json({ error: 'fresh MFA required' }, 428);

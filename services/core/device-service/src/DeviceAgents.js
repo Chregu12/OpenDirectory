@@ -5,6 +5,7 @@ const { validUuid } = require('../../../../packages/identity-authorization-contr
 const { DeviceInventory, pageQuery, selectionWhere, inventoryDevice } = require('./DeviceInventory');
 const { DEVICE_FIELDS } = require('../../../../packages/device-inventory-contract');
 const { validateInventory } = require('./AgentInventory');
+const COMPLIANCE = require('../../../../packages/device-compliance-contract');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const digest = token => createHash('sha256').update(token).digest('hex');
 const identifier = id => { if (!validUuid(id) || id !== id.toLowerCase()) fail(400, 'Canonical agent device required'); return id; };
@@ -38,7 +39,7 @@ class DeviceAgents {
   constructor(database, { inventory = new DeviceInventory(database), secret = () => randomBytes(32).toString('base64url') } = {}) {
     this.database = database; this.inventory = inventory; this.secret = secret;
   }
-  async receiving(client) { await client.query('SELECT device_agent_inventory_receiving()'); }
+  async receiving(client) { await client.query('SELECT device_compliance_receiving()'); }
   async inventoryReport(id, query, user, authorization) {
     identifier(id); if (Object.keys(query).length) fail(400, 'No inventory report selectors');
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
@@ -142,18 +143,22 @@ class DeviceAgents {
       return { schemaVersion: 1, agentProtocol: 1, deviceId: row.device_id, deviceToken: token, credentialExpiresAt: iso((await client.query('SELECT credential_expires_at FROM device_agent_connections WHERE device_id=$1', [row.device_id])).rows[0].credential_expires_at) };
     });
   }
-  async heartbeat(input, authorization) {
+  async heartbeat(input, authorization, correlationId) {
     const hasInventory = input && Object.hasOwn(input, 'inventory');
-    exact(input, hasInventory ? ['deviceId', 'report', 'inventory'] : ['deviceId', 'report']); identifier(input.deviceId); const values = report(input.report);
+    const hasSecurity = input && Object.hasOwn(input, 'security');
+    exact(input, ['deviceId', 'report', ...(hasInventory ? ['inventory'] : []), ...(hasSecurity ? ['security'] : [])]); identifier(input.deviceId); const values = report(input.report);
     const inventory = hasInventory ? validateInventory(input.inventory) : undefined;
+    const security = hasSecurity ? COMPLIANCE.security(input.security) : undefined;
     if (typeof authorization !== 'string' || !/^Bearer odad_[A-Za-z0-9_-]{43}$/.test(authorization)) fail(401, 'Device-only credential required');
     return this.database.transaction(async client => {
       await this.receiving(client);
       const tokenHash = digest(authorization.slice(7));
       const row = (await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 AND credential_hash=$2 AND credential_expires_at>clock_timestamp() AND revoked_at IS NULL', [input.deviceId, tokenHash])).rows[0];
       if (!row) fail(401, 'Agent credential rejected');
-      await client.query('SELECT device_agent_change($1::jsonb)', [JSON.stringify({ action: 'heartbeat', deviceId: row.device_id, tokenHash, report: values, ...(hasInventory ? { inventory } : {}) })]);
-      return { schemaVersion: 1, agentProtocol: 1, deviceId: row.device_id, receivedAt: iso((await client.query('SELECT last_seen FROM device_agent_connections WHERE device_id=$1', [row.device_id])).rows[0].last_seen) };
+      await client.query('SELECT device_agent_change($1::jsonb)', [JSON.stringify({ action: 'heartbeat', deviceId: row.device_id, tokenHash, report: values, ...(hasInventory ? { inventory } : {}), ...(hasSecurity ? { security, complianceEventId: randomUUID(), correlationId: validUuid(correlationId) ? correlationId : randomUUID() } : {}) })]);
+      const actual = (await client.query('SELECT last_seen,compliance_report FROM device_agent_connections WHERE device_id=$1', [row.device_id])).rows[0];
+      if (hasSecurity && !actual.compliance_report) fail(503, 'Actual compliance assessment unavailable');
+      return { schemaVersion: 1, agentProtocol: 1, deviceId: row.device_id, receivedAt: iso(actual.last_seen), ...(hasSecurity ? { compliance: { status: actual.compliance_report.status, policyRevision: actual.compliance_report.policyRevision, evaluatedAt: iso(actual.compliance_report.evaluatedAt) } } : {}) };
     });
   }
 }

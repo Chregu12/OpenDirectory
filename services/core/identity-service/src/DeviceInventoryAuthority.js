@@ -7,13 +7,15 @@ const { createTenantStateClient } = require('../../../../packages/oidc-tenant-st
 const { AuthorizationState } = require('./AuthorizationState');
 const { companyOwner } = require('./CompanyOwner');
 const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory-contract');
+const COMPLIANCE = require('../../../../packages/device-compliance-contract');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 class DeviceInventoryAuthority {
   constructor(database, { issuer = process.env.OIDC_ISSUER || 'http://localhost:3001', revalidate = createTenantStateClient() } = {}) {
     this.database = database; this.issuer = issuer; this.revalidate = revalidate;
   }
-  async read(user, authorization, body = null) {
+  async read(user, authorization, body = null, compliance = false) {
+    if (compliance && body !== null) fail(400, 'No compliance target overrides');
     if (body !== null && (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !validUuid(body.userId))) fail(400, 'Exact canonical userId required');
     if (!this.database.isAvailable()) fail(503, 'Canonical identity storage required');
     if (user?.actor_type !== 'user' || user.iss !== this.issuer || !validContext(user.identity_authorization)) fail(403, 'Canonical inventory human required');
@@ -22,8 +24,9 @@ class DeviceInventoryAuthority {
     const result = await this.database.transaction(async client => {
       const source = await new AuthorizationState({ transaction: callback => callback(client) }).state(user.iss, user.sub);
       if (!source.active || !sameContext(source.context, user.identity_authorization) || !sameTenantContext(source.tenant, tenant) || !acceptsRoleAuthentication(source.authentication, user)) fail(401, 'Original inventory authority changed');
-      const administrative = source.roles.includes('admin') || source.roles.includes('device-enrollment-operator');
-      const owner = administrative ? null : await companyOwner(client, user);
+      const administrative = source.roles.includes('admin') || source.roles.includes('device-enrollment-operator') || compliance && (source.roles.includes('policy-administrator') || source.roles.includes('compliance-reader'));
+      const manager = source.roles.includes('admin') || compliance && source.roles.includes('policy-administrator');
+      const owner = compliance ? (manager ? null : await companyOwner(client, user)) : administrative ? null : await companyOwner(client, user);
       if (!administrative && !owner) fail(403, 'Actual own-company inventory authority required');
       let target = null;
       if (body !== null) {
@@ -32,7 +35,7 @@ class DeviceInventoryAuthority {
         target = { id: account.id, revision: String(account.authorization_revision), enabled: account.enabled };
       }
       return { schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp,
-        context: source.context, tenant, actorUserId: source.context.userId, permissions: [...INVENTORY_PERMISSIONS],
+        context: source.context, tenant, actorUserId: source.context.userId, permissions: compliance ? COMPLIANCE.PERMISSIONS.slice(0, manager || owner ? 2 : 1) : [...INVENTORY_PERMISSIONS],
         validUntil: Math.min(user.exp, user.auth_time + Math.min(300, source.authentication.required ? source.authentication.maxAgeSeconds : 300)), target };
     }, { readOnly: true });
     if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || !acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user)

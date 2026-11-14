@@ -3,11 +3,12 @@
 const { validContext, sameContext, validUuid } = require('../../../../packages/identity-authorization-contract');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
 const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory-contract');
+const COMPLIANCE = require('../../../../packages/device-compliance-contract');
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 class InventoryAuthority {
-  constructor({ endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + '/api/identity/device-inventory', fetchImpl = (...args) => global.fetch(...args) } = {}) {
-    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl;
-    if (!['http:', 'https:'].includes(this.endpoint.protocol) || this.endpoint.username || this.endpoint.password || this.endpoint.search || this.endpoint.hash || this.endpoint.pathname !== '/api/identity/device-inventory') throw new Error('Invalid inventory identity authority URL');
+  constructor({ compliance = false, endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + (compliance ? '/api/identity/device-compliance' : '/api/identity/device-inventory'), fetchImpl = (...args) => global.fetch(...args) } = {}) {
+    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl; this.compliance = compliance;
+    if (!['http:', 'https:'].includes(this.endpoint.protocol) || this.endpoint.username || this.endpoint.password || this.endpoint.search || this.endpoint.hash || this.endpoint.pathname !== (compliance ? '/api/identity/device-compliance' : '/api/identity/device-inventory')) throw new Error('Invalid inventory identity authority URL');
   }
   async read(authorization, user, userId = null) {
     if (typeof authorization !== 'string' || authorization.length > 16384 || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization) || user?.actor_type !== 'user' || !validContext(user.identity_authorization)
@@ -22,7 +23,7 @@ class InventoryAuthority {
       const source = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if (Object.keys(source).length !== 11 || source.schemaVersion !== 1 || source.issuer !== user.iss || source.subject !== user.sub || source.tokenId !== user.jti || source.expiresAt !== user.exp
         || !sameContext(source.context, user.identity_authorization) || source.actorUserId !== source.context.userId || !validTenantContext(source.tenant)
-        || JSON.stringify(source.permissions) !== JSON.stringify(INVENTORY_PERMISSIONS) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
+        || (this.compliance ? !COMPLIANCE.permissions(source.permissions) || userId !== null : JSON.stringify(source.permissions) !== JSON.stringify(INVENTORY_PERMISSIONS)) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
         || (userId === null ? source.target !== null : source.target?.id !== userId || Object.keys(source.target).length !== 3 || typeof source.target.enabled !== 'boolean' || !/^[1-9][0-9]*$/.test(source.target.revision))) throw new Error('Mismatched inventory source');
       return source;
     } catch (error) { if (error.status) throw error; fail(503, 'Inventory identity authority unavailable'); }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.36.0",
+    "version": "1.37.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -45354,8 +45354,8 @@
     "/api/device-agent/heartbeat": {
       "post": {
         "operationId": "receiveDeviceAgentHeartbeat",
-        "summary": "Receive an actual credential-bound agent contact and optional hardware report",
-        "description": "Only the currently registered device credential can report for that exact device. Human JWTs, tenant overrides, caller timestamps, unknown fields and invalid capacities are rejected. inventory is optional for older agents. Storage, source receipt and heartbeat update commit atomically through the device row lock and physical expiry guards. No inventory, assignment or compliance revision is changed.",
+        "summary": "Receive actual agent contact, optional hardware and optional security observations",
+        "description": "Only the currently registered device credential can report for that exact device. Human JWTs, tenant overrides, caller timestamps, unknown fields and invalid capacities are rejected. inventory is optional for older agents. Storage, source receipt and heartbeat update commit atomically through the device row lock and physical expiry guards. No inventory, assignment or compliance revision is changed. Agent 1.3 sends security and inventory; older agent bodies retain their four-field response. A security request also returns the actual compliance summary; HTTP 200 alone does not mean compliant. Server 1.0.47 required for security.",
         "security": [
           {
             "deviceCredential": []
@@ -45418,6 +45418,9 @@
                   },
                   "inventory": {
                     "$ref": "#/components/schemas/AgentInventoryFacts"
+                  },
+                  "security": {
+                    "$ref": "#/components/schemas/AgentSecurityFacts"
                   }
                 }
               }
@@ -45452,6 +45455,34 @@
                     "receivedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "compliance": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status",
+                        "policyRevision",
+                        "evaluatedAt"
+                      ],
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "compliant",
+                            "non-compliant",
+                            "unknown",
+                            "not-configured"
+                          ]
+                        },
+                        "policyRevision": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$",
+                          "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+                        },
+                        "evaluatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
                     }
                   }
                 }
@@ -45817,6 +45848,2547 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/device-compliance": {
+      "get": {
+        "operationId": "readOriginalComplianceAuthority",
+        "summary": "Read the original current compliance source",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceComplianceAuthority"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/compliance/capabilities": {
+      "get": {
+        "operationId": "readOwnComplianceCapabilities",
+        "summary": "Read actual own compliance duties",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "complianceProtocol",
+                    "permissions"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "complianceProtocol": {
+                      "const": 1
+                    },
+                    "permissions": {
+                      "oneOf": [
+                        {
+                          "const": [
+                            "devices.compliance.read"
+                          ]
+                        },
+                        {
+                          "const": [
+                            "devices.compliance.read",
+                            "devices.compliance.manage"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/compliance/policies": {
+      "get": {
+        "operationId": "readOwnCompliancePolicies",
+        "summary": "Read all three own platform policies",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "permissions",
+                    "policies"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "permissions": {
+                      "oneOf": [
+                        {
+                          "const": [
+                            "devices.compliance.read"
+                          ]
+                        },
+                        {
+                          "const": [
+                            "devices.compliance.read",
+                            "devices.compliance.manage"
+                          ]
+                        }
+                      ]
+                    },
+                    "policies": {
+                      "type": "array",
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "items": {
+                        "$ref": "#/components/schemas/DeviceCompliancePolicy"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}/compliance": {
+      "get": {
+        "operationId": "readOwnDeviceCompliance",
+        "summary": "Read effective status and last retained assessment",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "deviceId",
+                    "assetId",
+                    "platform",
+                    "checkedAt",
+                    "policyRevision",
+                    "status",
+                    "assessment"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "assetId": {
+                      "type": "string"
+                    },
+                    "platform": {
+                      "enum": [
+                        "macos",
+                        "windows",
+                        "linux",
+                        "ios",
+                        "ipados",
+                        "android",
+                        "other"
+                      ]
+                    },
+                    "checkedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "policyRevision": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]{0,18})$",
+                      "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+                    },
+                    "status": {
+                      "enum": [
+                        "compliant",
+                        "non-compliant",
+                        "unknown",
+                        "not-configured",
+                        "pending",
+                        "stale",
+                        "historical"
+                      ]
+                    },
+                    "assessment": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/DeviceComplianceAssessment"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/compliance/policies/{platform}": {
+      "put": {
+        "operationId": "changeOwnCompliancePolicy",
+        "summary": "Conditionally change one actual company platform policy",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "windows",
+                "linux"
+              ]
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"device-compliance-TENANT-PLATFORM-REVISION\"; revision 0 means not yet configured. Stale 412; never retry a write automatically."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "policy",
+                    "eventId",
+                    "deliveryStatus"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "policy": {
+                      "$ref": "#/components/schemas/DeviceCompliancePolicy"
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "deliveryStatus": {
+                      "const": "pending"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "settings",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "settings": {
+                    "$ref": "#/components/schemas/DeviceComplianceSettings"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/compliance": {
+      "get": {
+        "operationId": "listOwnDeviceCompliance",
+        "summary": "Read coherent effective own-device statuses and counts",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "macos",
+                "windows",
+                "linux"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "compliant",
+                "non-compliant",
+                "unknown",
+                "not-configured",
+                "pending",
+                "stale",
+                "historical"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "checkedAt",
+                    "page",
+                    "limit",
+                    "total",
+                    "counts",
+                    "devices"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "checkedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "const": 25
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "counts": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "total",
+                        "compliant",
+                        "non-compliant",
+                        "unknown",
+                        "not-configured",
+                        "pending",
+                        "stale",
+                        "historical"
+                      ],
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "compliant": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "non-compliant": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unknown": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "not-configured": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "pending": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "stale": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "historical": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "devices": {
+                      "type": "array",
+                      "maxItems": 25,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "deviceId",
+                          "assetId",
+                          "platform",
+                          "status",
+                          "policyRevision",
+                          "evaluatedAt"
+                        ],
+                        "properties": {
+                          "deviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "assetId": {
+                            "type": "string"
+                          },
+                          "platform": {
+                            "enum": [
+                              "macos",
+                              "windows",
+                              "linux",
+                              "ios",
+                              "ipados",
+                              "android",
+                              "other"
+                            ]
+                          },
+                          "status": {
+                            "enum": [
+                              "compliant",
+                              "non-compliant",
+                              "unknown",
+                              "not-configured",
+                              "pending",
+                              "stale",
+                              "historical"
+                            ]
+                          },
+                          "policyRevision": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]{0,18})$",
+                            "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+                          },
+                          "evaluatedAt": {
+                            "oneOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}/compliance/history": {
+      "get": {
+        "operationId": "readOwnDeviceComplianceHistory",
+        "summary": "Read actual assessment transitions",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "target",
+                    "page",
+                    "limit",
+                    "total",
+                    "events"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "target": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "const": 25
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "events": {
+                      "type": "array",
+                      "maxItems": 25,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "createdAt",
+                          "correlationId",
+                          "before",
+                          "after"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "correlationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "before": {
+                            "oneOf": [
+                              {
+                                "$ref": "#/components/schemas/DeviceComplianceAssessment"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "after": {
+                            "$ref": "#/components/schemas/DeviceComplianceAssessment"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/compliance/policies/{platform}/history": {
+      "get": {
+        "operationId": "readOwnCompliancePolicyHistory",
+        "summary": "Read retained policy decisions and pending outbox",
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "windows",
+                "linux"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-company data",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "actorUserId",
+                    "tenantId",
+                    "target",
+                    "page",
+                    "limit",
+                    "total",
+                    "events"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "actorUserId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tenantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "target": {
+                      "enum": [
+                        "macos",
+                        "windows",
+                        "linux"
+                      ]
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "const": 25
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "events": {
+                      "type": "array",
+                      "maxItems": 25,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "createdAt",
+                          "correlationId",
+                          "before",
+                          "after",
+                          "actorUserId",
+                          "reason",
+                          "deliveryStatus"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "correlationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "before": {
+                            "oneOf": [
+                              {
+                                "$ref": "#/components/schemas/DeviceCompliancePolicy"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "after": {
+                            "$ref": "#/components/schemas/DeviceCompliancePolicy"
+                          },
+                          "actorUserId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 10,
+                            "maxLength": 500
+                          },
+                          "deliveryStatus": {
+                            "const": "pending"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503 — exact fields, original current source, fresh MFA, conditional version or persistent receivers required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -63932,6 +66504,581 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "DeviceComplianceSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "maxReportAgeSeconds",
+          "minimumOsVersion",
+          "requireDiskEncryption",
+          "requireFirewall",
+          "minimumDiskFreePercent"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "maxReportAgeSeconds": {
+            "type": "integer",
+            "minimum": 300,
+            "maximum": 86400,
+            "multipleOf": 60
+          },
+          "minimumOsVersion": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{1,6}(\\.[0-9]{1,6}){0,3}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requireDiskEncryption": {
+            "type": "boolean"
+          },
+          "requireFirewall": {
+            "type": "boolean"
+          },
+          "minimumDiskFreePercent": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "Enabled policies require at least one actual check. Numeric OS segments are compared with zero padding. An unavailable probe is unknown, never pass."
+      },
+      "DeviceCompliancePolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenantId",
+          "platform",
+          "revision",
+          "settings",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "platform": {
+            "enum": [
+              "macos",
+              "windows",
+              "linux"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/DeviceComplianceSettings"
+          },
+          "createdAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AgentSecurityFacts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "osVersion",
+          "diskEncryption",
+          "firewall"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "osVersion": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{1,6}(\\.[0-9]{1,6}){0,3}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diskEncryption": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "reason"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "enabled",
+                  "disabled",
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "checked",
+                  "probe-failed",
+                  "timeout",
+                  "unrecognized",
+                  "not-supported"
+                ]
+              }
+            },
+            "description": "checked is required for enabled/disabled; unknown requires one of the other reasons."
+          },
+          "firewall": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "reason"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "enabled",
+                  "disabled",
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "checked",
+                  "probe-failed",
+                  "timeout",
+                  "unrecognized",
+                  "not-supported"
+                ]
+              }
+            },
+            "description": "checked is required for enabled/disabled; unknown requires one of the other reasons."
+          }
+        }
+      },
+      "AgentSecurityReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "facts",
+          "receivedAt",
+          "enrolledAt",
+          "revision",
+          "platform",
+          "agentVersion"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "facts": {
+            "$ref": "#/components/schemas/AgentSecurityFacts"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enrolledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+          },
+          "platform": {
+            "enum": [
+              "macos",
+              "windows",
+              "linux"
+            ]
+          },
+          "agentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        }
+      },
+      "DeviceComplianceAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "tenantId",
+          "deviceId",
+          "platform",
+          "policyRevision",
+          "policySettings",
+          "evaluatedAt",
+          "validUntil",
+          "enrolledAt",
+          "agentRevision",
+          "security",
+          "hardware",
+          "checks",
+          "status",
+          "fingerprint"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "platform": {
+            "enum": [
+              "macos",
+              "windows",
+              "linux"
+            ]
+          },
+          "policyRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+          },
+          "policySettings": {
+            "$ref": "#/components/schemas/DeviceComplianceSettings"
+          },
+          "evaluatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enrolledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "agentRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+          },
+          "security": {
+            "$ref": "#/components/schemas/AgentSecurityReceipt"
+          },
+          "hardware": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "receivedAt",
+                  "enrolledAt",
+                  "revision",
+                  "systemDisk"
+                ],
+                "properties": {
+                  "receivedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "enrolledAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "description": "Exact canonical BIGINT decimal; maximum 9223372036854775807."
+                  },
+                  "systemDisk": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "totalBytes",
+                      "availableBytes"
+                    ],
+                    "properties": {
+                      "totalBytes": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive exact byte count"
+                      },
+                      "availableBytes": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$",
+                        "description": "Exact available bytes, no greater than totalBytes"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "status",
+                "expected",
+                "actual",
+                "reason"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "os-version",
+                    "disk-encryption",
+                    "firewall",
+                    "disk-free"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "unknown"
+                  ]
+                },
+                "expected": {
+                  "oneOf": [
+                    {
+                      "const": true
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]{1,6}(\\.[0-9]{1,6}){0,3}$"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 99
+                    }
+                  ]
+                },
+                "actual": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "totalBytes",
+                        "availableBytes"
+                      ],
+                      "properties": {
+                        "totalBytes": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Positive exact byte count"
+                        },
+                        "availableBytes": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$",
+                          "description": "Exact available bytes, no greater than totalBytes"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "enum": [
+                    "checked",
+                    "not-reported",
+                    "source-not-current",
+                    "probe-failed",
+                    "timeout",
+                    "unrecognized",
+                    "not-supported"
+                  ]
+                }
+              }
+            }
+          },
+          "status": {
+            "enum": [
+              "compliant",
+              "non-compliant",
+              "unknown",
+              "not-configured"
+            ]
+          },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "DeviceComplianceAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil",
+          "target"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "permissions": {
+            "oneOf": [
+              {
+                "const": [
+                  "devices.compliance.read"
+                ]
+              },
+              {
+                "const": [
+                  "devices.compliance.read",
+                  "devices.compliance.manage"
+                ]
+              }
+            ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "Unextended original deadline, at most the original token expiry and auth_time+300; enforced again at physical inventory commit."
+          },
+          "target": {
+            "type": "null"
           }
         }
       }

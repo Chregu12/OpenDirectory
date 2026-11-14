@@ -13,7 +13,7 @@ od-agent-service heartbeat
 od-agent-service run
 ```
 
-`inventory` zeigt die lokalen Messwerte. `heartbeat` benötigt die vorhandene geschützte Agent-Konfiguration und sendet genau eine echte Meldung; `run` meldet regelmäßig. Die [Registrierung und CA-Konfiguration](device-agents.md) bleiben unverändert. Neue Agenten benötigen den Server ab 1.0.46. Bisherige Agenten können weiterhin Heartbeats ohne Systemdaten senden. Ein solcher Heartbeat erneuert keine früheren Hardwaremessungen.
+`inventory` zeigt die lokalen Messwerte. `heartbeat` benötigt die vorhandene geschützte Agent-Konfiguration und sendet genau eine echte Meldung; `run` meldet regelmäßig. Die [Registrierung und CA-Konfiguration](device-agents.md) bleiben unverändert. Agent 1.2 benötigt Server ab 1.0.46; Agent 1.3 mit Sicherheitsmeldung benötigt Server ab 1.0.47. Bisherige Agenten können weiterhin Heartbeats ohne Systemdaten senden. Ein solcher Heartbeat erneuert keine früheren Hardwaremessungen.
 
 ## Quelle, Alter und Historie
 
@@ -38,4 +38,4 @@ Migration `009_agent_inventory.sql` ergänzt `device_agent_connections.inventory
 
 [Liefer- und Prüfnachweis](../deployment/agent-hardware-2026-11-14.json): lokale reale macOS-Messung, tatsächlicher kompilierter Rust-HTTP-Prozess, native PostgreSQL-Prüfungen einschließlich Präzision/Widerruf/Schema-Replay/physischer Drift, ursprünglicher signierter OAuth-/PIM-/Gateway-Weg und Desktop-/Mobil-Browserabläufe. Es werden dafür keine persönlichen produktiven Grants, Geräte oder MFA-Nachweise erzeugt.
 
-Windows-/Linux-Hardware und Autostart, signierte Installer, Compliance-Regeln, sichere Fernbefehle, App-Verteilung und Hersteller-MDM bleiben offen. Der Datenbankbetreiber und der nicht attestierte Geräteagent bleiben bestehende Vertrauensgrenzen. Diese Erweiterung ist eine Grundlage für weitere Geräte-/Compliance-Abläufe; BR-003 und der Gesamtauftrag bleiben offen.
+Seit 1.0.47 ergänzen [eigene Compliance-Regeln und tatsächliche Sicherheitsmeldungen](device-compliance.md) diesen Hardwareweg. Windows-/Linux-Hardware und Autostart, signierte Installer, sichere Fernbefehle, App-Verteilung und Hersteller-MDM bleiben offen. Der Datenbankbetreiber und der nicht attestierte Geräteagent bleiben bestehende Vertrauensgrenzen. Diese Erweiterung ist eine Grundlage für weitere Geräte-/Compliance-Abläufe; BR-003 und der Gesamtauftrag bleiben offen.

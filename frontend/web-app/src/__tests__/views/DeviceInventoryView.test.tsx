@@ -46,6 +46,8 @@ function deferred<Result>() {
   return { promise, resolve: (result: Result) => resolve(result) };
 }
 async function getResponse(url: string, config?: any) {
+  if (url === '/api/devices/compliance/capabilities') return { status: 200, data: { schemaVersion: 1, complianceProtocol: 1, actorUserId: actorId, tenantId, permissions: ['devices.compliance.read'] } };
+  if (url === '/api/devices/' + deviceId + '/compliance') return { status: 200, data: { schemaVersion: 1, actorUserId: actorId, tenantId, deviceId, assetId: device().assetId, platform: 'linux', checkedAt: new Date().toISOString(), policyRevision: '0', status: 'not-configured', assessment: null } };
   if (url === '/api/devices/capabilities') return { status: 200, data: access };
   if (url === '/api/devices' || url === '/api/devices/fleet') {
     requestedSearch = config?.params?.search || '';

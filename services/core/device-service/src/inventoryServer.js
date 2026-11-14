@@ -11,9 +11,10 @@ const { deviceEtag, deviceReturnEtag } = require('../../../../packages/device-in
 const { DeviceInventory } = require('./DeviceInventory');
 const { DeviceReturns } = require('./DeviceReturns');
 const { DeviceAgents, agentEtag } = require('./DeviceAgents');
+const { DeviceCompliance, compliancePolicyEtag } = require('./DeviceCompliance');
 const database = require('./db');
 
-function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }) } = {}) {
+function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }), compliance = new DeviceCompliance(db, { inventory }) } = {}) {
   const app=express();const issuer=process.env.OIDC_ISSUER || 'http://localhost:3001';const jwks=createRemoteJWKSet(new URL(process.env.JWKS_URI || 'http://localhost:3001/jwks'));const accessState=createAccessStateClient();
   app.disable('x-powered-by');app.use(helmet());app.use(cors({origin:(process.env.CORS_ORIGINS || 'http://localhost:3000').split(',')}));
   app.use(express.json({limit:'16kb',strict:true}));app.use(rateLimit({windowMs:60000,max:1000,standardHeaders:true,legacyHeaders:false}));
@@ -27,7 +28,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   }));
   app.post('/api/device-agent/heartbeat',agentLimit,route(async(req,res)=>{
     if(req.headers['x-api-key'] || req.headers['x-enrollment-token'])throw Object.assign(new Error('Device credential required'),{status:401});
-    res.json(await agents.heartbeat(req.body,req.headers.authorization));
+    res.json(await agents.heartbeat(req.body,req.headers.authorization,req.correlationId));
   }));
   app.use('/api/device-agent',(_req,res)=>res.status(404).json({error:'Agent operation not found'}));
   app.use(async(req,res,next)=>{
@@ -57,6 +58,13 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.get('/api/devices/capabilities',route(async(req,res)=>{
     if(Object.keys(req.query).length)throw Object.assign(new Error('No inventory capability selectors'),{status:400});res.json(await inventory.capabilities(req.user,req.headers.authorization));
   }));
+  app.get('/api/devices/compliance/capabilities',route(async(req,res)=>{noQuery(req);res.json(await compliance.capabilities(req.user,req.headers.authorization));}));
+  app.get('/api/devices/compliance/policies',route(async(req,res)=>res.json(await compliance.policies(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/compliance/policies/:platform/history',route(async(req,res)=>res.json(await compliance.history(req.params.platform,req.query,req.user,req.headers.authorization,true))));
+  app.put('/api/devices/compliance/policies/:platform',route(async(req,res)=>{const value=await compliance.save(req.params.platform,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);res.set('ETag',compliancePolicyEtag(value.policy.tenantId,value.policy.platform,value.policy.revision)).json(value);}));
+  app.get('/api/devices/compliance',route(async(req,res)=>res.json(await compliance.list(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/:id/compliance',route(async(req,res)=>res.json(await compliance.get(req.params.id,req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/:id/compliance/history',route(async(req,res)=>res.json(await compliance.history(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices',route(async(req,res)=>res.json(await inventory.list(req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/fleet',route(async(req,res)=>res.json(await agents.fleet(req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/fleet/export',route(async(req,res)=>{const value=await agents.fleet(req.query,req.user,req.headers.authorization,true);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
@@ -82,7 +90,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   });
   return app;
 }
-async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_agent_inventory_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
+async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_compliance_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
 if(require.main===module)start().then(server=>{
   const close=()=>{server.closeAllConnections();server.close(()=>database.pool.end().then(()=>process.exit(0)));};process.once('SIGTERM',close);process.once('SIGINT',close);
 }).catch(()=>{process.stderr.write('Device inventory startup requires migrated PostgreSQL and configured receiving dependencies.\n');process.exitCode=1;database.pool.end().catch(()=>{});});

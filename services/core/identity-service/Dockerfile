@@ -12,6 +12,7 @@ COPY services/core/identity-service/ ./
 COPY packages/organization-profile-contract/ /packages/organization-profile-contract/
 COPY packages/company-registration-contract/ /packages/company-registration-contract/
 COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
+COPY packages/device-compliance-contract.js /packages/device-compliance-contract.js
 COPY packages/company-license-contract/ /packages/company-license-contract/
 COPY packages/company-automation-contract.js /packages/company-automation-contract.js
 COPY packages/company-app-contract.js /packages/company-app-contract.js

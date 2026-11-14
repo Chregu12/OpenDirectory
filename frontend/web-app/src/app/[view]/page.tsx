@@ -34,7 +34,7 @@ import AntivirusView from '@/components/views/AntivirusView';
 import AuditView from '@/components/views/AuditView';
 import BackupView from '@/components/views/BackupView';
 import AppStoreView from '@/components/views/AppStoreView';
-import ComplianceView from '@/components/views/ComplianceView';
+import ComplianceView from '@/components/views/DeviceComplianceView';
 import SecurityScannerView from '@/components/views/SecurityScannerView';
 import BlueprintsView from '@/components/views/BlueprintConfigurationView';
 import CompanyBlueprintsView from '@/components/views/CompanyBlueprintsView';
@@ -75,7 +75,6 @@ import QuickActionsBar from '@/components/views/QuickActionsBar';
 import EnrollmentWizard from '@/components/views/EnrollmentWizard';
 import ServicePrincipalWizard from '@/components/views/ServicePrincipalWizard';
 import PolicyDeployWizard from '@/components/views/PolicyDeployWizard';
-import ComplianceSnapshot from '@/components/views/ComplianceSnapshot';
 import OnboardingWizard from '@/components/setup/OnboardingWizard';
 
 // Advanced infrastructure views
@@ -117,7 +116,7 @@ const EXTENSION_SERVICES: Record<string, [string, string]> = {
   threats: ['security-scanner', 'Bedrohungsanalyse'],
   antivirus: ['antivirus-protection', 'Antivirus'], scanner: ['security-scanner', 'Security Scanner'],
   conditionalaccess: ['conditional-access', 'Conditional Access'], certificates: ['certificate-authority', 'Zertifikate / PKI'],
-  compliance: ['compliance-engine', 'Compliance'], printers: ['printer-service', 'Drucker'],
+  printers: ['printer-service', 'Drucker'],
   infrastructure: ['network-infrastructure', 'Netzwerk-Infrastruktur'], radius: ['network-infrastructure', 'RADIUS / 802.1X'],
   secrets: ['vault-integration', 'Secrets'], topology: ['network-infrastructure', 'Netzwerk'],
 };
@@ -165,7 +164,6 @@ export default function ViewPage() {
   const [showEnrollWizard,  setShowEnrollWizard]  = useState(false);
   const [showSPWizard,      setShowSPWizard]      = useState(false);
   const [showPolicyWizard,  setShowPolicyWizard]  = useState(false);
-  const [showCompliance,    setShowCompliance]    = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -225,7 +223,7 @@ export default function ViewPage() {
     onNewUser:            () => router.push('/users?create=1'),
     onServicePrincipal:   () => setShowSPWizard(true),
     onDeployPolicy:       () => setShowPolicyWizard(true),
-    onComplianceSnapshot: () => setShowCompliance(true),
+    onComplianceSnapshot: () => router.push('/compliance'),
   };
 
   const renderView = () => {
@@ -347,12 +345,7 @@ export default function ViewPage() {
       {showPolicyWizard && (
         <PolicyDeployWizard onClose={() => setShowPolicyWizard(false)} />
       )}
-      {showCompliance && (
-        <ComplianceSnapshot
-          onClose={() => setShowCompliance(false)}
-          onViewChange={handleViewChange}
-        />
-      )}
+
     </UnifiLayout>
   );
 }

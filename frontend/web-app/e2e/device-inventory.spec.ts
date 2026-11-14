@@ -6,6 +6,7 @@ async function fixture(page:Page,stale=false){
  const summary=(value:any)=>value?{revision:value.revision,assignedUserId:value.assignedUserId,assignmentId:value.assignmentId}:null;
  await page.route(/\/api\/devices(?:\/|\?|$)/,async route=>{
   const req=route.request(),url=new URL(req.url()),p=url.pathname,m=req.method(),json=(value:any,status=200)=>route.fulfill({status,json:value});
+  if(p.includes('/compliance'))return route.fallback();
   if(p.endsWith('/capabilities'))return json({schemaVersion:1,inventoryProtocol:2,userId:actor,tenantId:tenant,permissions:['devices.inventory.read','devices.inventory.create','devices.inventory.assign'],managementMode:'inventory-only',supportedActions:[]});
   if(p.endsWith('/export'))return route.fulfill({headers:{'Content-Type':'text/csv; charset=utf-8','X-Inventory-Tenant':tenant,'X-Inventory-Count':unit?'1':'0'},body:'\uFEFF"assetId","model"\r\n'+(unit?'"'+unit.assetId+'","'+unit.model+'"\r\n':'')});
   if(m==='GET'&&p==='/api/devices/fleet'){const show=unit&&(!url.searchParams.has('lifecycle')||url.searchParams.get('lifecycle')===unit.lifecycle);return json({schemaVersion:1,actorUserId:actor,devices:show?[unit]:[],total:show?1:0,page:1,limit:25,fleet:{protocol:1,tenantId:tenant,checkedAt:new Date().toISOString(),counts:{total:show?1:0,'not-enrolled':show?1:0,connected:0,offline:0,pending:0,expired:0,revoked:0},connections:show?[{deviceId,status:'not-enrolled',enrolledAt:null,lastSeen:null,credentialExpiresAt:null,enrollmentExpiresAt:null,report:null}]:[]}});}

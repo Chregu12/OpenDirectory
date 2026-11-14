@@ -16,6 +16,9 @@ export async function mockApi(page:Page){
   if(p==='/api/auth/audit/login-history')return json({history:[]});
   if(p==='/api/users')return json({users:[person],total:1,page:Number(url.searchParams.get('page')||1),limit:25});
   if(p===`/api/users/${actor}`)return json(person);
+  if(p==='/api/devices/compliance/capabilities')return json({schemaVersion:1,complianceProtocol:1,actorUserId:actor,tenantId:tenant,permissions:['devices.compliance.read','devices.compliance.manage']});
+  if(p===`/api/devices/${deviceId}/compliance`)return json({schemaVersion:1,actorUserId:actor,tenantId:tenant,deviceId,assetId:device.assetId,platform:'linux',checkedAt:new Date().toISOString(),policyRevision:'0',status:'not-configured',assessment:null});
+  if(p===`/api/devices/${deviceId}/compliance/history`)return json({schemaVersion:1,actorUserId:actor,tenantId:tenant,target:deviceId,page:1,limit:25,total:0,events:[]});
   if(p==='/api/devices/capabilities')return json({schemaVersion:1,inventoryProtocol:1,userId:actor,tenantId:tenant,permissions:['devices.inventory.read','devices.inventory.create','devices.inventory.assign'],managementMode:'inventory-only',supportedActions:[]});
   if(p==='/api/devices')return json({schemaVersion:1,actorUserId:actor,devices:[device],total:1,page:1,limit:25});
   if(p===`/api/devices/${deviceId}`)return json(device);

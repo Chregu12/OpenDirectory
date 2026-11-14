@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use log::{error, info, warn};
 use std::time::Duration;
 
+mod compliance;
 mod config;
 mod enrollment;
 mod inventory;
@@ -11,7 +12,7 @@ use config::AgentConfig;
 #[derive(Parser)]
 #[command(
     name = "od-agent-service",
-    version = "1.2.0",
+    version = "1.3.0",
     about = "OpenDirectory MDM Agent"
 )]
 struct Cli {
@@ -37,6 +38,8 @@ enum Commands {
     Heartbeat,
     /// Show local hardware inventory without credentials
     Inventory,
+    /// Show local security observations without changing settings
+    Security,
     /// Show current configuration
     Status,
     /// Install as system service
@@ -67,11 +70,16 @@ async fn main() {
     let result = match cli.command.unwrap_or(Commands::Run) {
         Commands::Enroll => enrollment::enroll(&mut cfg).await,
         Commands::Run => run_daemon(cfg).await,
-        Commands::Compliance => {
-            Err("Compliance policies are not configured for agent protocol 1".into())
-        }
+        Commands::Compliance => enrollment::check_compliance(&cfg).await,
         Commands::Heartbeat => enrollment::heartbeat(&cfg).await,
         Commands::Inventory => match serde_json::to_string_pretty(&inventory::collect()) {
+            Ok(value) => {
+                println!("{}", value);
+                Ok(())
+            }
+            Err(error) => Err(error.into()),
+        },
+        Commands::Security => match serde_json::to_string_pretty(&compliance::collect().await) {
             Ok(value) => {
                 println!("{}", value);
                 Ok(())

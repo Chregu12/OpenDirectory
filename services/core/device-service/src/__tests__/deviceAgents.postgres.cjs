@@ -7,10 +7,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DeviceInventory } = require('../DeviceInventory');
 const { DeviceAgents, agentEtag } = require('../DeviceAgents');
+const { DeviceCompliance, compliancePolicyEtag } = require('../DeviceCompliance');
+const C = require('../../../../../packages/device-compliance-contract');
 const { INVENTORY_PERMISSIONS } = require('../../../../../packages/device-inventory-contract');
 assert.ok(process.env.DEVICE_TEST_DATABASE_URL);
 const administration = new Pool({ connectionString: process.env.DEVICE_TEST_DATABASE_URL });
-let pool, schema, db, source, inventory, agents, unit, revoked;
+let pool, schema, db, source, inventory, agents, unit, revoked, compliance, canManage;
 const report = { hostname: 'actual-fixture', platform: 'linux', architecture: 'x86_64', osVersion: 'Linux', agentVersion: '1.1.0' };
 const decision = { reason: 'Native explicit enrollment decision', confirm: true };
 beforeEach(async () => {
@@ -22,7 +24,8 @@ beforeEach(async () => {
  source = { schemaVersion: 1, issuer: 'https://native.example', subject: actor, tokenId: randomUUID(), expiresAt: now + 3600,
   context: { userId: actor, revision: '1', linkRevision: '1', rolesRevision: 'a'.repeat(64) }, tenant: { id: randomUUID(), version: '1', generation: '1' }, actorUserId: actor, permissions: [...INVENTORY_PERMISSIONS], validUntil: now + 300, target: null };
  inventory = new DeviceInventory(db, { authority: { async read() { if (revoked) throw Object.assign(new Error('Original authority revoked'), { status: 401 }); return structuredClone(source); } } });
- agents = new DeviceAgents(db, { inventory });
+ agents = new DeviceAgents(db, { inventory }); canManage = true;
+ compliance = new DeviceCompliance(db, { inventory, authority: { async read() { if (revoked) throw Object.assign(new Error('Original source revoked'), { status: 401 }); return { ...structuredClone(source), permissions: C.PERMISSIONS.slice(0, canManage ? 2 : 1) }; } } });
  unit = await inventory.create({ assetId: randomUUID(), serialNumber: randomUUID(), manufacturer: 'Native', model: 'Agent fixture', deviceClass: 'laptop', platform: 'linux' }, {}, 'Bearer original', randomUUID());
 });
 afterEach(async () => { await pool?.end(); await administration.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); });
@@ -34,6 +37,64 @@ const heartbeat = token => agents.heartbeat({ deviceId: unit.id, report }, 'Bear
 const hardware = () => ({ schemaVersion: 1, cpu: { model: 'Native fixture CPU', logicalProcessors: 8 }, memory: { totalBytes: '9007199254740993', availableBytes: '4000000000' }, systemDisk: { totalBytes: '1000000000000', availableBytes: '200000000000' }, uptimeSeconds: '86461' });
 const systemReport = () => agents.inventoryReport(unit.id, {}, {}, 'Bearer original');
 const hardwareHeartbeat = (token, inventory = hardware()) => agents.heartbeat({ deviceId: unit.id, report, inventory }, 'Bearer ' + token);
+const security = (changes = {}) => ({ schemaVersion: 1, osVersion: '24.04', diskEncryption: { state: 'enabled', reason: 'checked' }, firewall: { state: 'enabled', reason: 'checked' }, ...changes });
+const baseline = (changes = {}) => ({ ...C.DEFAULTS, enabled: true, minimumOsVersion: '22.04', requireDiskEncryption: true, requireFirewall: true, minimumDiskFreePercent: 10, ...changes });
+const savePolicy = (settings = baseline(), revision = '0') => compliance.save('linux', { settings, reason: 'Explicit own company security baseline decision', confirm: true }, compliancePolicyEtag(source.tenant.id, 'linux', revision), {}, 'Bearer original', randomUUID());
+const securityHeartbeat = (token, facts = security(), inventory = hardware()) => agents.heartbeat({ deviceId: unit.id, report, security: facts, inventory }, 'Bearer ' + token, randomUUID());
+const assessment = () => compliance.get(unit.id, {}, {}, 'Bearer original');
+
+test('company compliance policy starts unconfigured and requires a separate manager, exact revision and audit receipt', async () => {
+ assert.equal((await assessment()).status, 'not-configured'); const policies = await compliance.policies({}, {}, 'Bearer original'); assert.equal(policies.policies.length, 3); assert.equal(policies.policies[0].revision, '0');
+ canManage = false; await assert.rejects(savePolicy(), { status: 403 }); canManage = true;
+ const saved = await savePolicy(); assert.equal(saved.policy.revision, '1'); assert.equal(saved.deliveryStatus, 'pending'); assert.equal((await assessment()).status, 'pending');
+ await assert.rejects(savePolicy(), { status: 412 }); await assert.rejects(compliance.save('linux', { settings: baseline(), reason: decision.reason, confirm: true }, undefined, {}, 'Bearer original'), { status: 428 });
+ const history = await compliance.history('linux', {}, {}, 'Bearer original', true); assert.equal(history.total, 1); assert.equal(history.events[0].actorUserId, source.actorUserId); assert.equal(history.events[0].deliveryStatus, 'pending');
+});
+test('actual security and exact disk evidence produce retained assessment transitions without one event per heartbeat', async () => {
+ await savePolicy(); const registered = await enroll((await manage()).enrollmentToken);
+ const failed = security({ firewall: { state: 'disabled', reason: 'checked' } });
+ const response = await securityHeartbeat(registered.deviceToken, failed); assert.equal(response.compliance.status, 'non-compliant'); assert.equal(response.compliance.policyRevision, '1');
+ let value = await assessment(); assert.equal(value.status, 'non-compliant'); assert.equal(value.assessment.checks.find(row => row.id === 'firewall').status, 'fail');
+ assert.equal((await compliance.history(unit.id, {}, {}, 'Bearer original')).total, 1); await securityHeartbeat(registered.deviceToken, failed); assert.equal((await compliance.history(unit.id, {}, {}, 'Bearer original')).total, 1);
+ await securityHeartbeat(registered.deviceToken); assert.equal((await assessment()).status, 'compliant');
+ const unknown = security({ diskEncryption: { state: 'unknown', reason: 'probe-failed' } }); await securityHeartbeat(registered.deviceToken, unknown); assert.equal((await assessment()).status, 'unknown');
+ const lowDisk = hardware(); lowDisk.systemDisk.availableBytes = '1'; await securityHeartbeat(registered.deviceToken, security(), lowDisk); assert.equal((await assessment()).status, 'non-compliant');
+ value = await compliance.list({ status: 'non-compliant' }, {}, 'Bearer original'); assert.equal(value.total, 1); assert.equal(value.counts.total, 1); assert.equal(value.devices[0].deviceId, unit.id);
+ assert.equal((await compliance.history(unit.id, {}, {}, 'Bearer original')).total, 4);
+ assert.equal((await inventory.get(unit.id, {}, 'Bearer original')).revision, unit.revision);
+});
+test('changed policies await a new actual device report and numeric versions do not compare lexicographically', async () => {
+ await savePolicy(baseline({ minimumOsVersion: '13.9' })); const registered = await enroll((await manage()).enrollmentToken);
+ await securityHeartbeat(registered.deviceToken, security({ osVersion: '13.10' })); assert.equal((await assessment()).status, 'compliant');
+ await savePolicy(baseline({ minimumOsVersion: '25.0' }), '1'); assert.equal((await assessment()).status, 'pending');
+ await securityHeartbeat(registered.deviceToken); assert.equal((await assessment()).status, 'non-compliant');
+ await savePolicy({ ...C.DEFAULTS }, '2'); assert.equal((await assessment()).status, 'not-configured');
+});
+test('revocation and replacement retain historical assessments, old heartbeats do not renew assessment age', async () => {
+ await savePolicy(); const registered = await enroll((await manage()).enrollmentToken); await securityHeartbeat(registered.deviceToken); const first = (await assessment()).assessment;
+ const old = await heartbeat(registered.deviceToken); assert.ok(!Object.hasOwn(old, 'compliance')); assert.deepEqual((await assessment()).assessment, first);
+ await pool.query('ALTER TABLE device_agent_connections DISABLE TRIGGER USER'); try { await pool.query("UPDATE device_agent_connections SET compliance_report=jsonb_set(compliance_report,'{validUntil}',to_jsonb(clock_timestamp()-interval '1 second'))"); } finally { await pool.query('ALTER TABLE device_agent_connections ENABLE TRIGGER USER'); }
+ assert.equal((await assessment()).status, 'stale'); await securityHeartbeat(registered.deviceToken); await manage('revoke'); assert.equal((await assessment()).status, 'historical');
+ const replacement = await enroll((await manage()).enrollmentToken); assert.equal((await assessment()).status, 'historical'); await securityHeartbeat(replacement.deviceToken); assert.equal((await assessment()).status, 'compliant');
+});
+test('foreign selectors, fabricated source fields and invalid security cannot acquire a compliance result', async () => {
+ await assert.rejects(compliance.list({ tenantId: source.tenant.id }, {}, 'Bearer original'), { status: 400 });
+ await assert.rejects(compliance.get(unit.id, { force: 'true' }, {}, 'Bearer original'), { status: 400 });
+ await assert.rejects(savePolicy(baseline({ minimumOsVersion: 'latest' })), { status: 400 });
+ const registered = await enroll((await manage()).enrollmentToken);
+ for (const facts of [null, { ...security(), tenantId: source.tenant.id }, security({ osVersion: '24.04\n' }), security({ firewall: { state: 'enabled', reason: 'probe-failed' } })]) await assert.rejects(securityHeartbeat(registered.deviceToken, facts), { status: 400 });
+ source.tenant.id = randomUUID(); await assert.rejects(assessment(), { status: 404 }); assert.equal((await compliance.list({}, {}, 'Bearer original')).total, 0);
+ revoked = true; await assert.rejects(assessment(), { status: 401 });
+});
+test('policy and assessment omissions or late row drift cannot acknowledge a successful physical commit', async () => {
+ const event = await savePolicy(); const registered = await enroll((await manage()).enrollmentToken);
+ await assert.rejects(pool.query('TRUNCATE device_compliance_policy_events CASCADE'), { code: '42501' }); await assert.rejects(pool.query('DELETE FROM device_compliance_policy_outbox'), { code: '42501' });
+ await pool.query('CREATE FUNCTION omit_assessment() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL;END; $$; CREATE TRIGGER z_omit_assessment BEFORE INSERT ON device_compliance_events FOR EACH ROW EXECUTE FUNCTION omit_assessment()');
+ await assert.rejects(securityHeartbeat(registered.deviceToken), { code: '42501' }); assert.equal((await assessment()).status, 'pending'); assert.equal((await compliance.history(unit.id, {}, {}, 'Bearer original')).total, 0);
+ await pool.query('DROP TRIGGER z_omit_assessment ON device_compliance_events');
+ await securityHeartbeat(registered.deviceToken); assert.equal((await assessment()).status, 'compliant');
+ await pool.query('ALTER TABLE device_compliance_policy_outbox DISABLE TRIGGER device_compliance_policy_guard'); await assert.rejects(savePolicy(baseline({ requireFirewall: false }), event.policy.revision));
+});
 
 test('hardware heartbeat persists exact measured counters and server-owned receipt without mutating inventory or audit', async () => {
  assert.equal((await systemReport()).status, 'missing');
@@ -232,7 +293,10 @@ test('actual Rust binary enrolls through HTTP gateway, stores a private credenti
   const stored = JSON.parse(fs.readFileSync(configPath, 'utf8')); assert.equal(stored.enrollment_token, null); assert.match(stored.device_token, /^odad_/); assert.equal(stored.device_id, unit.id);
   if (process.platform !== 'win32') assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
   assert.equal((await run('heartbeat')).code, 0); assert.equal((await get()).status, 'connected');
-  const measured = await systemReport(); assert.equal(measured.status, 'current'); assert.equal(measured.inventory.agentVersion, '1.2.0'); assert.ok(Number(measured.inventory.facts.cpu.logicalProcessors) > 0); assert.ok(BigInt(measured.inventory.facts.memory.totalBytes) > 0n);
+  const measured = await systemReport(); assert.equal(measured.status, 'current'); assert.equal(measured.inventory.agentVersion, '1.3.0'); assert.ok(Number(measured.inventory.facts.cpu.logicalProcessors) > 0); assert.ok(BigInt(measured.inventory.facts.memory.totalBytes) > 0n);
+  const unconfigured=await run('compliance');assert.equal(unconfigured.code,1);assert.match(unconfigured.output,/not-configured/);
+  await compliance.save(platform,{settings:{...C.DEFAULTS,enabled:true,minimumOsVersion:'0'},reason:'Validate the actual Rust OS observation with a bounded fixture rule',confirm:true},compliancePolicyEtag(source.tenant.id,platform,'0'),{},'Bearer original',randomUUID());
+  const checked=await run('compliance');assert.equal(checked.code,0,checked.output);const actualAssessment=await assessment();assert.equal(actualAssessment.status,'compliant');assert.equal(actualAssessment.assessment.security.agentVersion,'1.3.0');assert.ok(C.security(actualAssessment.assessment.security.facts));
   assert.equal((await fetch(endpoint + '/api/devices', { headers: { Authorization: 'Bearer ' + stored.device_token } })).status, 401);
   assert.equal((await fetch(endpoint + '/api/device-agent/heartbeat?deviceId=foreign', { method: 'POST' })).status, 404);
   await manage('revoke'); const denied = await run('heartbeat'); assert.equal(denied.code, 1); assert.match(denied.output, /401/); assert.ok(!denied.output.includes(stored.device_token));
@@ -253,4 +317,22 @@ test('reapplying the additive agent migration preserves existing credentials and
  const issued = await manage(); const current = await enroll(issued.enrollmentToken);
  await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations/008_device_agents.sql'), 'utf8'));
  await heartbeat(current.deviceToken); assert.equal((await get()).history.total, 2);
+});
+
+test('concurrent current-version policy writers serialize and retain only the winning receipt', async () => {
+ const results=await Promise.allSettled([savePolicy(baseline({minimumOsVersion:'22.04'})),savePolicy(baseline({minimumOsVersion:'24.04'}))]);
+ assert.equal(results.filter(result=>result.status==='fulfilled').length,1);assert.equal(results.find(result=>result.status==='rejected').reason.status,412);
+ const history=await compliance.history('linux',{}, {},'Bearer original',true);assert.equal(history.total,1);assert.equal(history.events[0].after.revision,'1');
+});
+test('policy source expiry during physical commit rolls back policy, retained event and pending outbox', async () => {
+ const original=db.transaction;db.transaction=(operation,options={})=>original(operation,{...options,beforeCommit:async client=>{if(options.beforeCommit)await options.beforeCommit(client);const proof=(await client.query("SELECT current_setting('opendirectory.device_compliance_policy',true) AS proof")).rows[0].proof;if(proof){await client.query("SELECT set_config('opendirectory.device_compliance_policy',jsonb_set($1::jsonb,'{validUntil}',to_jsonb(extract(epoch FROM clock_timestamp())-1))::text,true)",[proof]);}}});
+ await assert.rejects(savePolicy(),{code:'42501'});assert.equal((await compliance.policies({}, {},'Bearer original')).policies.find(row=>row.platform==='linux').revision,'0');assert.equal((await compliance.history('linux',{}, {},'Bearer original',true)).total,0);
+});
+
+test('compliance migration replay retains the actual policy, assessments and exact large policy history revisions', async () => {
+ await savePolicy();const registered=await enroll((await manage()).enrollmentToken);await securityHeartbeat(registered.deviceToken);const retained=(await assessment()).assessment;
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/010_device_compliance.sql'),'utf8'));assert.deepEqual((await assessment()).assessment,retained);assert.equal((await compliance.history(unit.id,{}, {},'Bearer original')).total,1);
+ await pool.query('ALTER TABLE device_compliance_policies DISABLE TRIGGER USER');try{await pool.query("UPDATE device_compliance_policies SET revision=9007199254740993 WHERE tenant_id=$1 AND platform='linux'",[source.tenant.id]);}finally{await pool.query('ALTER TABLE device_compliance_policies ENABLE TRIGGER USER');}
+ const saved=await savePolicy(baseline({minimumOsVersion:'24.04'}),'9007199254740993');assert.equal(saved.policy.revision,'9007199254740994');const history=await compliance.history('linux',{}, {},'Bearer original',true);assert.equal(history.events[0].before.revision,'9007199254740993');assert.equal(history.events[0].after.revision,'9007199254740994');
+ await securityHeartbeat(registered.deviceToken);assert.equal((await assessment()).policyRevision,'9007199254740994');
 });

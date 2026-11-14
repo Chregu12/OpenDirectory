@@ -60,6 +60,8 @@ const nextConfig = {
       { source: '/api/devices/fleet/:path*',                  destination: `${deviceServiceUrl}/api/devices/fleet/:path*` },
       { source: '/api/devices/returns/:path*',                destination: `${deviceServiceUrl}/api/devices/returns/:path*` },
       { source: '/api/devices/users/:userId/offboarding-returns/:path*', destination: `${deviceServiceUrl}/api/devices/users/:userId/offboarding-returns/:path*` },
+      { source: '/api/devices/compliance/:path*',              destination: `${deviceServiceUrl}/api/devices/compliance/:path*` },
+      { source: '/api/devices/:id/compliance/:path*',          destination: `${deviceServiceUrl}/api/devices/:id/compliance/:path*` },
       { source: '/api/devices/:id/assignment',                destination: `${deviceServiceUrl}/api/devices/:id/assignment` },
       { source: '/api/devices/:id/lifecycle',                 destination: `${deviceServiceUrl}/api/devices/:id/lifecycle` },
       { source: '/api/devices/:id/history',                   destination: `${deviceServiceUrl}/api/devices/:id/history` },

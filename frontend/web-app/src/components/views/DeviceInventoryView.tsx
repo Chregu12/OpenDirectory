@@ -9,6 +9,7 @@ import { agentStatuses, agentStatusLabels } from '@/lib/deviceAgents';
 import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 import DeviceAgentPanel from './DeviceAgentPanel';
+import DeviceCompliancePanel from './DeviceCompliancePanel';
 
 const eventLabels = { 'device.registered': 'Gerät erfasst', 'device.assigned': 'Benutzer zugewiesen', 'device.assignment.released': 'Zuweisung aufgehoben', 'device.updated': 'Stammdaten geändert', 'device.lifecycle.changed': 'Lebenszyklus geändert' };
 
@@ -281,6 +282,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
           </section>}
           {!selected.assignedUserId && ['maintenance', 'retired'].includes(selected.lifecycle) && <p className="text-sm">Für eine neue Benutzerzuweisung das Gerät zuerst wieder bereitstellen.</p>}
           <DeviceAgentPanel key={selected.id} device={selected} actor={access!.userId} canManage={Boolean(canCreate)} disabled={busy} onBusy={setBusy} onChanged={() => setListVersion(value => value + 1)} onSecurityError={failure => fail(failure, generation.current)} />
+          <DeviceCompliancePanel key={selected.id + 'compliance'} deviceId={selected.id} expectedActor={access!.userId} onSecurityError={failure => fail(failure, generation.current)} />
           <section aria-label="Gerätehistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Gerätehistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">

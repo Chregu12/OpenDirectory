@@ -31,3 +31,8 @@ test('an activated canonical Engineering duty obtains only home-tenant inventory
 test('claiming Engineering without the canonical role cannot authorize inventory operations',async()=>{
  state.roles=['user'];companyOwner.mockResolvedValue(null);user.roles=['device-enrollment-operator'];await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:403});
 });
+
+test.each(['compliance-reader','device-enrollment-operator'])('actual %s reads compliance without gaining policy management',async role=>{state.roles=[role];companyOwner.mockResolvedValue(null);const result=await authority.read(user,'Bearer original',null,true);expect(result.permissions).toEqual(['devices.compliance.read']);expect(result.target).toBeNull();});
+test.each(['admin','policy-administrator'])('actual %s can manage company compliance',async role=>{state.roles=[role];companyOwner.mockResolvedValue(null);expect((await authority.read(user,'Bearer original',null,true)).permissions).toEqual(['devices.compliance.read','devices.compliance.manage']);});
+test('actual owner retains management while Engineering is active',async()=>{state.roles=['device-enrollment-operator'];expect((await authority.read(user,'Bearer original',null,true)).permissions).toHaveLength(2);});
+test('claimed compliance role cannot replace source role and compliance cannot select a recipient',async()=>{state.roles=[];user.roles=['policy-administrator'];companyOwner.mockResolvedValue(null);await expect(authority.read(user,'Bearer original',null,true)).rejects.toMatchObject({status:403});await expect(authority.read(user,'Bearer original',{userId},true)).rejects.toMatchObject({status:400});});

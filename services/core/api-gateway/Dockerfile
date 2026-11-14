@@ -24,6 +24,7 @@ COPY services/core/api-gateway/src/ ./src/
 COPY packages/oidc-access-state.js /packages/oidc-access-state.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
 COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
+COPY packages/device-compliance-contract.js /packages/device-compliance-contract.js
 COPY packages/grpc-event-bus/ /packages/grpc-event-bus/
 RUN cd /packages/grpc-event-bus && npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
