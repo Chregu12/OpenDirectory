@@ -172,6 +172,7 @@ test('rule reconciliation creates actual memberships, preserves manual links and
  parent = await groups.add(parent.id, { userId: manualEngineer }, groupEtag(parent), owner.user, bearer); parent = await groups.add(parent.id, { userId: manualOther }, groupEtag(parent), owner.user, bearer);
  await save(parent); const result = await sync(parent); assert.equal(result.find(item => item.userId === managed).status, 'added'); assert.equal(result.find(item => item.userId === manualEngineer).status, 'manual-retained');
  const first = (await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2', [parent.id, managed])).rows[0].membership_id;
+ const reader=new(require('../DirectoryReader').DirectoryReader)(database,{issuer,revalidate:async(_bearer,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant});const membership=(await reader.userGroups(managed,{},owner.user,bearer)).groups.find(row=>row.id===parent.id).membership;assert.equal(membership.source,'rule');assert.equal(membership.effective,true);
  await save(parent, input({ enabled: false }), '1'); const removed = await sync(parent); assert.equal(removed.find(item => item.userId === managed).status, 'removed');
  assert.deepEqual((await pool.query('SELECT user_id FROM group_members WHERE group_id=$1 ORDER BY user_id', [parent.id])).rows.map(row => row.user_id), [manualEngineer, manualOther].sort());
  await save(parent, input(), '2'); await sync(parent);
@@ -262,12 +263,14 @@ test('attribute loss immediately removes human and app rule sources from live au
  const worker=await appWorker();await worker.queue(child.id);assert.equal((await worker.run()).job.status,'succeeded');await sync(parent);await sync(root);
  const first=await snapshot(root);assert.deepEqual(first.memberIds,[userId]);assert.equal((await new AuthorizationState(database).state(issuer,subject)).memberships.length,3);
  const physical=(await pool.query('SELECT id,revision FROM groups WHERE id=ANY($1::uuid[]) ORDER BY id',[[child.id,parent.id,root.id]])).rows;
+ const reader=new(require('../DirectoryReader').DirectoryReader)(database,{issuer,revalidate:async(_bearer,user)=>(await new AuthorizationState(database).state(issuer,user.sub)).tenant});assert.ok((await reader.userGroups(userId,{},owner.user,bearer)).groups.every(row=>row.membership.effective&&row.membership.source==='rule'));
  await changeDepartment(userId,'Operations');
  assert.deepEqual((await new AuthorizationState(database).state(issuer,subject)).memberships,[]);assert.equal((await new AuthorizationState(database).target('group',root.id,userId)).actorIsMember,true);
  for(const collection of [child,parent,root]){const current=await snapshot(collection);assert.deepEqual(current.memberIds,[]);assert.deepEqual(current.inactiveMemberIds,[userId]);const preview=await rules.preview(collection.id,owner.user,bearer);assert.equal(preview.existing[0].effective,false);assert.equal(preview.existing[0].validUntil,null);}
  const second=await snapshot(root);assert.ok(BigInt(second.revision)>BigInt(first.revision));
  assert.deepEqual((await pool.query('SELECT id,revision FROM groups WHERE id=ANY($1::uuid[]) ORDER BY id',[[child.id,parent.id,root.id]])).rows,physical);
  assert.equal((await pool.query('SELECT count(*)::integer AS count FROM group_members WHERE user_id=$1',[userId])).rows[0].count,3);
+ const staleLinks=await reader.userGroups(userId,{},owner.user,bearer);assert.equal(staleLinks.total,3);assert.ok(staleLinks.groups.every(row=>!row.membership.effective&&row.membership.source==='rule'));
  await changeDepartment(userId,'Engineering');assert.deepEqual((await snapshot(root)).memberIds,[userId]);
 });
 test('removing the last real child link or changing a standing rule invalidates its materialized parent while retaining unrelated manual origins',async()=>{

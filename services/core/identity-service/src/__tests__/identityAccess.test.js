@@ -114,3 +114,11 @@ test('production ignores the demo flag and refuses startup without migrated stor
   }
   finally { process.env.NODE_ENV = original; delete process.env.IDENTITY_DEMO_MODE; listen.mockRestore(); }
 });
+
+test('user group memberships require both user and group read duties before the route can reach storage',()=>{
+ for(const permissions of [[],['users.read'],['groups.read'],['users.read','groups.read']]){
+  const response={status:jest.fn().mockReturnThis(),json:jest.fn()},next=jest.fn();
+  requireIdentityAccess({method:'GET',path:'/users/11111111-1111-4111-8111-111111111111/groups',user:{sub:'operator',permissions},body:{}},response,next);
+  if(permissions.length===2)expect(next).toHaveBeenCalledTimes(1);else{expect(next).not.toHaveBeenCalled();expect(response.status).toHaveBeenCalledWith(403);}
+ }
+});

@@ -160,7 +160,7 @@ const { UserSnapshotStore } = require('./UserSnapshotStore');
 app.get('/api/identity/access', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: req.identityPermissions, demoMode,
     userId: req.user.identity_authorization?.userId || null, directoryReadProtocol: 1, directoryCreationProtocol: 1, directoryUserMutationProtocol: 1,
-    directoryGroupMutationProtocol:1,directoryOuMutationProtocol:1,directoryOuMembershipProtocol:1,licenseSnapshotProtocol:1,groupMembershipReviewProtocol:1,organizationProfileProtocol:1,organizationDelegationProtocol:1,companyRegistrationReviewProtocol:1,
+    directoryUserGroupsProtocol:1,directoryGroupMutationProtocol:1,directoryOuMutationProtocol:1,directoryOuMembershipProtocol:1,licenseSnapshotProtocol:1,groupMembershipReviewProtocol:1,organizationProfileProtocol:1,organizationDelegationProtocol:1,companyRegistrationReviewProtocol:1,
     companyOwner: req.organizationPermissions?.includes('organization.delegations.manage') === true });
 });
 app.use('/api', (_req, res, next) => {
@@ -433,6 +433,12 @@ function userFailure(res, error) {
 
 app.get('/api/users', asyncRoute(async (req, res) => {
   try { res.set('Cache-Control', 'no-store').json(await directoryReader.users(req.query,req.user,req.headers.authorization)); }
+  catch (error) { return userFailure(res, error); }
+}));
+
+app.get('/api/users/:id/groups', asyncRoute(async (req, res) => {
+  if (Object.keys(req.body || {}).length) return res.status(400).json({ error: 'No user group request body accepted' });
+  try { res.set('Cache-Control', 'no-store').json(await directoryReader.userGroups(req.params.id, req.query, req.user, req.headers.authorization)); }
   catch (error) { return userFailure(res, error); }
 }));
 

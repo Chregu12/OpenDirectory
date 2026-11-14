@@ -1,0 +1,305 @@
+{
+  "checkedAt": "2026-11-14T09:33:47.215950+00:00",
+  "url": "https://opendirectory.heusser.local/users",
+  "release": "opendirectory",
+  "namespace": "opendirectory",
+  "chart": "opendirectory-lite-0.1.42",
+  "appVersion": "1.0.39",
+  "baselineCommit": "33a19c842f7a323e82ca821294d1afbff3f4ba27",
+  "goalStatus": "active",
+  "goal": "Make OpenDirectory functional through the existing GUI with Entra-like identity administration",
+  "features": [
+    "Selected person overview, group and role sections with keyboard navigation",
+    "Actual own-user group memberships and available groups with server search, pagination and coherent counts",
+    "Minimal group metadata without returning other member profiles or IDs in the new endpoint",
+    "Actual manual or rule-generated membership provenance; live user enablement and canonical review/rule deadline determine effective status",
+    "Explicit group add/remove confirmation against the displayed original group revision and unchanged guarded writer",
+    "Selected-person role read, temporary grant and withdrawal through the existing canonical role kernel without copying UUIDs",
+    "No self role administration or direct bypass of activation-required PIM roles",
+    "Late receipts and pending intent discarded after person, operator or session changes"
+  ],
+  "api": {
+    "newRead": "GET /api/users/{id}/groups",
+    "capability": "directoryUserGroupsProtocol:1",
+    "requiredReadDuties": [
+      "users.read",
+      "groups.read"
+    ],
+    "membershipSelectors": [
+      "member",
+      "available"
+    ],
+    "pageSizeDefault": 25,
+    "pageSizeMaximum": 100,
+    "existingMutationContractsUnchanged": true,
+    "originalCanonicalBearerAndHomeTenantRequired": true,
+    "automaticWriteRetry": false
+  },
+  "validation": {
+    "frontendUnit": {
+      "suites": 146,
+      "passed": 3146
+    },
+    "identityUnit": {
+      "suites": 65,
+      "passed": 1237
+    },
+    "nativePostgresGroupsAndRules": {
+      "passed": 65,
+      "includes": [
+        "unknown and foreign users",
+        "independent read duties",
+        "canonical final authority loss",
+        "literal search and coherent pagination",
+        "required independent review",
+        "disabled users retaining stored but ineffective membership",
+        "manual vs rule-generated sources",
+        "attribute loss invalidating three retained rule levels before cleanup"
+      ]
+    },
+    "actualOAuthGatewayPostgres": {
+      "passed": 1,
+      "scenario": "real original human OAuth tokens through the production gateway; group picker, conditional add/remove, stale ETag denial, temporary role grant/read/revoke and ordinary-user denial",
+      "disposableOnly": true
+    },
+    "browserDevelopment": {
+      "passed": 80
+    },
+    "browserProductionImage": {
+      "passed": 80,
+      "includes": "desktop/mobile person groups and roles, read-only controls, exact captured write versions and stale-write rejection"
+    },
+    "productionBrowserAuthentication": {
+      "passed": 67
+    },
+    "typescript": "passed",
+    "openApiGeneratorConsistency": "passed",
+    "helmLint": "passed",
+    "gitDiffCheck": "passed",
+    "artifacts": "linux/amd64; non-root; relevant runtime source hashes verified against the built artifacts and running pods"
+  },
+  "rollout": {
+    "resourceCount": 49,
+    "phase1": {
+      "phase": 1,
+      "revision": 60,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-76d95db658-hd4c9",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.39",
+            "digest": "sha256:37ff7c5d8363364befd297de0190f5de0f8a19955f0230bb1d0ba7682be183cd"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DirectoryReader.js": "5e69573205bbf829dcce5458d08f19d6508368bcf1e512bc5f975707e79f4da5",
+            "/app/src/index.js": "e6f61ca53016de93c81129190fec4fe17b095abe9ff0ff93182110e27f503068",
+            "/app/src/middleware/identityAccess.js": "029c4b7a103917b0f5dd12cbfa7cf48f04ddb2ed5568d731bedd9c757910e9a1"
+          }
+        }
+      }
+    },
+    "phase2": {
+      "phase": 2,
+      "revision": 61,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-76d95db658-hd4c9",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.39",
+            "digest": "sha256:37ff7c5d8363364befd297de0190f5de0f8a19955f0230bb1d0ba7682be183cd"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DirectoryReader.js": "5e69573205bbf829dcce5458d08f19d6508368bcf1e512bc5f975707e79f4da5",
+            "/app/src/index.js": "e6f61ca53016de93c81129190fec4fe17b095abe9ff0ff93182110e27f503068",
+            "/app/src/middleware/identityAccess.js": "029c4b7a103917b0f5dd12cbfa7cf48f04ddb2ed5568d731bedd9c757910e9a1"
+          }
+        },
+        "web-app": {
+          "pod": "opendirectory-web-app-7694488b8d-vmr4l",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.39",
+            "digest": "sha256:10c6ddeba53c4fbd1b6be2ff14beb13d2d0b3c4afa7141449617366b43bade8f"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "RIRs4ng32e0jFkMivoq1F",
+          "hashes": {
+            "src/components/views/UserDetailPanel.tsx": "e70d2150b92abb1051279aa91913da1e902942fbf507c1c9c264ffa8c910071f",
+            "src/components/views/RolesView.tsx": "9ca0d31e9958bdef31c9ef031459f5850a8efca82a81d4232136c660f15f7600",
+            "src/components/views/UserGroupsPanel.tsx": "f06ca82d20dff669932e7cbf2ed18f69e0a20bb935112442910157062fad748e",
+            "src/lib/directoryUsers.ts": "a9d295c9c796cc041855ad77493fe74713bab1a2ab41d4795dc9e433137cfe6a",
+            "src/lib/userGroups.ts": "bfd3d36e62dcec2416c0be965a096a86979c244d79fe229e1abed5d7203637d4",
+            "src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+          }
+        }
+      }
+    },
+    "privateValuesReused": true,
+    "onlyIdentityAndWebImagesChangedBeyondChartLabels": true,
+    "unrelatedDeploymentsChanged": false,
+    "schemaMigrationAdded": false,
+    "unchangedDeploymentSpecs": [
+      "opendirectory-api-backend",
+      "opendirectory-api-gateway",
+      "opendirectory-app-store",
+      "opendirectory-auth-service",
+      "opendirectory-device-service",
+      "opendirectory-integration-service",
+      "opendirectory-license-management",
+      "opendirectory-oauth-provider",
+      "opendirectory-policy-service"
+    ]
+  },
+  "backup": {
+    "database": "identity",
+    "format": "pg_dump custom format",
+    "bytes": 3337769,
+    "sha256": "df8de027547eaa2b33f6646052d4874458c4debdb20fb3aad4fc581415a2f964",
+    "tocEntries": 5582
+  },
+  "storage": {
+    "liveGroupRuleReceiving": "passed",
+    "identityHealth": {
+      "status": 200,
+      "body": {
+        "status": "healthy",
+        "service": "identity-service",
+        "demoMode": false,
+        "timestamp": "2026-11-14T09:31:49.583Z"
+      }
+    },
+    "schemaMigrationAdded": false,
+    "checkedBusinessTablesUnchanged": true,
+    "checkedTables": [
+      "users",
+      "groups",
+      "group_members",
+      "identity_role_assignments",
+      "identity_pim_eligibilities"
+    ]
+  },
+  "businessDataBefore": {
+    "users": {
+      "count": 1,
+      "md5": "0f1d075bac747b5ac26277e2ccb0b62b"
+    },
+    "groups": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "group_members": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "identity_role_assignments": {
+      "count": 1,
+      "md5": "40b1d3732913da887ada1d4d59c4daa1"
+    },
+    "identity_pim_eligibilities": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "businessDataAfter": {
+    "users": {
+      "count": 1,
+      "md5": "0f1d075bac747b5ac26277e2ccb0b62b"
+    },
+    "groups": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "group_members": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "identity_role_assignments": {
+      "count": 1,
+      "md5": "40b1d3732913da887ada1d4d59c4daa1"
+    },
+    "identity_pim_eligibilities": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "publicVerification": {
+    "checkedAt": "2026-11-14T09:29:41.897947+00:00",
+    "https": {
+      "/users": 200,
+      "/devices": 200,
+      "/pim": 200,
+      "/.well-known/openid-configuration": 200,
+      "/api/users": 401,
+      "/api/users/11111111-1111-4111-8111-111111111111/groups": 401,
+      "/api/identity/roles/catalog": 401
+    },
+    "compiledStylesheets": [
+      {
+        "path": "/_next/static/chunks/3tkb4cr1victr.css",
+        "sha256": "d24ec5fc5c80163709cd8c2707c3c7eec88f4112c8cd4317d39f2af42a61b2c5"
+      }
+    ]
+  },
+  "maintenance": {
+    "registryVerifiedLocalImages": [
+      {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.38",
+        "digest": "sha256:cb5a4940b01e45ec5b8bd3ba20d19dc50aa6fc5d269badafe9915138874f79c8"
+      },
+      {
+        "image": "harbor.heusser.local/opendirectory/identity-service:1.0.38",
+        "digest": "sha256:d428d309edc8be1d51f6c5ffb1901e72b4e6ef367cd1c40fb4131de17a31d56c"
+      }
+    ],
+    "unusedOwnBuildCandidates": [
+      {
+        "imageId": "sha256:28f4485dd3ac332160731a736e77c43c842f196b28df5a1e204785a65ff7a130",
+        "historySha256": "3254e08aff1ee31f2cf9f42dcd63b6f5b34e4f655b1296bd92565787e8e65303"
+      },
+      {
+        "imageId": "sha256:653e1c26616ed1e1f424fa22761592c4fe518a89a1353a6f50b18ce3016fd879",
+        "historySha256": "3254e08aff1ee31f2cf9f42dcd63b6f5b34e4f655b1296bd92565787e8e65303"
+      },
+      {
+        "imageId": "sha256:34552ab59b3c7166b50db3f8f74744dbb67e2e9f256f4e5c344539c430ca0718",
+        "historySha256": "3254e08aff1ee31f2cf9f42dcd63b6f5b34e4f655b1296bd92565787e8e65303"
+      },
+      {
+        "imageId": "sha256:0eac616db34a4fea40e0344922f926de5e59733790e015e875aaec26bae65c80",
+        "historySha256": "408482154821c519b0c4bf141376d6494e174f38cd7bb2c7976f3088bfeac3e0"
+      },
+      {
+        "imageId": "sha256:e70b9a6f05819cb7a9673074163f0553c04e93e4c8290e33a3eafc70a5c4a000",
+        "historySha256": "408482154821c519b0c4bf141376d6494e174f38cd7bb2c7976f3088bfeac3e0"
+      },
+      {
+        "imageId": "sha256:23602a21d8ba245c0488a6e2ee66d62d6d0558b60c87ceaf43d801a588e65440",
+        "historySha256": "c91c3220baec73a4e9d41afd65a1c0e531df31a04b083dde06f083309728f241"
+      }
+    ],
+    "sourceCacheCandidates": 62,
+    "existingContainersBefore": 88,
+    "existingContainersAfter": 88,
+    "volumesRemoved": false,
+    "obsoleteWebDependencyCacheIds": [
+      "7nfviyijhpqwspokuxapcfxtf",
+      "nrbdny4llvp1fp5dgxbhc4bdr"
+    ],
+    "currentWebDependencyCachePreserved": "t0ckpbajab6qdb07b0he6sp8b",
+    "temporaryPreviewContainerRemoved": true
+  },
+  "limits": [
+    "This is an increment toward the active complete goal, not proof of full Entra feature parity or completion of BR-001–012 / WF-001–005.",
+    "Tenant-defined custom roles, OU role scopes, general group role inheritance, SCIM, further company app types and actual agent/MDM/provider workflows remain open.",
+    "The selected-person role UI uses existing canonical platform roles; company ownership and group management do not grant role administration.",
+    "Group changes do not prove external license or account provisioning. Rule-managed rows in this person UI link to their rule source; existing group API permissions are unchanged.",
+    "Native and real OAuth tests use disposable databases; browser interaction tests use synthetic local API fixtures. No personal production login, password, MFA enrollment or personal assignment was performed.",
+    "Load, failure/recovery and full accessibility/privacy acceptance remain unproven."
+  ]
+}

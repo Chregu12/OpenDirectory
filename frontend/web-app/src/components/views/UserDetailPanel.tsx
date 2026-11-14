@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import { DirectoryUser, directoryUsers, directoryError, userName } from '@/lib/directoryUsers';
 import { ensureSession } from '@/lib/auth';
 import DirectoryUserEditor from './DirectoryUserEditor';
+import UserGroupsPanel from './UserGroupsPanel';
+import RolesView from './RolesView';
 
 export function DirectoryConfirmation({ title, children, busy, error, onConfirm, onClose, confirmDisabled = false }: { title: string; children: React.ReactNode; busy: boolean; error: string; onConfirm: () => void; onClose: () => void; confirmDisabled?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null); const cancel = useRef<HTMLButtonElement>(null);
@@ -26,7 +28,11 @@ export default function UserDetailPanel({ user, permissions, actorUserId, onChan
   const [editing, setEditing] = useState(false); const [action, setAction] = useState<'status' | 'reset' | 'delete' | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [showAccessInfo, setShowAccessInfo] = useState(false); const accessInfoId = React.useId();
+  const [tab, setTab] = useState('profile');
+  const tabsId = React.useId();
   const can = (permission: string) => permissions.includes(permission);
+  const tabs = [{ id: 'profile', label: 'Übersicht' }, ...(can('users.read') && can('groups.read') ? [{ id: 'groups', label: 'Gruppen' }] : []), ...(can('identities.roles.read') ? [{ id: 'roles', label: 'Rollen & Rechte' }] : [])];
+  const activeTab = tabs.some(item => item.id === tab) ? tab : 'profile';
   if (!user) return <p className="p-4" role="status">Wähle einen Verzeichniseintrag.</p>;
   const title = action === 'delete' ? 'Verzeichniseintrag löschen' : action === 'reset' ? 'Sicherheitsreset' : user.enabled ? 'Konto sperren' : 'Konto freigeben';
   const allowed = action === 'delete' ? can('users.delete') : action === 'reset' ? can('users.sessions.invalidate') : can('users.update') && can('users.status.manage');
@@ -43,7 +49,12 @@ export default function UserDetailPanel({ user, permissions, actorUserId, onChan
       {can('users.delete') && <button className="text-red-500" onClick={() => begin('delete')}>Eintrag löschen</button>}
       <button onClick={onReload}>Details neu laden</button>
     </div>
-    <section className="od-object-section"><h2>Profil</h2><dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div role="tablist" aria-label="Benutzer verwalten" className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3">{tabs.map((item, index) => <button key={item.id} id={`${tabsId}-${item.id}`} role="tab" tabIndex={activeTab === item.id ? 0 : -1} aria-selected={activeTab === item.id} aria-controls={`${tabsId}-panel`} className={activeTab === item.id ? 'fluent-btn-primary' : 'fluent-btn-secondary'} onClick={() => setTab(item.id)} onKeyDown={event => {
+      const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+      if (next < 0) return; event.preventDefault(); setTab(tabs[next].id); document.getElementById(`${tabsId}-${tabs[next].id}`)?.focus();
+    }}>{item.label}</button>)}</div>
+    <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${activeTab}`} className="space-y-5">
+    {activeTab === 'profile' && <><section className="od-object-section"><h2>Profil</h2><dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {Object.entries({ 'Verzeichnis-ID': user.id, Benutzername: user.username, Anzeigename: user.displayName || '—', Abteilung: user.department || '—', Position: user.title || '—', Datensatzversion: user.revision }).map(([label, value]) =>
         <div key={label}><dt className="text-xs opacity-70">{label}</dt><dd className="break-all">{value}</dd></div>)}
     </dl></section>
@@ -56,7 +67,10 @@ export default function UserDetailPanel({ user, permissions, actorUserId, onChan
         <a className="fluent-btn-secondary" href="/organization">Organisationszuordnungen</a>
         {can('groups.read') && <a className="fluent-btn-secondary" href="/usergroups">Gruppen verwalten</a>}
       </div>
-    </section>
+    </section></>}
+    {activeTab === 'groups' && <UserGroupsPanel key={user.id} user={user} permissions={permissions} actorUserId={actorUserId} onDenied={onDenied} />}
+    {activeTab === 'roles' && <RolesView key={user.id} selectedUser={user} />}
+    </div>
     {editing && can('users.update') && <DirectoryUserEditor user={user} onClose={() => setEditing(false)} onSaved={updated => { setEditing(false); onChanged(updated, user.id); toast.success('Profil gespeichert.'); }} />}
     {action && allowed && <DirectoryConfirmation title={title} busy={busy} error={error} onClose={() => { setAction(null); if (error) onReload(); }} onConfirm={async () => {
       if (busy || error || !allowed) return; setBusy(true);

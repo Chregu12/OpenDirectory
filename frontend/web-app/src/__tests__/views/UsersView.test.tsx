@@ -192,3 +192,7 @@ test('a canonical person deep link loads that exact ID without a write', async (
   expect(api.get).toHaveBeenCalledWith('/api/users/' + targetId, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(api.post).not.toHaveBeenCalled(); expect(api.put).not.toHaveBeenCalled();
 });
+
+test('person sections support keyboard navigation without exposing ungranted administrative tasks',async()=>{
+ permissions.push('groups.read');render(<UsersView/>);await userEvent.click(await screen.findByRole('button',{name:'Benutzer employee'}));const overview=await screen.findByRole('tab',{name:'Übersicht'});expect(screen.queryByRole('tab',{name:'Rollen & Rechte'})).not.toBeInTheDocument();overview.focus();await userEvent.keyboard('{ArrowRight}');expect(screen.getByRole('tab',{name:'Gruppen'})).toHaveFocus();expect(screen.getByRole('tab',{name:'Gruppen'})).toHaveAttribute('aria-selected','true');await userEvent.keyboard('{Home}');expect(overview).toHaveFocus();expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Übersicht');
+});

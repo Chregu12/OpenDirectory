@@ -22,6 +22,7 @@ export interface DirectoryAccess {
   directoryCreationProtocol?: number;
   directoryUserMutationProtocol?: number;
   directoryGroupMutationProtocol?: number;
+  directoryUserGroupsProtocol?: number;
   directoryOuMutationProtocol?: number;
   directoryOuMembershipProtocol?: number;
   groupMembershipReviewProtocol?: number;

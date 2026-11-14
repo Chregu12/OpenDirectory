@@ -64,6 +64,34 @@ class DirectoryReader {
     });
   }
 
+  async userGroups(userId, query = {}, user, authorization) {
+    identifier(userId);
+    if (Object.keys(query).some(key => !['page', 'limit', 'search', 'membership'].includes(key))
+      || query.membership !== undefined && !['member', 'available'].includes(query.membership)) reject(400, 'Invalid user group selectors');
+    const { membership = 'member', ...selectors } = query;
+    const { page, limit, search } = userListQuery(selectors);
+    if (/[\u0000-\u001f\u007f-\u009f]/u.test(query.search || '')) reject(400, 'Invalid user group search');
+    return this.read(['users.read', 'groups.read'], user, authorization, async (client, tenantId) => {
+      if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2", [userId, tenantId])).rows.length) reject(404, 'User not found');
+      await client.query('SELECT identity_company_group_rule_live_receiving()');
+      const from = `FROM groups collection LEFT JOIN group_members member ON member.group_id=collection.id AND member.user_id=$1
+        WHERE identity_tenant_id('group',collection.id)=$2 AND ($3='' OR strpos(lower(concat_ws(' ',collection.name,collection.description)),lower($3))>0)
+        AND member.membership_id IS ${membership === 'member' ? 'NOT ' : ''}NULL`;
+      const parameters = [userId.toLowerCase(), tenantId, search];
+      const total = Number((await client.query('SELECT count(*) AS count ' + from, parameters)).rows[0].count);
+      const rows = (await client.query(`SELECT collection.id,collection.name,collection.description,collection.created_at,collection.revision,
+        member.membership_id,member.added_at AS linked_at,
+        CASE WHEN member.membership_id IS NOT NULL THEN identity_tenant_user_enabled($1::uuid)
+          AND identity_membership_rule_deadline(member.membership_id)>identity_membership_review_now() END AS effective,
+        EXISTS(SELECT 1 FROM identity_company_group_rule_effects effect WHERE effect.membership_id=member.membership_id AND effect.action='member-add'
+          AND effect.group_id=collection.id AND effect.user_id=$1::uuid AND effect.tenant_id=$2) AS rule_managed
+        ${from} ORDER BY lower(collection.name),collection.id LIMIT $4 OFFSET $5`, [...parameters, limit, (page - 1) * limit])).rows;
+      return { schemaVersion: 1, actorUserId: user.identity_authorization.userId, userId: userId.toLowerCase(), membership, total, page, limit,
+        groups: rows.map(row => ({ id: row.id, name: row.name, description: row.description || '', createdAt: iso(row.created_at), revision: String(row.revision),
+          membership: row.membership_id ? { id: row.membership_id, createdAt: iso(row.linked_at), effective: row.effective, source: row.rule_managed ? 'rule' : 'manual' } : null })) };
+    });
+  }
+
   async readGroups(client, tenantId, groupId = null) {
     const rows = bounded((await client.query("SELECT id,name,description,created_at,revision FROM groups WHERE identity_tenant_id('group',id)=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at,id LIMIT 10001", [tenantId,groupId])).rows);
     if (!rows.length) return [];

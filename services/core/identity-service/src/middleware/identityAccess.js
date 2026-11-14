@@ -116,6 +116,7 @@ const ROUTES = [
   ['GET', /^\/identity\/search\/?$/, ['users.read', 'groups.read']],
   ['GET', /^\/license-groups\/[^/]+\/snapshot\/?$/, ['licenses.groups.read']],
   ['GET', /^\/license-users\/[^/]+\/snapshot\/?$/, []],
+  ['GET', /^\/users\/[^/]+\/groups\/?$/, ['users.read', 'groups.read']],
   ['GET', /^\/users(?:\/[^/]+)?\/?$/, ['users.read']],
   ['POST', /^\/users\/?$/, ['users.create']],
   ['PUT', /^\/users\/[^/]+\/?$/, ['users.update']],

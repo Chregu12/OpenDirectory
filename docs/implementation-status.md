@@ -1,5 +1,7 @@
 # Tatsächlicher Implementierungsstand
 
+**Personenverwaltung 1.0.39 (14. November 2026):** Das vorhandene GUI verwaltet tatsächliche eigene Gruppenmitgliedschaften und befristete Rollen direkt an der ausgewählten Person. Server-Pagination, aktuelle Regel-/Review-Wirksamkeit, Versionsprüfung, ausdrückliche Bestätigungen und die bestehenden Autorisierungskerne sind verbunden. Die [Liefer- und Prüfnachweise](deployment/people-access-2026-11-14.json) enthalten die vollständigen Unit-Suiten, echte PostgreSQL-/OAuth-Prozesse, Browserabläufe und den gestaffelten Harbor-/k3s-Rollout. Das Gesamtziel bleibt aktiv; Firmenrollen, OU-Rollenscopes, SCIM und weitere Anbieter-/Geräteabläufe sind damit nicht abgeschlossen.
+
 
 **Portal-Lieferung 1.0.16 (2. November 2026):** Gemeinsamer SSPR-Stil, tatsächliche WinGet-/Homebrew-Katalogquellen, herstellerunabhängige endliche Legacy-Pools mit direkter Quellenvergabe/-rücknahme, nutzbare Gateway-/OAuth-Integrationsbereiche und PostgreSQL-Moduleinstellungen sind über Harbor auf k3s ausgerollt. Dienstzustand, Meldungen, Auth-Audit und Identitätsseiten zeigen bestätigte Quellen statt Demo-/Browser-Erfolgen. 3’033 Frontend-Tests sowie gezielte Backend-/HTTPS-Verträge bestehen. [Aktueller Liefer- und Prüfbericht](ui-redesign/portal-report.html) mit konkreten Provider-, MFA-, Betriebs- und Browsergrenzen; dies setzt keine vollständige Business Capability oder externe Provisionierung auf Done.
 

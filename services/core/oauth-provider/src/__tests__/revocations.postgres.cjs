@@ -4329,3 +4329,22 @@ test('Engineering PIM inventory maintenance works through original OAuth and the
   assert.equal((await request(base,route,{token})).status,401);
  });
 });
+
+test('person group and role management uses original OAuth through the production gateway',async()=>{
+ const first=await issue('operator');const admin=provenMfa(payload(first.access_token))?first:await configureFactor('operator',first);const token=admin.access_token;const ordinary=await issue('alice');const target=canonicalSubjects.get('alice');
+ await withProductionGateway(async base=>{
+  const route='/api/users/'+target+'/groups';assert.equal((await request(base,route,{token:ordinary.access_token})).status,403);
+  const capabilities=await request(base,'/api/identity/access',{token});assert.equal(capabilities.status,200);assert.equal(capabilities.body.directoryUserGroupsProtocol,1);
+  const created=await request(base,'/api/groups',{method:'POST',token,body:{name:'Actual person assignment group'}});assert.equal(created.status,201,JSON.stringify(created.body));const collection=created.body;const {groupEtag}=require('../../../identity-service/src/GroupMutator');
+  const candidates=await request(base,route+'?membership=available&search=Actual%20person',{token});assert.equal(candidates.status,200,JSON.stringify(candidates.body));assert.ok(candidates.body.groups.some(group=>group.id===collection.id&&group.membership===null));
+  const assigned=await request(base,'/api/groups/'+collection.id+'/members',{method:'POST',token,headers:{'If-Match':groupEtag(collection)},body:{userId:target}});assert.equal(assigned.status,200,JSON.stringify(assigned.body));
+  const current=await request(base,route+'?search=Actual%20person',{token});assert.equal(current.status,200,JSON.stringify(current.body));assert.equal(current.body.userId,target);assert.equal(current.body.groups.length,1);assert.equal(current.body.groups[0].membership.source,'manual');assert.equal(current.body.groups[0].membership.effective,true);assert.equal('members' in current.body.groups[0],false);
+  assert.equal((await request(base,route+'?tenantId='+randomUUID(),{token})).status,400);
+  assert.equal((await request(base,'/api/groups/'+collection.id+'/members/'+target,{method:'DELETE',token,headers:{'If-Match':groupEtag(collection)}})).status,412);
+  const grant=await request(base,'/api/users/'+target+'/roles',{method:'POST',token,body:{role:'directory-reader',durationSeconds:3600,reason:'Actual independently authorized person administration'}});assert.equal(grant.status,201,JSON.stringify(grant.body));
+  const roles=await request(base,'/api/users/'+target+'/roles',{token});assert.equal(roles.status,200);assert.ok(roles.body.assignments.some(row=>row.id===grant.body.id&&row.role==='directory-reader'&&row.status==='active'));
+  assert.equal((await request(base,'/api/users/'+target+'/roles/'+grant.body.id,{method:'DELETE',token})).status,200);
+  assert.equal((await request(base,'/api/groups/'+collection.id+'/members/'+target,{method:'DELETE',token,headers:{'If-Match':groupEtag(assigned.body)}})).status,200);
+  const removed=await request(base,route+'?search=Actual%20person',{token});assert.equal(removed.status,200);assert.equal(removed.body.total,0);
+ });
+});

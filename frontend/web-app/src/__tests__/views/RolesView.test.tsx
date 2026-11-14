@@ -80,3 +80,13 @@ test('a malformed role list never creates empty-success or writable state', asyn
   await user.type(await screen.findByLabelText('Verzeichnis-ID'), target); await user.click(screen.getByRole('button', { name: 'Zuweisungen laden' }));
   await screen.findByRole('alert'); expect(screen.queryByLabelText('Begründung')).not.toBeInTheDocument(); expect(screen.queryByText('Keine Rollenzuweisungen vorhanden.')).not.toBeInTheDocument();
 });
+
+test('the selected person loads roles directly and grants only to that captured user without UUID entry',async()=>{
+ permissions.push('identities.roles.manage');render(<RolesView selectedUser={{id:target,username:'employee',email:'employee@example.test',displayName:'Selected Employee',enabled:true,revision:'1',createdAt:'2026-01-01T00:00:00Z'}}/>);
+ await screen.findByRole('heading',{name:'Rollen für Selected Employee'});await screen.findByRole('heading',{name:'Rollenzuweisungen für '+target});expect(screen.queryByLabelText('Verzeichnis-ID')).not.toBeInTheDocument();
+ const user=userEvent.setup();await user.selectOptions(screen.getByLabelText('Rolle'),'license-manager');await user.type(screen.getByLabelText('Begründung'),row().reason);await user.click(screen.getByRole('button',{name:'Rollenzuweisung prüfen'}));expect(api.post).not.toHaveBeenCalled();await user.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Bestätigen'}));await waitFor(()=>expect(api.post).toHaveBeenCalledWith(`/api/users/${target}/roles`,expect.objectContaining({role:'license-manager',durationSeconds:3600})));expect(screen.queryByText('Rollenauthentifizierung')).not.toBeInTheDocument();
+});
+
+test('losing the operator session removes a captured role confirmation before any write',async()=>{
+ const user=await grant();window.dispatchEvent(new Event('od:session-error'));await screen.findByText(/Rollenberechtigungen nicht verfügbar/);expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();expect(api.post).not.toHaveBeenCalled();
+});

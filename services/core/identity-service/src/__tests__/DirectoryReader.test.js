@@ -49,3 +49,18 @@ test('unsupported tree depth is rejected without overflowing a recursive seriali
 test.each([{tenantId:tenant.id},{filter:'(objectClass=*)'},{scope:'sub'}])('ignored selectors never choose or silently widen a directory view: %j',async query=>{
  await expect(reader.search(query,user,'Bearer original')).rejects.toMatchObject({status:400});expect(verify).not.toHaveBeenCalled();
 });
+
+test('user group reads bind both canonical resources, return minimal memberships and paginate a single snapshot',async()=>{
+ const target=crypto.randomUUID(),groupId=crypto.randomUUID(),membershipId=crypto.randomUUID();
+ database.query.mockImplementation(async sql=>({rows:sql.startsWith('SELECT id FROM users')?[{id:target}]:sql.startsWith('SELECT count(*)')?[{count:'1'}]:sql.startsWith('SELECT collection.id')?[{id:groupId,name:'Engineering',description:null,revision:'7',created_at:new Date('2026-01-01'),membership_id:membershipId,linked_at:new Date('2026-01-02'),effective:false,rule_managed:true}]:[]}));
+ const result=await reader.userGroups(target,{search:'literal%',page:'2',limit:'25'},user,'Bearer original');
+ expect(result).toMatchObject({schemaVersion:1,actorUserId:context.userId,userId:target,membership:'member',total:1,page:2,limit:25,groups:[{id:groupId,revision:'7',membership:{id:membershipId,effective:false,source:'rule'}}]});
+ expect(result.groups[0]).not.toHaveProperty('members');expect(database.transaction).toHaveBeenCalledWith(expect.any(Function),{readOnly:true});expect(verify).toHaveBeenCalledTimes(2);
+ expect(database.query).toHaveBeenCalledWith(expect.stringContaining("identity_tenant_id('group',collection.id)=$2"),[target,tenant.id,'literal%',25,25]);
+});
+test.each([{tenantId:tenant.id},{membership:'all'},{enabled:'true'},{membership:['member']},{page:'0'},{limit:'101'}])('user group read refuses widening or malformed selectors %j',async query=>{
+ await expect(reader.userGroups(crypto.randomUUID(),query,user,'Bearer original')).rejects.toMatchObject({status:400});expect(database.query).not.toHaveBeenCalled();
+});
+test('unknown and foreign user group targets are unavailable before any group metadata is read',async()=>{
+ database.query.mockResolvedValue({rows:[]});await expect(reader.userGroups(crypto.randomUUID(),{},user,'Bearer original')).rejects.toMatchObject({status:404});expect(database.query).toHaveBeenCalledTimes(1);
+});
