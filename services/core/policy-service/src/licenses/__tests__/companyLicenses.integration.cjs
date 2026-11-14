@@ -793,12 +793,14 @@ test('an actual preexisting provider subject prevents adoption before any provid
 
 test('the private SQL interfaces reject a separately authenticated SQL login even when explicitly granted execution', async () => {
   const role = 'company_limited_' + randomUUID().replaceAll('-', ''); roles.push(role);
-  await administration.query('CREATE ROLE ' + role + ' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT');
+  const password = randomUUID();
+  await administration.query('CREATE ROLE ' + role + " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT PASSWORD '" + password + "'");
   await pool.query('GRANT USAGE ON SCHEMA ' + schema + ' TO ' + role);
   await pool.query('GRANT EXECUTE ON FUNCTION license_company_begin(jsonb,jsonb),license_company_finish(uuid,jsonb),license_company_receiving(),license_company_pool_valid(uuid) TO ' + role);
-  const url = new URL(process.env.LICENSE_TEST_DATABASE_URL); url.username = role; url.searchParams.set('options', '-c search_path=' + schema + ',public');
+  const url = new URL(process.env.LICENSE_TEST_DATABASE_URL); url.username = role; url.password = password; url.searchParams.set('options', '-c search_path=' + schema + ',public');
   const restricted = new Pool({ connectionString: url.toString(), max: 1 });
   try {
+    assert.equal((await restricted.query('SELECT session_user AS name')).rows[0].name, role);
     await assert.rejects(restricted.query('SELECT license_company_begin($1,$2)', [proof(), command()]), error => error.code === '42501');
     await assert.rejects(restricted.query('SELECT license_company_finish($1,$2)', [randomUUID(), proof()]), error => error.code === '42501');
   } finally { await restricted.end(); }
