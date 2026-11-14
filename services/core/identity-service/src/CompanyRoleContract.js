@@ -33,15 +33,21 @@ function assignment(input) {
   return { targetType: input.targetType, targetId: identifier(input.targetId), scopeType: input.scopeType,
     ouId: input.ouId === null ? null : identifier(input.ouId), durationSeconds: input.durationSeconds, reason: explanation(input), confirm: true };
 }
+function eligibility(input){
+ exact(input,['targetType','targetId','scopeType','ouId','validForSeconds','reason','confirm']);
+ if(!Number.isInteger(input.validForSeconds)||input.validForSeconds<60||input.validForSeconds>31536000)fail(400,'invalid_company_pim_eligibility_duration');
+ const {validForSeconds,...fields}=input;const checked=assignment({...fields,durationSeconds:60});delete checked.durationSeconds;return {...checked,validForSeconds};
+}
+function activation(input){exact(input,['durationSeconds','reason','confirm']);if(!Number.isInteger(input.durationSeconds)||input.durationSeconds<60||input.durationSeconds>36000)fail(400,'invalid_company_pim_activation_duration');return {durationSeconds:input.durationSeconds,...decision({reason:input.reason,confirm:input.confirm})};}
 function group(input) { exact(input,['name','description','reason','confirm']); return {name:text(input.name,2,120),description:text(input.description,0,1000,true),reason:explanation(input),confirm:true}; }
 function decision(input) { exact(input, ['reason', 'confirm']); return { reason: explanation(input), confirm: true }; }
 function etag(kind, value) {
-  if (!['role', 'grant'].includes(kind) || !validRevision(value?.revision)) fail(400, 'invalid_company_role_revision');
+  if (!['role', 'grant','eligibility','activation'].includes(kind) || !validRevision(value?.revision)) fail(400, 'invalid_company_role_revision');
   return `"company-${kind}-${identifier(value.id)}-${value.revision}"`;
 }
 function expected(kind, value, id) {
   if (value === undefined || value === '') fail(428, 'company_role_if_match_required');
-  const match = typeof value === 'string' && /^"company-(role|grant)-([a-f0-9-]{36})-([1-9][0-9]{0,18})"$/.exec(value);
+  const match = typeof value === 'string' && /^"company-(role|grant|eligibility|activation)-([a-f0-9-]{36})-([1-9][0-9]{0,18})"$/.exec(value);
   if (!match || match[0] !== value || match[1] !== kind || match[2] !== identifier(id) || !validRevision(match[3])) fail(400, 'invalid_company_role_if_match');
   return match[3];
 }
@@ -51,4 +57,4 @@ function page(input = {}) {
   if (typeof selected !== 'string' || !/^[1-9][0-9]*$/u.test(selected) || Number(selected) > 1000000 || input.limit !== undefined && input.limit !== '25') fail(400, 'invalid_company_role_page');
   return { page: Number(selected), limit: 25, search: input.search === undefined ? '' : text(input.search, 0, 255) };
 }
-module.exports = { PERMISSIONS, OU_PERMISSIONS, identifier, definition, assignment, decision, group, etag, expected, page, fail };
+module.exports = { PERMISSIONS, OU_PERMISSIONS, identifier, definition, assignment, eligibility, activation, decision, group, etag, expected, page, fail };

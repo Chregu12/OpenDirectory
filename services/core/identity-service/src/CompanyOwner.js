@@ -20,7 +20,7 @@ async function companyOwner(client, user) {
   return owner?.active && owner.tenant_id === home && owner.issuer === user.iss && owner.subject === user.sub ? owner : null;
 }
 async function companyDirectoryPermissions(client, user) {
-  if (!acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user)) return [];
+  if (!acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user)) return require('./CompanyRoleAuthority').permissions(client, user);
   if (!await companyOwner(client, user)) return require('./CompanyRoleAuthority').permissions(client, user);
   await requireOuReceiver(client); return [...COMPANY_DIRECTORY_PERMISSIONS];
 }

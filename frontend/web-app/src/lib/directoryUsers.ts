@@ -31,6 +31,7 @@ export interface DirectoryAccess {
   companyRegistrationReviewProtocol?: number;
   companyOwner?: boolean;
   companyRolesProtocol?: number;
+  companyPimProtocol?: number;
 }
 
 export type UserProfile = Pick<DirectoryUser, 'username' | 'email' | 'displayName' | 'department' | 'title'>;

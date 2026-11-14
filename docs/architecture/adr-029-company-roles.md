@@ -19,4 +19,4 @@ Jede Definition, Änderung, Vergabe und Rücknahme benötigt exakte Felder, Begr
 Abnahme verlangt reale PostgreSQL- und OAuth-Prozesse für erlaubte und fremde Ziele, Scope-Grenzen, Gruppen-/OU-Selbsterweiterung, Ablauf, Revisionen, Widerruf während gehaltener Schreibtransaktionen und unterdrückte Audit-/Outbox-Belege sowie vollständige Browserbedienung. Die begrenzte Implementierung und ihre Prüfungen sind im [Liefernachweis](../deployment/company-roles-2026-11-14.json) festgehalten; dies schließt das vollständige Governance-Ziel nicht ab.
 
 
-Implementierungsbeleg: [Firmenrollen](../features/company-roles.md). Die erste Capability bleibt auf die vierzehn Verzeichnisaktionen begrenzt; eigene PIM-Selbstaktivierung und zusätzliche Dienstaktionen bleiben Teil des offenen Gesamtauftrags.
+Implementierungsbeleg: [Firmenrollen](../features/company-roles.md). Die erste Capability bleibt auf die vierzehn Verzeichnisaktionen begrenzt; [eigene PIM-Selbstaktivierung](../features/company-pim.md) ist ergänzt. Unabhängige Genehmigungs-/Reviewregeln und zusätzliche Dienstaktionen bleiben Teil des offenen Gesamtauftrags.

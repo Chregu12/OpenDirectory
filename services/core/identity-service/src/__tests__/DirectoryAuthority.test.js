@@ -41,11 +41,10 @@ test('invented owner claims and company permission arrays do not replace an actu
 test.each([{ active: false }, { subject: 'foreign-subject' }, { issuer: 'https://foreign.test' }, { tenant_id: randomUUID() }])('an inactive, foreign or rehomed source is not company-directory authority: %j', async change => {
   owner = { ...owner, ...change }; expect(await companyDirectoryPermissions(client, user)).toEqual([]);
 });
-test('old or missing independently bound MFA cannot activate the owner path', async () => {
-  for (const changed of [{ ...user, amr: ['pwd'] }, { ...user, auth_time: authTime - 301, mfa_authorization: { ...user.mfa_authorization, authTime: authTime - 301 } }]) {
-    expect(mayUseDirectory(changed, ['users.create'])).toBe(false); expect(await companyDirectoryPermissions(client, changed)).toEqual([]);
-  }
-  expect(client.query).not.toHaveBeenCalled();
+test('owner rights still require fresh independently bound MFA while the preflight permits checking a real longer PIM lease',async()=>{
+ const missing={...user,amr:['pwd']};expect(mayUseDirectory(missing,['users.create'])).toBe(false);expect(await companyDirectoryPermissions(client,missing)).toEqual([]);
+ const older={...user,auth_time:authTime-301,mfa_authorization:{...user.mfa_authorization,authTime:authTime-301}};
+ expect(mayUseDirectory(older,['users.create'])).toBe(true);expect(await companyDirectoryPermissions(client,older)).toEqual([]);await expect(requireDirectoryPermissions(client,older,['users.create'])).rejects.toMatchObject({status:403});
 });
 test('corrupt retained owner evidence fails closed rather than falling back to a caller claim', async () => {
   owner.valid = false; await expect(requireDirectoryPermissions(client, user, ['users.read'])).rejects.toMatchObject({ status: 503 });

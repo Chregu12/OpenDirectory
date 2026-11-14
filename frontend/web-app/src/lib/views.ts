@@ -28,7 +28,7 @@ export const VIEWS: ViewDefinition[] = [
   { id: 'usergroups', name: 'Gruppen', group: 'Unternehmen & Personen', icon: UserGroupIcon, keywords: ['Gruppen', 'usergroups'], audience: 'permissions', permissions: ['groups.read', 'groups.create'] },
   { id: 'company-roles', name: 'Firmenrollen', group: 'Administration', icon: KeyIcon, keywords: ['Firmenrollen', 'company-roles', 'Bereiche', 'OU-Rechte'], audience: 'permissions', permissions: ['company.roles.read'] },
   { id: 'permissions', name: 'Rollen & Rechte', group: 'Administration', icon: KeyIcon, keywords: ['Rollen & Rechte', 'permissions'], audience: 'permissions', permissions: ['identities.roles.read'] },
-  { id: 'pim', name: 'PIM', group: 'Administration', icon: ShieldCheckIcon, keywords: ['PIM', 'pim'], audience: 'permissions', permissions: ['pim.eligibilities.read', 'pim.requests.read'] },
+  { id: 'pim', name: 'PIM', group: 'Administration', icon: ShieldCheckIcon, keywords: ['PIM', 'pim'], audience: 'self' },
   { id: 'offboarding-access', name: 'Offboarding: Rollen & PIM', group: 'Unternehmen & Personen', icon: KeyIcon, keywords: ['Austritt: Rollen & PIM', 'offboarding-access'], audience: 'permissions', permissions: ['identities.roles.read', 'pim.eligibilities.read'] },
   { id: 'mfa', name: 'MFA / 2FA', group: 'Administration', icon: DevicePhoneMobileIcon, keywords: ['MFA / 2FA', 'mfa'], audience: 'self' },
   { id: 'sspr', name: 'Passwort zurücksetzen', group: 'Administration', icon: ArrowUturnLeftIcon, keywords: ['Passwort-Reset', 'sspr'], audience: 'self' },

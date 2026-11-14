@@ -5,6 +5,7 @@ import PIMGroupsPanel from '@/components/views/PIMGroupsPanel';
 import { privilegedGroups } from '@/lib/privilegedGroups';
 import { privilegedActivation } from '@/lib/privilegedActivation';
 import { startLogin } from '@/lib/auth';
+jest.mock('@/components/views/CompanyPimPanel',()=>({__esModule:true,default:()=>null}));
 jest.mock('@/lib/privilegedGroups', () => ({ privilegedGroups: { load: jest.fn(), assign: jest.fn(), create: jest.fn(), disable: jest.fn(), initialize: jest.fn(), members: jest.fn(), history: jest.fn() } }));
 jest.mock('@/lib/privilegedActivation', () => ({ privilegedActivation: { request: jest.fn(), change: jest.fn(), revokeEligibility: jest.fn() }, pimError: () => 'PIM-Ergebnis nicht bestätigt.' }));
 jest.mock('@/lib/directoryUsers', () => ({ directoryUsers: { list: jest.fn(async () => ({ users: [{ id: other, username: 'engineer', displayName: 'Engineering User' }] })) }, userName: (user: any) => user.displayName || user.username }));

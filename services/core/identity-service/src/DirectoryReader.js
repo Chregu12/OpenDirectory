@@ -44,7 +44,6 @@ class DirectoryReader {
     if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || !acceptsRoleAuthentication(authentication, user)
       || !Number.isFinite(user.exp) || user.exp * 1000 <= Date.now()) reject(401, 'Original directory authority changed');
     if (checks.length) {
-      if (!acceptsRoleAuthentication({required:true,maxAgeSeconds:300},user)) reject(401,'Original custom role assurance expired');
       await this.database.transaction(async client => { for (const check of checks) { const actual=await requireDirectoryPermissions(client,user,check.required); if(JSON.stringify(actual)!==JSON.stringify(check.captured)) reject(401,'Original custom role source changed'); } },{readOnly:true});
     }
     return result;
@@ -54,8 +53,8 @@ class DirectoryReader {
     const { page, limit, search, enabled } = userListQuery(query);
     return this.read(['users.read'], user, authorization, async (client, tenantId, captured) => {
       const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
-      const where = "WHERE ($1='' OR strpos(lower(concat_ws(' ',username,email,display_name,department,title)),lower($1))>0) AND ($2::boolean IS NULL OR enabled=$2) AND identity_tenant_id('user',id)=$3"+(scoped?" AND jsonb_array_length(identity_company_role_sources($4::uuid,$3::uuid,'users.read','user',id))>0":'');
-      const parameters=[search,enabled,tenantId,...(scoped?[user.identity_authorization.userId]:[])];
+      const where = "WHERE ($1='' OR strpos(lower(concat_ws(' ',username,email,display_name,department,title)),lower($1))>0) AND ($2::boolean IS NULL OR enabled=$2) AND identity_tenant_id('user',id)=$3"+(scoped?" AND identity_company_role_covers($4::uuid,$3::uuid,'users.read','user',id,$5::jsonb)":'');
+      const parameters=[search,enabled,tenantId,...(scoped?[user.identity_authorization.userId,JSON.stringify(captured.grants.filter(grant=>grant.permission==='users.read').map(grant=>grant.source))]:[])];
       const total = Number((await client.query('SELECT COUNT(*) AS count FROM users ' + where, parameters)).rows[0].count);
       const result = await client.query(`SELECT ${USER_COLUMNS} FROM users ${where} ORDER BY created_at,id LIMIT $${parameters.length+1} OFFSET $${parameters.length+2}`, [...parameters,limit,(page-1)*limit]);
       return { users: result.rows.map(userFromRow), total, page, limit };
@@ -66,7 +65,7 @@ class DirectoryReader {
     identifier(userId); exactQuery(query);
     return this.read(['users.read'], user, authorization, async (client, tenantId, captured) => {
       const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
-      const row = (await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2`+(scoped?" AND jsonb_array_length(identity_company_role_sources($3::uuid,$2::uuid,'users.read','user',id))>0":''), [userId,tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows[0];
+      const row = (await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2`+(scoped?" AND identity_company_role_covers($3::uuid,$2::uuid,'users.read','user',id,$4::jsonb)":''), [userId,tenantId,...(scoped?[user.identity_authorization.userId,JSON.stringify(captured.grants.filter(grant=>grant.permission==='users.read').map(grant=>grant.source))]:[])])).rows[0];
       if (!row) reject(404, 'User not found');
       return userFromRow(row);
     });
@@ -81,7 +80,7 @@ class DirectoryReader {
     if (/[\u0000-\u001f\u007f-\u009f]/u.test(query.search || '')) reject(400, 'Invalid user group search');
     return this.read(['users.read', 'groups.read'], user, authorization, async (client, tenantId, captured) => {
       const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
-      if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2"+(scoped?" AND jsonb_array_length(identity_company_role_sources($3::uuid,$2::uuid,'users.read','user',id))>0":''), [userId, tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows.length) reject(404, 'User not found');
+      if (!(await client.query("SELECT id FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2"+(scoped?" AND identity_company_role_covers($3::uuid,$2::uuid,'users.read','user',id,$4::jsonb)":''), [userId, tenantId,...(scoped?[user.identity_authorization.userId,JSON.stringify(captured.grants.filter(grant=>grant.permission==='users.read').map(grant=>grant.source))]:[])])).rows.length) reject(404, 'User not found');
       await client.query('SELECT identity_company_group_rule_live_receiving()');
       const from = `FROM groups collection LEFT JOIN group_members member ON member.group_id=collection.id AND member.user_id=$1
         WHERE identity_tenant_id('group',collection.id)=$2 AND ($3='' OR strpos(lower(concat_ws(' ',collection.name,collection.description)),lower($3))>0)
@@ -185,7 +184,7 @@ class DirectoryReader {
     exactQuery(query);
     return this.read(['users.read','groups.read'], user, authorization, async (client, tenantId, captured) => {
       const scoped=captured?.grants.some(grant=>grant.permission==='users.read');
-      const users = bounded((await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE identity_tenant_id('user',id)=$1`+(scoped?" AND jsonb_array_length(identity_company_role_sources($2::uuid,$1::uuid,'users.read','user',id))>0":'')+' ORDER BY created_at,id LIMIT 10001', [tenantId,...(scoped?[user.identity_authorization.userId]:[])])).rows).map(userFromRow);
+      const users = bounded((await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE identity_tenant_id('user',id)=$1`+(scoped?" AND identity_company_role_covers($2::uuid,$1::uuid,'users.read','user',id,$3::jsonb)":'')+' ORDER BY created_at,id LIMIT 10001', [tenantId,...(scoped?[user.identity_authorization.userId,JSON.stringify(captured.grants.filter(grant=>grant.permission==='users.read').map(grant=>grant.source))]:[])])).rows).map(userFromRow);
       const groups = await this.readGroups(client, tenantId); return { entries:[...users,...groups],total:users.length+groups.length };
     });
   }

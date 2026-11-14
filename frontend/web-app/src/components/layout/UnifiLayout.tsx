@@ -79,6 +79,7 @@ export default function UnifiLayout({
   );
   useEffect(() => {
     let active = true;
+    let request=0;
     setAccess(null);
     setAccessError(false);
     const invalid = () => {
@@ -86,21 +87,25 @@ export default function UnifiLayout({
       setAccess(null);
       setAccessError(true);
     };
-    const refresh = () =>
-      directoryUsers
+    const refresh = () => {
+      const expected=++request;
+      return directoryUsers
         .access()
         .then((result) => {
-          if (active) {
+          if (active&&expected===request) {
             setAccess(result);
             setAccessError(false);
           }
         })
         .catch(() => {
-          if (active) {
+          if (active&&expected===request) {
             setAccess(null);
             setAccessError(true);
           }
         });
+    };
+    const changed=()=>{setAccess(null);void refresh();};
+    window.addEventListener("od:directory-access-changed",changed);
     window.addEventListener("od:session-error", invalid);
     api
       .get("/api/platform/capabilities")
@@ -124,6 +129,7 @@ export default function UnifiLayout({
       active = false;
       window.clearInterval(timer);
       window.removeEventListener("od:session-error", invalid);
+      window.removeEventListener("od:directory-access-changed",changed);
     };
   }, [currentUser?.id, currentUser?.role, currentUser?.roles?.join(",")]);
   const [notifOpen, setNotifOpen] = useState(false);

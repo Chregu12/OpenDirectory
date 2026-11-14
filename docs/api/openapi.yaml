@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.32.0",
+    "version": "1.33.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -3766,6 +3766,9 @@
                       "const": 1
                     },
                     "companyRolesProtocol": {
+                      "const": 1
+                    },
+                    "companyPimProtocol": {
                       "const": 1
                     }
                   }
@@ -42563,6 +42566,629 @@
           }
         }
       }
+    },
+    "/api/identity/company-roles/{id}/eligibilities": {
+      "get": {
+        "operationId": "readOwnCompanyRoleEligibilities",
+        "summary": "Read paginated eligible assignments",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimEligibilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "assignOwnCompanyRoleEligibility",
+        "summary": "Independently assign person or protected-group eligibility",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-role-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyPimEligibilityInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimEligibilityResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/eligibilities/{id}/revoke": {
+      "post": {
+        "operationId": "revokeOwnCompanyRoleEligibility",
+        "summary": "Withdraw eligibility and stop derived activation effects",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-eligibility-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimEligibilityResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/activations/{id}/revoke": {
+      "post": {
+        "operationId": "revokeOwnCompanyRoleActivation",
+        "summary": "Independently stop one actual activation",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-activation-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimActivationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim": {
+      "get": {
+        "operationId": "readSelfCompanyPim",
+        "summary": "Read current original own eligible or running assignments",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          },
+          {
+            "name": "tab",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "eligible",
+                "active"
+              ],
+              "default": "eligible"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimSelf"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim/history": {
+      "get": {
+        "operationId": "readSelfCompanyPimHistory",
+        "summary": "Read actual own activation and cancellation history",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim/eligibilities/{id}/activate": {
+      "post": {
+        "operationId": "activateSelfCompanyRole",
+        "summary": "Activate one original own eligibility with bounded duration",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-eligibility-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyPimActivationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimActivationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim/activations/{id}/end": {
+      "post": {
+        "operationId": "endSelfCompanyRoleActivation",
+        "summary": "End one original own activation",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "One exact strong \"company-activation-UUID-revision\" ETag."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own-tenant result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimActivationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields or bounded duration rejected"
+          },
+          "401": {
+            "description": "Original actor or deadline expired"
+          },
+          "403": {
+            "description": "Actual independent duty missing"
+          },
+          "404": {
+            "description": "Own currently eligible source or activation not found"
+          },
+          "409": {
+            "description": "Duplicate activation, source conflict or insufficient remaining duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Original fresh bound MFA or strong If-Match required"
+          },
+          "503": {
+            "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -58670,7 +59296,12 @@
                     "role-update",
                     "grant-create",
                     "grant-revoke",
-                    "group-protect"
+                    "group-protect",
+                    "eligibility-create",
+                    "eligibility-revoke",
+                    "activation-create",
+                    "activation-cancel",
+                    "activation-revoke"
                   ]
                 },
                 "resourceId": {
@@ -58865,6 +59496,615 @@
               },
               "roleAssignable": {
                 "const": true
+              }
+            }
+          }
+        }
+      },
+      "CompanyRoleEligibility": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "roleId",
+          "roleRevision",
+          "targetType",
+          "targetId",
+          "scopeType",
+          "ouId",
+          "revision",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "targetType": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scopeType": {
+            "enum": [
+              "tenant",
+              "ou"
+            ]
+          },
+          "ouId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "eligible",
+              "inactive",
+              "expired",
+              "definition-changed",
+              "revoked"
+            ]
+          }
+        }
+      },
+      "CompanyPimEligibilityInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targetType",
+          "targetId",
+          "scopeType",
+          "ouId",
+          "reason",
+          "confirm",
+          "validForSeconds"
+        ],
+        "properties": {
+          "targetType": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "scopeType": {
+            "enum": [
+              "tenant",
+              "ou"
+            ]
+          },
+          "ouId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          },
+          "validForSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 31536000
+          }
+        }
+      },
+      "CompanyPimActivationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "durationSeconds",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "durationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyPimActivation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "eligibilityId",
+          "userId",
+          "revision",
+          "createdAt",
+          "expiresAt",
+          "endedAt",
+          "endedBy",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eligibilityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "invalid",
+              "expired",
+              "ended"
+            ]
+          }
+        }
+      },
+      "CompanyPimEligibilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "roleId",
+          "total",
+          "page",
+          "limit",
+          "eligibilities"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "eligibilities": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyRoleEligibility"
+            }
+          }
+        }
+      },
+      "CompanyPimEligibilityResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "eligibility"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "eligibility-create",
+              "eligibility-revoke"
+            ]
+          },
+          "eligibility": {
+            "$ref": "#/components/schemas/CompanyRoleEligibility"
+          }
+        }
+      },
+      "CompanyPimActivationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "activation"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "activation-create",
+              "activation-cancel",
+              "activation-revoke"
+            ]
+          },
+          "activation": {
+            "$ref": "#/components/schemas/CompanyPimActivation"
+          }
+        }
+      },
+      "CompanyPimSelf": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "companyPimProtocol",
+          "canActivate",
+          "tab",
+          "total",
+          "page",
+          "limit",
+          "items"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "companyPimProtocol": {
+            "const": 1
+          },
+          "canActivate": {
+            "type": "boolean"
+          },
+          "tab": {
+            "enum": [
+              "eligible",
+              "active"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "eligibility",
+                "role",
+                "groupName",
+                "ouName",
+                "maximumDurationSeconds",
+                "activation"
+              ],
+              "properties": {
+                "eligibility": {
+                  "$ref": "#/components/schemas/CompanyRoleEligibility"
+                },
+                "role": {
+                  "$ref": "#/components/schemas/CompanyRole"
+                },
+                "groupName": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ouName": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maximumDurationSeconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 36000
+                },
+                "activation": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CompanyPimActivation"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CompanyPimHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "total",
+          "page",
+          "limit",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "action",
+                "resourceId",
+                "actorUserId",
+                "reason",
+                "createdAt",
+                "deliveryStatus"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "action": {
+                  "enum": [
+                    "activation-create",
+                    "activation-cancel",
+                    "activation-revoke"
+                  ]
+                },
+                "resourceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "actorUserId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 500
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "deliveryStatus": {
+                  "const": "pending"
+                }
               }
             }
           }

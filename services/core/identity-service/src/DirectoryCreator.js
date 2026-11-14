@@ -64,7 +64,7 @@ class DirectoryCreator {
       }
       if (!sameTenantContext(tenant,await this.revalidate(authorization,user))) reject(401, 'Tenant authority changed');
       const rolesSnapshot = (await client.query('SELECT identity_subject_link_role_state($1) AS state', [user.identity_authorization.userId])).rows[0].state;
-      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp, (companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant => Number(grant.source.validUntil)) || []), companyGovernance?.validUntil || user.exp);
+      const validUntil = Math.min(user.exp, source.authentication.required ? user.auth_time + source.authentication.maxAgeSeconds : user.exp, require('./CompanyRoleAuthority').deadline(user,companyRoles),...(companyRoles?.grants.map(grant => Number(grant.source.validUntil)) || []), companyGovernance?.validUntil || user.exp);
       if (!Number.isFinite(validUntil) || validUntil * 1000 <= Date.now()) reject(401, 'Original creator assurance expired');
       const proof = {issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,...(companyRoles?{companyRoles}:{}),...(companyGovernance?{companyGovernance}:{}),resource:{kind,id:resourceId.toLowerCase(),values}};
       if(companyRoles||companyGovernance)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);

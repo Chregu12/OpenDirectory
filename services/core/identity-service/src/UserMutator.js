@@ -43,7 +43,7 @@ class UserMutator{
    if(!sameTenantContext(tenant,await this.revalidate(authorization,user)))reject(401,'Tenant authority changed');
    const expectedValues=action==='delete'?null:{...profile(before),...(changes||{})};
    const rolesSnapshot=(await client.query('SELECT identity_subject_link_role_state($1) AS state',[user.identity_authorization.userId])).rows[0].state;
-   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp,(companyRoles?user.auth_time+300:user.exp),...(companyRoles?.grants.map(grant=>Number(grant.source.validUntil))||[]));
+   const validUntil=Math.min(user.exp,source.authentication.required?user.auth_time+source.authentication.maxAgeSeconds:user.exp,require('./CompanyRoleAuthority').deadline(user,companyRoles),...(companyRoles?.grants.map(grant=>Number(grant.source.validUntil))||[]));
    if(!Number.isFinite(validUntil)||validUntil*1000<=Date.now())reject(401,'Original operator assurance expired');
    const proof={operationId:operationId.toLowerCase(),issuer:user.iss,subject:user.sub,context:user.identity_authorization,tenant,rolesSnapshot,validUntil,...(companyRoles?{companyRoles}:{}),target:{id:targetId,action,before,expectedValues}};
    if(companyRoles)await client.query('SELECT identity_company_role_admit_use($1::jsonb)',[JSON.stringify(proof)]);

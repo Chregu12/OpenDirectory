@@ -101,7 +101,7 @@ test('missing pending role outbox rolls back definition changes and preserves th
  await assert.rejects(roles.update(role.id,definition({enabled:false}),C.etag('role',role),owner.user,bearer),{status:503});const current=await roles.detail(role.id,{},owner.user,bearer);assert.equal(current.role.revision,'1');assert.equal(current.role.enabled,true);
 });
 test('replaying the additive migration preserves grants, use receipts and every required guard',async()=>{
- const delegate=await person();const role=await createRole();await assign(role,delegate.id);await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/057_company_roles.sql'),'utf8'));assert.ok((await reader.users({},delegate.user,bearer)).users.some(row=>row.id===delegate.id));await pool.query('SELECT identity_company_role_receiving()');
+ const delegate=await person();const role=await createRole();await assign(role,delegate.id);await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/057_company_roles.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/058_company_pim.sql'),'utf8'));assert.ok((await reader.users({},delegate.user,bearer)).users.some(row=>row.id===delegate.id));await pool.query('SELECT identity_company_role_receiving()');
 });
 test('a limited SQL login cannot read another actor role source through security-definer helpers',async()=>{
  const limited='cr_limited_'+randomUUID().replaceAll('-','');await pool.query('CREATE ROLE '+limited+' NOLOGIN');const client=await pool.connect();
@@ -122,4 +122,92 @@ test('a role manager cannot bypass self-grant restrictions by adding themselves 
  const collection=(await roles.createGroup({name:'Independent protected membership',description:'No self elevation through group timing',reason,confirm:true},owner.user,bearer)).group;
  const role=await createRole({permissions:['users.read']});await assign(role,collection.id,{targetType:'group'});const group=await reader.group(collection.id,{},owner.user,bearer);
  await assert.rejects(new GroupMutator(db,options).add(group.id,{userId:owner.user.identity_authorization.userId},groupEtag(group),owner.user,bearer),{status:403});assert.deepEqual((await reader.group(group.id,{},owner.user,bearer)).members,[]);
+});
+const {CompanyPim}=require('../CompanyPim');
+const pim=()=>new CompanyPim(db,{revalidate:async user=>{const state=await new AuthorizationState(db).state(issuer,user.sub);assert.deepEqual(state.context,user.identity_authorization);}});
+const makeEligible=(role,target,extra={})=>pim().assign(role.id,{targetType:'user',targetId:target,scopeType:'tenant',ouId:null,validForSeconds:30*86400,reason,confirm:true,...extra},C.etag('role',role),owner.user,bearer);
+const activate=(eligible,user,durationSeconds=3600)=>pim().activate(eligible.id,{durationSeconds,reason,confirm:true},C.etag('eligibility',eligible),user,bearer);
+test('own PIM eligibility grants no access until actual self activation and supports immediate self cancellation and retained history',async()=>{
+ const delegate=await person(),target=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;assert.equal(eligible.status,'eligible');
+ await assert.rejects(reader.users({},delegate.user,bearer),{status:403});const list=await pim().self({},delegate.user,bearer);assert.equal(list.total,1);assert.equal(list.items[0].role.id,role.id);assert.equal(list.items[0].activation,null);
+ const current=(await activate(eligible,delegate.user)).activation;assert.equal(current.status,'active');assert.equal((await pim().self({tab:'active'},delegate.user,bearer)).items[0].activation.id,current.id);
+ const before=await reader.user(target.id,{},delegate.user,bearer);await new UserMutator(db,options).update(target.id,{title:'Activated original custom role'},userEtag(before),delegate.user,bearer);
+ const use=(await pool.query('SELECT proof FROM identity_company_role_uses WHERE resource_id=$1',[target.id])).rows[0].proof;assert.equal(use.companyRoles.grants[0].source.activationId,current.id);
+ const ended=await pim().end(current.id,{reason,confirm:true},C.etag('activation',current),delegate.user,bearer);assert.equal(ended.activation.status,'ended');await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+ assert.equal((await pim().history({},delegate.user,bearer)).total,2);assert.equal((await pim().history({},target.user,bearer)).total,0);assert.equal((await pim().eligibilities(role.id,{},owner.user,bearer)).eligibilities[0].id,eligible.id);
+ const again=await activate(eligible,delegate.user);assert.notEqual(again.activation.id,current.id);assert.deepEqual(delegate.user.roles,[]);
+});
+test('own PIM activation stays usable beyond five-minute MFA freshness while stale direct grants do not expand its OU scope',async()=>{
+ const delegate=await person(),inside=await person('inside'),outside=await person('outside');const ouMutator=new OuMutator(db,options);
+ let a=await creator.ou({name:'PIM Engineering'},owner.user,bearer),b=await creator.ou({name:'Separate direct scope'},owner.user,bearer);
+ a=(await ouMutator.addMember(a.id,{userId:inside.id},ouEtag(a),owner.user,bearer)).unit;b=(await ouMutator.addMember(b.id,{userId:outside.id},ouEtag(b),owner.user,bearer)).unit;
+ const role=await createRole();await assign(role,delegate.id,{scopeType:'ou',ouId:b.id});const eligible=(await makeEligible(role,delegate.id,{scopeType:'ou',ouId:a.id})).eligibility;
+ delegate.user.auth_time=Math.floor(Date.now()/1000)-298;delegate.user.mfa_authorization.authTime=delegate.user.auth_time;await activate(eligible,delegate.user);
+ await pool.query('SELECT pg_sleep(3.2)');const list=await reader.users({},delegate.user,bearer);assert.equal(list.total,1);assert.equal(list.users[0].id,inside.id);await assert.rejects(reader.user(outside.id,{},delegate.user,bearer),{status:404});
+ const before=await reader.user(inside.id,{},delegate.user,bearer);const changed=await new UserMutator(db,options).update(inside.id,{title:'Actual longer PIM lease'},userEtag(before),delegate.user,bearer);assert.equal(changed.title,'Actual longer PIM lease');
+ await assert.rejects(activate(eligible,delegate.user),{status:428});
+});
+test('protected group eligibility binds the original membership incarnation and cannot revive after remove and re-add',async()=>{
+ const delegate=await person();const collection=(await roles.createGroup({name:'Eligible Engineering group',description:'PIM delegation',reason,confirm:true},owner.user,bearer)).group;
+ let group=await reader.group(collection.id,{},owner.user,bearer);group=await new GroupMutator(db,options).add(group.id,{userId:delegate.id},groupEtag(group),owner.user,bearer);
+ const role=await createRole();const eligible=(await makeEligible(role,group.id,{targetType:'group'})).eligibility;await activate(eligible,delegate.user);assert.ok((await reader.users({},delegate.user,bearer)).total>0);
+ group=await new GroupMutator(db,options).removeMember(group.id,delegate.id,groupEtag(group),owner.user,bearer);await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+ group=await new GroupMutator(db,options).add(group.id,{userId:delegate.id},groupEtag(group),owner.user,bearer);await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+ await activate(eligible,delegate.user);assert.ok((await reader.users({},delegate.user,bearer)).total>0);await pim().revokeEligibility(eligible.id,{reason,confirm:true},C.etag('eligibility',eligible),owner.user,bearer);await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+});
+test('role definition changes invalidate PIM eligibility and activations without silently expanding actions',async()=>{
+ const delegate=await person();const role=await createRole({permissions:['users.read']});const eligible=(await makeEligible(role,delegate.id)).eligibility;await activate(eligible,delegate.user);
+ await roles.update(role.id,definition({permissions:['users.read','users.update'],enabled:true}),C.etag('role',role),owner.user,bearer);
+ await assert.rejects(reader.users({},delegate.user,bearer),{status:403});assert.equal((await pim().self({},delegate.user,bearer)).total,0);assert.equal((await pim().self({tab:'active'},delegate.user,bearer)).items[0].activation.status,'invalid');await assert.rejects(activate(eligible,delegate.user),{status:404});
+});
+test('PIM eligibility and activation reject self-assignment, other users, stale versions, absent confirmation and unbounded durations',async()=>{
+ const delegate=await person(),other=await person();const role=await createRole();await assert.rejects(makeEligible(role,owner.user.identity_authorization.userId),{status:403});const eligible=(await makeEligible(role,delegate.id)).eligibility;
+ await assert.rejects(activate(eligible,other.user),{status:404});await assert.rejects(activate(eligible,delegate.user,3601),{status:409});
+ await assert.rejects(pim().activate(eligible.id,{durationSeconds:60,reason,confirm:true},'"company-eligibility-'+eligible.id+'-99"',delegate.user,bearer),{status:412});
+ await assert.rejects(pim().activate(eligible.id,{durationSeconds:60,reason,confirm:false},C.etag('eligibility',eligible),delegate.user,bearer),{status:400});
+ const actual=(await activate(eligible,delegate.user)).activation;await assert.rejects(activate(eligible,delegate.user),{status:409});await assert.rejects(pim().end(actual.id,{reason,confirm:true},C.etag('activation',actual),other.user,bearer),{status:404});
+ await pim().end(actual.id,{reason,confirm:true},C.etag('activation',actual),owner.user,bearer,true);await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+});
+test('current PIM sources require the original MFA revision, subject and actor context',async()=>{
+ const delegate=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;await activate(eligible,delegate.user);
+ const changed=structuredClone(delegate.user);changed.mfa_authorization.revision='2';await assert.rejects(reader.users({},changed,bearer),{status:403});assert.equal((await pim().self({tab:'active'},changed,bearer)).items[0].activation.status,'invalid');await activate(eligible,changed);assert.ok((await reader.users({},changed,bearer)).total>0);
+ await pool.query('UPDATE users SET display_name=$2 WHERE id=$1',[delegate.id,'Unrelated profile keeps PIM']);assert.ok((await reader.users({},delegate.user,bearer)).total>0);
+});
+test('missing PIM event outbox or a fabricated positive admission cannot create effective activation',async()=>{
+ const delegate=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;
+ const missing={...db,transaction:(operation,settings)=>db.transaction(client=>operation({query:(sql,values)=>sql.startsWith('SELECT identity_company_role_pim_change')?Promise.resolve({rows:[{id:randomUUID()}]}):client.query(sql,values)}),settings)};
+ await assert.rejects(new CompanyPim(missing,{revalidate:async()=>{}}).activate(eligible.id,{durationSeconds:60,reason,confirm:true},C.etag('eligibility',eligible),delegate.user,bearer),{status:503});
+ await pool.query('CREATE FUNCTION suppress_pim_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END; $$');await pool.query('CREATE TRIGGER aaa_suppress_pim_outbox BEFORE INSERT ON identity_company_role_outbox FOR EACH ROW EXECUTE FUNCTION suppress_pim_outbox()');
+ await assert.rejects(activate(eligible,delegate.user),{status:503});assert.equal((await pool.query('SELECT count(*) AS count FROM identity_company_role_activations')).rows[0].count,'0');await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+});
+test('PIM activation final commit rechecks the real eligibility and unchanged original deadline',async()=>{
+ const delegate=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;
+ beforeCommit=async client=>{beforeCommit=null;await client.query('ALTER TABLE identity_company_role_eligibilities DISABLE TRIGGER USER');await client.query('UPDATE identity_company_role_eligibilities SET revoked_at=clock_timestamp() WHERE id=$1',[eligible.id]);await client.query('ALTER TABLE identity_company_role_eligibilities ENABLE TRIGGER USER');};
+ await assert.rejects(activate(eligible,delegate.user));beforeCommit=null;assert.equal((await pool.query('SELECT count(*) AS count FROM identity_company_role_activations')).rows[0].count,'0');
+ delegate.user.auth_time=Math.floor(Date.now()/1000)-299;delegate.user.mfa_authorization.authTime=delegate.user.auth_time;beforeCommit=client=>client.query('SELECT pg_sleep(2.1)');await assert.rejects(activate(eligible,delegate.user));beforeCommit=null;
+ assert.equal((await pool.query('SELECT count(*) AS count FROM identity_company_role_activations')).rows[0].count,'0');
+});
+test('an activation that expires during a real pending directory write cannot commit its resource change',async()=>{
+ const delegate=await person(),target=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;await activate(eligible,delegate.user,60);const original=await reader.user(target.id,{},delegate.user,bearer);
+ beforeCommit=async client=>{await client.query("SET LOCAL statement_timeout='70s'");await client.query('SELECT pg_sleep(60.5)');};await assert.rejects(new UserMutator(db,options).update(target.id,{title:'Must roll back after actual PIM expiry'},userEtag(original),delegate.user,bearer),{code:'42501'});beforeCommit=null;
+ assert.equal((await reader.user(target.id,{},owner.user,bearer)).title,original.title);await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
+});
+test('PIM eligibility and active leases do not revive when the original employee is disabled and reactivated',async()=>{
+ const delegate=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;await activate(eligible,delegate.user);
+ let current=await reader.user(delegate.id,{},owner.user,bearer);current=await new UserMutator(db,options).update(delegate.id,{enabled:false},userEtag(current),owner.user,bearer);await new UserMutator(db,options).update(delegate.id,{enabled:true},userEtag(current),owner.user,bearer);
+ const state=await new AuthorizationState(db).state(issuer,delegate.user.sub);delegate.user.identity_authorization=state.context;await assert.rejects(reader.users({},delegate.user,bearer),{status:403});assert.equal((await pim().self({},delegate.user,bearer)).total,0);
+});
+test('PIM raw rows, missing receiver manifests and public SQL helper calls fail closed',async()=>{
+ const delegate=await person();const role=await createRole();const eligible=(await makeEligible(role,delegate.id)).eligibility;await activate(eligible,delegate.user);
+ await assert.rejects(pool.query('UPDATE identity_company_role_activations SET ended_at=clock_timestamp(),ended_by=$1',[delegate.id]),{code:'42501'});await assert.rejects(pool.query('TRUNCATE identity_company_role_eligibilities CASCADE'),{code:'42501'});
+ const limited='pim_limited_'+randomUUID().replaceAll('-','');await pool.query('CREATE ROLE '+limited+' NOLOGIN');const client=await pool.connect();try{await pool.query('GRANT USAGE ON SCHEMA '+schema+' TO '+limited);await client.query('BEGIN');await client.query('SET LOCAL ROLE '+limited);await assert.rejects(client.query('SELECT identity_company_role_pim_candidates($1::uuid,$2::uuid)',[delegate.id,owner.receipt.tenantId]),{code:'42501'});}finally{await client.query('ROLLBACK');client.release();await pool.query('DROP OWNED BY '+limited);await pool.query('DROP ROLE '+limited);}
+ await pool.query('ALTER TABLE identity_company_role_pim_manifest DISABLE TRIGGER company_role_pim_manifest_guard');await assert.rejects(pim().self({},delegate.user,bearer),{status:503});
+});
+test('a real activated company lease reaches all four existing directory writers after the direct MFA window',async()=>{
+ const delegate=await person(),target=await person();const role=await createRole({permissions:[...C.PERMISSIONS]});const eligible=(await makeEligible(role,delegate.id)).eligibility;delegate.user.auth_time=Math.floor(Date.now()/1000)-298;delegate.user.mfa_authorization.authTime=delegate.user.auth_time;await activate(eligible,delegate.user);await pool.query('SELECT pg_sleep(3.1)');
+ const personCreated=await creator.user({username:'activated-new-account',email:'activated-new@test.invalid'},delegate.user,bearer);assert.equal(personCreated.enabled,false);
+ let collection=await creator.group({name:'Activated new group'},delegate.user,bearer);const groups=new GroupMutator(db,options);collection=await groups.update(collection.id,{description:'Actual activated group update'},groupEtag(collection),delegate.user,bearer);collection=await groups.add(collection.id,{userId:target.id},groupEtag(collection),delegate.user,bearer);assert.ok(collection.members.includes(target.id));collection=await groups.removeMember(collection.id,target.id,groupEtag(collection),delegate.user,bearer);await groups.remove(collection.id,groupEtag(collection),delegate.user,bearer);
+ let unit=await creator.ou({name:'Activated new OU'},delegate.user,bearer);const units=new OuMutator(db,options);unit=await units.update(unit.id,{description:'Actual activated OU update'},ouEtag(unit),delegate.user,bearer);const added=await units.addMember(unit.id,{userId:target.id},ouEtag(unit),delegate.user,bearer);const removed=await units.removeMember(unit.id,added.membership.id,ouEtag(added.unit),delegate.user,bearer);await units.remove(unit.id,ouEtag(removed.unit),delegate.user,bearer);
+ const current=await reader.user(target.id,{},delegate.user,bearer);const changed=await new UserMutator(db,options).update(target.id,{title:'Actual activated user update'},userEtag(current),delegate.user,bearer);assert.equal(changed.title,'Actual activated user update');
+ const kinds=(await pool.query('SELECT DISTINCT resource_kind FROM identity_company_role_uses ORDER BY resource_kind')).rows.map(row=>row.resource_kind);assert.deepEqual(kinds,['group','ou','user']);
 });

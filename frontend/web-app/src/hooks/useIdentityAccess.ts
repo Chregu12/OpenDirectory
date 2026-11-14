@@ -11,9 +11,11 @@ export function useIdentityAccess() {
   useEffect(() => {
     let active = true;
     const invalid = () => { active = false; setAccess(null); setUnavailable(true); };
+    const changed=()=>{active=false;setAccess(null);setUnavailable(false);setAttempt(value=>value+1);};
+    window.addEventListener('od:directory-access-changed',changed);
     window.addEventListener('od:session-error', invalid);
     directoryUsers.access().then(result => { if (active) setAccess(result); }).catch(() => { if (active) { setAccess(null); setUnavailable(true); } });
-    return () => { active = false; window.removeEventListener('od:session-error', invalid); };
+    return () => { active = false; window.removeEventListener('od:session-error', invalid);window.removeEventListener('od:directory-access-changed',changed); };
   }, [attempt]);
   return { access, unavailable, reload, can: (permission: string) => access?.permissions.includes(permission) === true };
 }

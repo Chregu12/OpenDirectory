@@ -4363,7 +4363,7 @@ test('own custom directory roles and OU scopes use actual OAuth, canonical sourc
  const first=await issue('operator');const manager=provenMfa(payload(first.access_token))?first:await configureFactor('operator',first);const initial=await issue('alice');const delegate=provenMfa(payload(initial.access_token))?initial:await configureFactor('alice',initial);const managerToken=manager.access_token,delegateToken=delegate.access_token;
  await withProductionGateway(async base=>{
   const metadata=await request(base,'/api/identity/access',{token:managerToken});assert.equal(metadata.status,200,JSON.stringify(metadata.body));assert.equal(metadata.body.companyRolesProtocol,1);assert.ok(metadata.body.permissions.includes('company.roles.manage'));
-  const definition={name:'Actual own scoped Engineering profile role',description:'Real signed original user proof',permissions:['users.read','users.update'],maxDurationSeconds:3600,reason:'Explicit own scoped directory profile management',confirm:true};
+  const definition={name:'Actual own scoped Engineering profile role',description:'Real signed original user proof',permissions:['users.read','users.update'],maxDurationSeconds:36000,reason:'Explicit own scoped directory profile management',confirm:true};
   const role=await request(base,'/api/identity/company-roles',{method:'POST',token:managerToken,body:definition});assert.equal(role.status,201,JSON.stringify(role.body));
   const unit=await request(base,'/api/ous',{method:'POST',token:managerToken,body:{name:'Actual custom role scope'}});assert.equal(unit.status,201,JSON.stringify(unit.body));
   const employee=await request(base,'/api/users',{method:'POST',token:managerToken,body:{username:'scoped-profile-target',email:'scoped-profile-target@native.test'}});assert.equal(employee.status,201,JSON.stringify(employee.body));
@@ -4383,6 +4383,19 @@ test('own custom directory roles and OU scopes use actual OAuth, canonical sourc
   assert.equal((await request(base,'/api/users',{token:delegateToken})).body.total,1);
   assert.equal((await request(base,'/api/groups/'+gid+'/members/'+canonicalSubjects.get('alice'),{method:'DELETE',token:managerToken,headers:{'If-Match':`"group-${gid}-${member.body.revision}"`}})).status,200);
   assert.equal((await request(base,'/api/users',{token:delegateToken})).status,403);
+  const eligible=await request(base,'/api/identity/company-roles/'+role.body.role.id+'/eligibilities',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.body.role.id}-${role.body.role.revision}"`},body:{targetType:'user',targetId:canonicalSubjects.get('alice'),scopeType:'ou',ouId:unit.body.id,validForSeconds:30*86400,reason:'Assign the actual scoped eligibility without activating any employee rights',confirm:true}});assert.equal(eligible.status,201,JSON.stringify(eligible.body));
+  assert.equal((await request(base,'/api/users',{token:delegateToken})).status,403);
+  const mine=await request(base,'/api/identity/company-pim',{token:delegateToken});assert.equal(mine.status,200,JSON.stringify(mine.body));assert.equal(mine.body.items[0].eligibility.id,eligible.body.eligibility.id);assert.equal(mine.body.items[0].activation,null);
+  const activationPath='/api/identity/company-pim/eligibilities/'+eligible.body.eligibility.id+'/activate';const eligibilityTag=`"company-eligibility-${eligible.body.eligibility.id}-${eligible.body.eligibility.revision}"`;
+  const activated=await request(base,activationPath,{method:'POST',token:delegateToken,headers:{'If-Match':eligibilityTag},body:{durationSeconds:36000,reason:'Actually activate my Engineering scope using the original bound MFA',confirm:true}});assert.equal(activated.status,201,JSON.stringify(activated.body));assert.equal(activated.body.activation.userId,canonicalSubjects.get('alice'));assert.equal(Date.parse(activated.body.activation.expiresAt)-Date.parse(activated.body.activation.createdAt),36000000);
+  const pimAccess=await request(base,'/api/identity/access',{token:delegateToken});assert.equal(pimAccess.body.companyPimProtocol,1);assert.ok(pimAccess.body.permissions.includes('users.update'));
+  const scoped=await request(base,'/api/users',{token:delegateToken});assert.equal(scoped.status,200,JSON.stringify(scoped.body));assert.equal(scoped.body.total,1);
+  const realEdit=await request(base,'/api/users/'+employee.body.id,{method:'PUT',token:delegateToken,headers:{'If-Match':`"user-${employee.body.id}-${changed.body.revision}"`},body:{title:'Actually activated own PIM profile update'}});assert.equal(realEdit.status,200,JSON.stringify(realEdit.body));
+  const ownHistory=await request(base,'/api/identity/company-pim/history',{token:delegateToken});assert.equal(ownHistory.status,200,JSON.stringify(ownHistory.body));assert.equal(ownHistory.body.events[0].action,'activation-create');
+  const ended=await request(base,'/api/identity/company-pim/activations/'+activated.body.activation.id+'/end',{method:'POST',token:delegateToken,headers:{'If-Match':`"company-activation-${activated.body.activation.id}-${activated.body.activation.revision}"`},body:{reason:'End my actual scoped privileged work without global role changes',confirm:true}});assert.equal(ended.status,200,JSON.stringify(ended.body));assert.equal(ended.body.activation.status,'ended');
+  assert.equal((await request(base,'/api/users',{token:delegateToken})).status,403);
+  assert.equal((await request(base,activationPath+'?tenantId='+randomUUID(),{method:'POST',token:delegateToken,headers:{'If-Match':eligibilityTag},body:{durationSeconds:60,reason:'Reject hidden tenant overrides on original user activation',confirm:true}})).status,400);
+
 
  });
 });

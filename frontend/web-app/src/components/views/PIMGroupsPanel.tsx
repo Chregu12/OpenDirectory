@@ -8,6 +8,7 @@ import { privilegedActivation, ActivationRequest, pimError } from '@/lib/privile
 import { directoryUsers, DirectoryUser, userName } from '@/lib/directoryUsers';
 import { startLogin } from '@/lib/auth';
 import { DirectoryConfirmation } from './UserDetailPanel';
+import CompanyPimPanel from './CompanyPimPanel';
 
 const labels: Record<string, string> = { group_created: 'PIM-Gruppe eingerichtet', group_disabled: 'PIM-Gruppe deaktiviert', pending: 'Wartet auf Freigabe', approved: 'Freigegeben · jetzt aktivieren', active: 'Aktiv', revoked: 'Beendet', denied: 'Abgelehnt', cancelled: 'Abgebrochen', expired: 'Abgelaufen', stale: 'Berechtigung geändert', eligibility_created: 'Benutzer berechtigt', eligibility_revoked: 'Berechtigung entzogen' };
 const durations = [900, 3600, 7200, 14400, 28800, 36000];
@@ -138,7 +139,8 @@ export default function PIMGroupsPanel({ management = false }: { management?: bo
   const ownApproved = (group: Pick<PIMGroup, 'name' | 'role'>, request: ActivationRequest) => void execute({ kind: 'change', group, request, action: 'activate' });
   const formTitle = form?.kind === 'request' ? 'Aktivieren' : form?.kind === 'assign' ? 'Zuweisung hinzufügen' : form?.kind === 'create' ? 'Gruppe erstellen' : 'Gruppe deaktivieren';
   const returnTo = management ? '%2Fpim' : '%2Fdashboard';
-  return <section className="od-pim" aria-label="PIM-Aufgabengruppen">
+  if(state&&!error&&!notice&&!state.canCreate&&!state.canReview&&!state.standingRoles.length&&!state.self.eligibilities.length&&!state.self.requests.length&&!state.groups.some(group=>group.canManage))return <CompanyPimPanel management={management}/>;
+  return <><section className="od-pim" aria-label="PIM-Aufgabengruppen">
     <div className="od-pim-heading"><div><h2><ShieldCheckIcon aria-hidden="true" />Meine Rollen</h2><p>Aktiviere den Zugriff, den du gerade benötigst.</p></div>
       {!management && <a className="od-text-action" href="/pim">Privileged Identity Management öffnen</a>}
     </div>
@@ -245,5 +247,5 @@ export default function PIMGroupsPanel({ management = false }: { management?: bo
       {'body' in pending && <p className="mt-3">Begründung: {pending.body.reason}</p>}
       {pending.kind === 'change' && <p className="mt-3">Benutzer: {pending.request.userId} · {pending.request.reason}</p>}
     </DirectoryConfirmation>}
-  </section>;
+  </section><CompanyPimPanel management={management}/></>;
 }

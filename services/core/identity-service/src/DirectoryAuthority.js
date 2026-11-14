@@ -8,7 +8,7 @@ function mayUseDirectory(user, required) {
   const held = getIdentityPermissions(user);
   const missing = required.filter(permission => !held.includes(permission));
   return !missing.length || missing.every(permission => COMPANY_DIRECTORY_PERMISSIONS.includes(permission))
-    && acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user);
+    && acceptsRoleAuthentication({ required: true, maxAgeSeconds: 86400 }, user);
 }
 
 async function requireDirectoryPermissions(client, user, required, resource = null) {
