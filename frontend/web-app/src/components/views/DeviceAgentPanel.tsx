@@ -2,12 +2,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Device } from '@/lib/deviceInventory';
 import { deviceInventoryError } from '@/lib/deviceInventory';
-import { AgentConnection, readAgent, manageAgent } from '@/lib/deviceAgents';
+import { AgentConnection, readAgent, manageAgent, agentStatusLabels as labels } from '@/lib/deviceAgents';
 import { DirectoryConfirmation } from './UserDetailPanel';
-const labels = { 'not-enrolled': 'Nicht verbunden', pending: 'Registrierung ausstehend', connected: 'Online', offline: 'Offline', expired: 'Zugang abgelaufen', revoked: 'Zugang widerrufen' };
 const events = { issue: 'Registrierungscode erstellt · vorheriger Zugang gesperrt', register: 'Agent registriert', revoke: 'Gerätezugang widerrufen' };
 const date = (value: string | null) => value ? new Date(value).toLocaleString('de-CH') : '—';
-export default function DeviceAgentPanel({ device, actor, canManage, disabled, onBusy, onSecurityError }: { device: Device; actor: string; canManage: boolean; disabled: boolean; onBusy: (busy: boolean) => void; onSecurityError: (failure: unknown) => void }) {
+export default function DeviceAgentPanel({ device, actor, canManage, disabled, onBusy, onSecurityError, onChanged }: { device: Device; actor: string; canManage: boolean; disabled: boolean; onBusy: (busy: boolean) => void; onSecurityError: (failure: unknown) => void; onChanged?: () => void }) {
   const [state, setState] = useState<AgentConnection | null>(null);
   const page = useRef(1);
   const setPage = (value: number) => { page.current = value; setReload(previous => previous + 1); };
@@ -20,6 +19,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
   const generation = useRef(0);
   const command = useRef<AbortController | null>(null);
   const securityError = useRef(onSecurityError); securityError.current = onSecurityError;
+  const changed = useRef(onChanged); changed.current = onChanged;
   const authority = useRef({ id: device.id, revision: device.revision, actor, canManage }); authority.current = { id: device.id, revision: device.revision, actor, canManage };
   useEffect(() => {
     const expected = ++generation.current; const controller = new AbortController();
@@ -37,6 +37,21 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
     return () => { generation.current += 1; controller.abort(); if (command.current) { command.current.abort(); command.current = null; onBusy(false); } window.removeEventListener('od:session-error', session); };
   }, [device.id, device.revision, actor, canManage, reload]);
   useEffect(() => { if (!secret) return; const timer = window.setTimeout(() => setSecret(null), 5 * 60 * 1000); return () => window.clearTimeout(timer); }, [secret]);
+  useEffect(() => {
+    if (!state || disabled || working || action || secret) return;
+    const expected = generation.current; const controller = new AbortController();
+    let reading = false;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible' || reading) return;
+      reading = true;
+      void readAgent(device, actor, page.current, controller.signal).then(result => { if (!controller.signal.aborted && generation.current === expected) setState(result); }).catch(failure => {
+        if (controller.signal.aborted || generation.current !== expected) return;
+        setState(null); setError(deviceInventoryError(failure));
+        if ([401, 403, 428].includes((failure as any)?.response?.status)) securityError.current(failure);
+      }).finally(() => { reading = false; });
+    }, 30000);
+    return () => { window.clearInterval(timer); controller.abort(); };
+  }, [Boolean(state), device.id, device.revision, actor, disabled, working, action, secret, reload]);
   const confirm = async () => {
     if (!state || !action || !canManage || disabled || working || reason.trim().length < 10) return;
     const expected = generation.current; const original = { ...authority.current }; const controller = new AbortController(); command.current = controller;
@@ -44,7 +59,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
     try {
       const result = await manageAgent(device, actor, state, action, reason, controller.signal);
       if (generation.current !== expected || controller.signal.aborted || JSON.stringify(authority.current) !== JSON.stringify(original)) return;
-      setState(result.connection); setSecret(result.enrollmentToken); setAction(null); page.current = 1;
+      setState(result.connection); setSecret(result.enrollmentToken); setAction(null); page.current = 1; changed.current?.();
     } catch (failure) {
       if (generation.current !== expected || controller.signal.aborted) return;
       setState(null); setAction(null);

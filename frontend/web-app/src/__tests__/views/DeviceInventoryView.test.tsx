@@ -47,10 +47,12 @@ function deferred<Result>() {
 }
 async function getResponse(url: string, config?: any) {
   if (url === '/api/devices/capabilities') return { status: 200, data: access };
-  if (url === '/api/devices') {
+  if (url === '/api/devices' || url === '/api/devices/fleet') {
     requestedSearch = config?.params?.search || '';
     const page = config.params.page;
-    return { status: 200, data: { schemaVersion: 1, actorUserId: actorId, devices: rows.slice((page - 1) * 25, page * 25), total: rows.length, page, limit: 25 } };
+    const data: any = { schemaVersion: 1, actorUserId: actorId, devices: rows.slice((page - 1) * 25, page * 25), total: rows.length, page, limit: 25 };
+    if (url.endsWith('/fleet')) data.fleet = { protocol: 1, tenantId, checkedAt: new Date().toISOString(), counts: { total: rows.length, 'not-enrolled': rows.length, connected: 0, offline: 0, pending: 0, expired: 0, revoked: 0 }, connections: data.devices.map((row: any) => ({ deviceId: row.id, status: 'not-enrolled', enrolledAt: null, lastSeen: null, credentialExpiresAt: null, enrollmentExpiresAt: null, report: null })) };
+    return { status: 200, data };
   }
   if (url === '/api/devices/' + deviceId) return { status: 200, data: rows.find(row => row.id === deviceId) };
   if (url === '/api/devices/' + deviceId + '/history') {

@@ -4332,8 +4332,12 @@ test('Engineering PIM inventory maintenance works through original OAuth and the
   const deviceCredential=agentRegistered.body.deviceToken;assert.equal((await request(base,'/api/device-agent/heartbeat',{method:'POST',token:deviceCredential,body:{deviceId:registered.body.id,report:agentReport}})).status,200);
   assert.equal((await request(base,route+'/agent',{token:deviceCredential})).status,401);
   const connected=await request(base,route+'/agent',{token});assert.equal(connected.body.status,'connected');
+  const fleet=await request(base,'/api/devices/fleet?connectionStatus=connected&search=PIM-ENGINEERING',{token});assert.equal(fleet.status,200,JSON.stringify(fleet.body));assert.equal(fleet.body.fleet.tenantId,cap.body.tenantId);assert.equal(fleet.body.fleet.counts.connected,1);assert.equal(fleet.body.devices[0].id,registered.body.id);assert.deepEqual(fleet.body.fleet.connections[0].report,agentReport);
+  const fleetCsv=await fetch(base+'/api/devices/fleet/export?connectionStatus=connected&search=PIM-ENGINEERING',{headers:{Authorization:'Bearer '+token}});assert.equal(fleetCsv.status,200);assert.equal(fleetCsv.headers.get('x-inventory-count'),'1');assert.ok((await fleetCsv.text()).includes(agentReport.hostname));
+  assert.equal((await request(base,'/api/devices/fleet',{token:deviceCredential})).status,401);
   assert.equal((await request(base,route+'/agent/revoke',{method:'POST',token,headers:{'If-Match':`"agent-${registered.body.id}-${connected.body.revision}"`},body:{reason:'Explicitly revoke the tested device credential',confirm:true}})).status,200);
   assert.equal((await request(base,'/api/device-agent/heartbeat',{method:'POST',token:deviceCredential,body:{deviceId:registered.body.id,report:agentReport}})).status,401);
+  const revokedFleet=await request(base,'/api/devices/fleet?search=PIM-ENGINEERING',{token});assert.equal(revokedFleet.status,200);assert.equal(revokedFleet.body.fleet.counts.revoked,1);
   assert.equal((await request(base,'/api/users',{token})).status,403);
   assert.equal((await request(identityBase,groups+'/'+created.body.id+'/disable',{method:'POST',token:admin.access_token,body:{reason:'Withdraw the actual Engineering authority and its issued tokens',confirm:true}})).status,200);
   assert.equal((await request(base,route,{token})).status,401);

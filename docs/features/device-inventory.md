@@ -1,5 +1,7 @@
 # Eigenes Geräteinventar und Mitarbeitenden-Zuweisung
 
+Seit Version 1.0.45 zeigt die [Geräteübersicht](device-fleet.md) tatsächliche Agent-Verbindungen, Kontaktzeiten, gemeinsame Statuszahlen und einen passenden CSV-Export mit automatischer Aktualisierung.
+
 Seit Version 1.0.40 ergänzt die [Geräteverbindung über den Rust-Agenten](device-agents.md) das weiterhin getrennte lokale Inventar. Registrierung, Heartbeats und Widerruf ändern die Inventarzuweisung nicht. Aktive Verbindungen müssen vor Plattformänderung, Wartung oder Archivierung widerrufen werden.
 
 Stand: 10. November 2026. Begrenzter vertikaler Slice für BR-003: reale Unternehmensgeräte erfassen, eigene Mitarbeitende auswählen, genau eine aktuelle Benutzerzuweisung verwalten und die tatsächliche Historie sehen. Keine MDM-, Enrollment-, Compliance- oder Lizenzwirkung wird aus einer Inventarzeile abgeleitet.

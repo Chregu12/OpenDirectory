@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ViewShell } from '@/components/ui/ViewShell';
 import DeviceInventoryEditor, { deviceClassLabels as classLabels, devicePlatformLabels as platformLabels, deviceOwnershipLabels as ownershipLabels, deviceLifecycleLabels as lifecycleLabels } from './DeviceInventoryEditor';
 import { DataTable } from '@/components/ui/DataTable';
-import { Device, DeviceCapabilities, DeviceHistoryPage, DeviceInput, DeviceInventoryClient, DevicePage, DeviceFilters, devicePlatforms, deviceLifecycles, deviceInventoryError } from '@/lib/deviceInventory';
+import { Device, DeviceCapabilities, DeviceHistoryPage, DeviceInput, DeviceInventoryClient, DevicePage, DeviceFilters, ConnectionStatus, devicePlatforms, deviceLifecycles, deviceInventoryError } from '@/lib/deviceInventory';
+import { agentStatuses, agentStatusLabels } from '@/lib/deviceAgents';
 import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 import DeviceAgentPanel from './DeviceAgentPanel';
@@ -25,6 +26,8 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   const [reload, setReload] = useState(0);
   const [access, setAccess] = useState<DeviceCapabilities | null>(null);
   const [devices, setDevices] = useState<DevicePage | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const listCriteria = useRef('');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
@@ -43,6 +46,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Device | null>(null);
   const [filters, setFilters] = useState<DeviceFilters>({});
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | undefined>();
   const [lifecycleChange, setLifecycleChange] = useState<{ device: Device; lifecycle: 'available' | 'maintenance' | 'retired' } | null>(null);
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [pending, setPending] = useState<{ device: Device; userId: string | null } | null>(null);
@@ -92,11 +96,24 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
     const controller = new AbortController();
     const expected = generation.current;
     let active = true;
-    setDevices(null);
-    client.current.list(page, search, controller.signal, filters).then(result => { if (active && generation.current === expected) setDevices(result); })
-      .catch(failure => { if (active) fail(failure, expected); });
+    const criteria = JSON.stringify([access?.userId, access?.tenantId, page, search, filters, connectionStatus]);
+    if (listCriteria.current !== criteria) setDevices(null);
+    listCriteria.current = criteria; setRefreshing(true);
+    const request = enhanced ? client.current.fleet(page, search, controller.signal, filters, connectionStatus) : client.current.list(page, search, controller.signal, filters);
+    request.then(result => { if (active && generation.current === expected) {
+      const lastPage = Math.max(1, Math.ceil(result.total / 25));
+      if (page > lastPage) setPage(lastPage); else setDevices(result);
+    } }).catch(failure => { if (active) fail(failure, expected); }).finally(() => { if (active && generation.current === expected) setRefreshing(false); });
     return () => { active = false; controller.abort(); };
-  }, [access, page, search, listVersion, filters]);
+  }, [access, page, search, listVersion, filters, connectionStatus]);
+
+  useEffect(() => {
+    if (!canRead || !enhanced || busy || creating || editing || pending || lifecycleChange) return;
+    const refresh = () => { if (document.visibilityState === 'visible') setListVersion(value => value + 1); };
+    const timer = window.setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [canRead, enhanced, busy, creating, editing, pending, lifecycleChange]);
 
   useEffect(() => {
     if (!canRead || !selectedId) return;
@@ -173,14 +190,14 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
   const exportCsv = async () => {
     if (busy || !canRead || !enhanced) return; const expected = generation.current; setBusy(true); setNotice('');
     try {
-      const blob = await client.current.exportCsv(search, filters); if (generation.current !== expected) return;
+      const blob = await client.current.exportCsv(search, filters, undefined, enhanced, connectionStatus); if (generation.current !== expected) return;
       const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'opendirectory-devices.csv'; document.body.appendChild(link); link.click(); link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000); setNotice('CSV-Export bereitgestellt.');
     } catch (failure) { fail(failure, expected); }
     finally { if (generation.current === expected) setBusy(false); }
   };
 
-  return <ViewShell title="Geräteinventar" subtitle="Geräte erfassen und genau einem Benutzer zuordnen."
+  return <ViewShell title="Geräte" subtitle="Inventar, Benutzerzuweisung und Geräteverbindungen."
     primaryAction={canCreate && devices ? { label: 'Gerät erfassen', onClick: () => { setEditing(null); setCreating(true); setNotice(''); }, disabled: busy } : undefined}
     rightContent={canRead ? <a className="fluent-btn-secondary" href="/device-returns">Geräterückgaben öffnen</a> : undefined}
     actions={[{ label: 'CSV exportieren', onClick: () => void exportCsv(), disabled: busy || !enhanced || !devices }, { label: 'Neu laden', onClick: () => { generation.current += 1; client.current?.invalidate(); setReload(value => value + 1); }, disabled: busy }]}>
@@ -188,11 +205,18 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
       <details className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}><summary className="cursor-pointer">Inventar und Geräteverwaltung</summary><p className="mt-2">Inventar erfassen, Personen zuweisen und Windows-, macOS- oder Linux-Geräte über den OpenDirectory-Agenten verbinden. Compliance bleibt bis zur Richtlinienprüfung unbekannt.</p></details>
       {error ? <div role="alert" className="rounded border border-red-500/40 p-4 space-y-3"><p>{error}</p><div className="flex gap-3">{needsMfa && <a className="fluent-btn-secondary" href="/mfa?returnTo=%2Fdevices">MFA einrichten</a>}<a className="fluent-btn-primary" href="/api/auth/oidc/login?returnTo=%2Fdevices">Erneut anmelden</a></div></div> : !access ? <p role="status">Geräteberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen des Geräteinventars.</p> : <>
         {notice && !selected && <p role="status">{notice}</p>}
+        {devices?.fleet && <section aria-label="Verbindungsübersicht" className="space-y-3">
+          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3">{([
+            ['Geräte gesamt', devices.fleet.counts.total], ['Online', devices.fleet.counts.connected], ['Offline', devices.fleet.counts.offline], ['Registrierung ausstehend', devices.fleet.counts.pending],
+          ] as const).map(([label, value]) => <div key={label} className="rounded-lg border border-[var(--border)] p-4"><dt className="text-sm opacity-70">{label}</dt><dd className="mt-1 text-2xl font-semibold">{value}</dd></div>)}</dl>
+          <p className="text-sm opacity-70">Stand: {new Date(devices.fleet.checkedAt).toLocaleString('de-CH')} · {refreshing ? 'Wird aktualisiert …' : 'Aktualisierung alle 30 Sekunden'} · Zahlen berücksichtigen Suche und Inventarfilter.</p>
+        </section>}
         <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); clearSelection(); setPage(1); setSearch(searchDraft.trim()); setListVersion(value => value + 1); }}>
           <label className="text-sm">Geräte suchen<input className="mt-1 block rounded border p-2 bg-transparent" maxLength={200} value={searchDraft} disabled={busy} onChange={event => setSearchDraft(event.target.value)} placeholder="Inventarnummer, Seriennummer, Modell" /></label>
           <button className="fluent-btn-secondary" disabled={busy} type="submit">Suchen</button>
           <label className="text-sm">Plattform filtern<select className="input-apple" value={filters.platform || ''} disabled={busy || !enhanced} onChange={event => filter('platform', event.target.value)}><option value="">Alle Plattformen</option>{devicePlatforms.map(value => <option key={value} value={value}>{platformLabels[value]}</option>)}</select></label>
           <label className="text-sm">Status filtern<select className="input-apple" value={filters.lifecycle || ''} disabled={busy || !enhanced} onChange={event => filter('lifecycle', event.target.value)}><option value="">Alle Status</option>{deviceLifecycles.map(value => <option key={value} value={value}>{lifecycleLabels[value]}</option>)}</select></label>
+          {enhanced && <label className="text-sm">Verbindung filtern<select className="input-apple" value={connectionStatus || ''} disabled={busy} onChange={event => { clearSelection(); setPage(1); setConnectionStatus(event.target.value as ConnectionStatus || undefined); }}><option value="">Alle Verbindungen</option>{agentStatuses.map(value => <option key={value} value={value}>{agentStatusLabels[value]}{devices?.fleet ? ` (${devices.fleet.counts[value]})` : ''}</option>)}</select></label>}
           <label className="text-sm">Eigentum filtern<select className="input-apple" value={filters.ownership || ''} disabled={busy || !enhanced} onChange={event => filter('ownership', event.target.value)}><option value="">Alle Eigentumsarten</option>{Object.entries(ownershipLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label className="text-sm">Sortierung<select className="input-apple" disabled={busy || !enhanced} value={(filters.sort || 'createdAt') + '-' + (filters.order || 'asc')} onChange={event => { const [sort, order] = event.target.value.split('-'); clearSelection(); setPage(1); setFilters(previous => ({ ...previous, sort: sort as DeviceFilters['sort'], order: order as DeviceFilters['order'] })); }}>
             <option value="createdAt-asc">Älteste zuerst</option><option value="createdAt-desc">Neueste zuerst</option><option value="updatedAt-desc">Zuletzt geändert</option><option value="assetId-asc">Inventarnummer A–Z</option><option value="assetId-desc">Inventarnummer Z–A</option>
@@ -200,12 +224,13 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
         </form>
         {devices ? <section aria-label="Geräteliste">
           <DataTable<Device> rows={devices.devices} getRowId={device => device.id} activeRowId={selectedId} emptyMessage="Keine Geräte gefunden." columns={[
-            { key: 'assetId', header: 'Inventarnummer', render: device => <button className="text-blue-500 underline" disabled={busy} onClick={() => { if (selectedId === device.id) return; clearSelection(); setSelectedId(device.id); }}>{device.assetId}</button> },
+            { key: 'assetId', header: 'Inventarnummer', render: device => { const connection = devices.fleet?.connections.find(value => value.deviceId === device.id); return <div><button className="text-blue-500 underline" disabled={busy} onClick={() => { if (selectedId === device.id) return; clearSelection(); setSelectedId(device.id); }}>{device.assetId}</button>{connection && <div className="text-xs mt-1 opacity-70">{agentStatusLabels[connection.status]}{connection.report && <span className="block">{connection.report.hostname}</span>}</div>}</div>; } },
             { key: 'serialNumber', header: 'Seriennummer' },
             { key: 'model', header: 'Gerät', render: device => <span className="inline-block min-w-[12rem]">{device.manufacturer} {device.model}</span> },
             { key: 'deviceClass', header: 'Geräteklasse', render: device => classLabels[device.deviceClass] },
             { key: 'platform', header: 'Plattform', render: device => platformLabels[device.platform] },
             { key: 'lifecycle', header: 'Zuordnung', render: device => lifecycleLabels[device.lifecycle] },
+            ...(devices.fleet ? [{ key: 'connection', header: 'Letzter Kontakt', render: (device: Device) => { const connection = devices.fleet!.connections.find(value => value.deviceId === device.id)!; return <div className="min-w-[10rem]">{connection.lastSeen ? new Date(connection.lastSeen).toLocaleString('de-CH') : 'Noch kein Kontakt'}{connection.report && <span className="block text-xs opacity-70">Agent {connection.report.agentVersion}</span>}</div>; } }] : []),
           ]} />
           <Pagination label="Geräteseite" page={devices.page} total={devices.total} disabled={busy} onPage={next => { clearSelection(); setPage(next); }} />
         </section> : <p role="status">Geräte werden geladen …</p>}
@@ -255,7 +280,7 @@ export default function DeviceInventoryView({ createRequested = false, onCreateH
             </>}
           </section>}
           {!selected.assignedUserId && ['maintenance', 'retired'].includes(selected.lifecycle) && <p className="text-sm">Für eine neue Benutzerzuweisung das Gerät zuerst wieder bereitstellen.</p>}
-          <DeviceAgentPanel key={selected.id} device={selected} actor={access!.userId} canManage={Boolean(canCreate)} disabled={busy} onBusy={setBusy} onSecurityError={failure => fail(failure, generation.current)} />
+          <DeviceAgentPanel key={selected.id} device={selected} actor={access!.userId} canManage={Boolean(canCreate)} disabled={busy} onBusy={setBusy} onChanged={() => setListVersion(value => value + 1)} onSecurityError={failure => fail(failure, generation.current)} />
           <section aria-label="Gerätehistorie" className="border-t border-[var(--border)] pt-4 space-y-3">
             <h3 className="font-semibold">Gerätehistorie</h3>
             {history ? <><ol className="space-y-4">{history.events.map(event => <li key={event.id} className="text-sm space-y-1">

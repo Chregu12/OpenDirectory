@@ -1,4 +1,6 @@
-# Device Service API Reference
+# Legacy Device Service API Reference
+
+Der produktive Einstieg `inventoryServer.js` verwendet den [generierten Inventarvertrag](openapi.yaml), die [Geräteübersicht](../features/device-fleet.md) und die [Agent-Verbindung](../features/device-agents.md). Die folgenden Abschnitte dokumentieren den historischen Service und dessen frühere Entwürfe für Gerätebefehle und Authentifizierung.
 
 **Base URL:** `http://device-service:3003`
 

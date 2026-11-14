@@ -32,6 +32,54 @@ const manage = async (action = 'issue', revision) => agents.manage(unit.id, acti
 const enroll = token => agents.register({ token, report }, randomUUID());
 const heartbeat = token => agents.heartbeat({ deviceId: unit.id, report }, 'Bearer ' + token);
 
+test('fleet reads real agent status and counts in one own-tenant snapshot without changing inventory', async () => {
+ const registered = await enroll((await manage()).enrollmentToken); await heartbeat(registered.deviceToken);
+ const other = await inventory.create({ assetId: 'FLEET-SECOND', serialNumber: randomUUID(), manufacturer: 'Native', model: 'Second', deviceClass: 'laptop', platform: 'linux' }, {}, 'Bearer original');
+ const fleet = await agents.fleet({}, {}, 'Bearer original');
+ assert.equal(fleet.fleet.counts.total, 2); assert.equal(fleet.fleet.counts.connected, 1); assert.equal(fleet.fleet.counts['not-enrolled'], 1);
+ const connected = fleet.fleet.connections.find(row => row.deviceId === unit.id); assert.equal(connected.status, 'connected'); assert.deepEqual(connected.report, report); assert.ok(Date.parse(connected.lastSeen) <= Date.parse(fleet.fleet.checkedAt));
+ assert.equal(fleet.devices.find(row => row.id === unit.id).lastSeen, null); assert.equal(fleet.devices.find(row => row.id === unit.id).revision, unit.revision);
+ const filtered = await agents.fleet({ connectionStatus: 'connected', search: unit.assetId }, {}, 'Bearer original');
+ assert.equal(filtered.total, 1); assert.equal(filtered.fleet.counts.total, 1); assert.equal(filtered.devices[0].id, unit.id);
+ const unconnected = await agents.fleet({ connectionStatus: 'not-enrolled' }, {}, 'Bearer original'); assert.deepEqual(unconnected.devices.map(row => row.id), [other.id]); assert.equal(unconnected.fleet.counts.total, 2);
+ assert.ok(!JSON.stringify(fleet).includes('_hash')); assert.ok(!JSON.stringify(fleet).includes(registered.deviceToken));
+ source.tenant.id = randomUUID(); assert.equal((await agents.fleet({}, {}, 'Bearer original')).total, 0);
+ revoked = true; await assert.rejects(agents.fleet({}, {}, 'Bearer original'), { status: 401 });
+});
+test('fleet status cutoff, expired and revoked states agree with device detail and CSV filters', async () => {
+ await enroll((await manage()).enrollmentToken);
+ // Controlled timestamps in this disposable schema only; production row guards remain enabled.
+ async function drift(values) { await pool.query('ALTER TABLE device_agent_connections DISABLE TRIGGER USER'); try { await pool.query('UPDATE device_agent_connections SET '+values); } finally { await pool.query('ALTER TABLE device_agent_connections ENABLE TRIGGER USER'); } }
+ await drift("last_seen=clock_timestamp()-interval '4 minutes'"); assert.equal((await get()).status, 'offline');
+ assert.equal((await agents.fleet({ connectionStatus: 'offline' }, {}, 'Bearer original')).total, 1);
+ await drift("credential_expires_at=clock_timestamp()-interval '1 second'"); assert.equal((await get()).status, 'expired');
+ assert.equal((await agents.fleet({}, {}, 'Bearer original')).fleet.counts.expired, 1);
+ await manage('revoke'); assert.equal((await agents.fleet({}, {}, 'Bearer original')).fleet.counts.revoked, 1);
+ await manage(); assert.equal((await agents.fleet({}, {}, 'Bearer original')).fleet.counts.pending, 1);
+ const exported = await agents.fleet({ connectionStatus: 'pending' }, {}, 'Bearer original', true); assert.equal(exported.count, 1); assert.match(exported.csv, /"connectionStatus","lastSeen","hostname","agentVersion"/); assert.match(exported.csv, /"pending"/);
+ const empty = await agents.fleet({ connectionStatus: 'connected' }, {}, 'Bearer original', true); assert.equal(empty.count, 0); assert.equal(empty.csv.split('\r\n').length, 2);
+ await drift("bootstrap_expires_at=clock_timestamp()-interval '1 second'"); assert.equal((await agents.fleet({}, {}, 'Bearer original')).fleet.counts.expired, 1);
+});
+test('fleet validates exact selectors, pagination, CSV escaping and current authority after the read', async () => {
+ for (const query of [{ tenantId: source.tenant.id }, { connectionStatus: ['connected'] }, { connectionStatus: 'all' }, { connectionStatus: '' }, { page: '0' }, { sort: 'hostname' }]) await assert.rejects(agents.fleet(query, {}, 'Bearer original'), { status: 400 });
+ await assert.rejects(agents.fleet({ page: '1' }, {}, 'Bearer original', true), { status: 400 });
+ const created = await inventory.create({ assetId: '=DANGEROUS()', serialNumber: randomUUID(), manufacturer: 'Native', model: 'Quoted "model"', deviceClass: 'laptop', platform: 'linux' }, {}, 'Bearer original');
+ const one = await agents.fleet({ sort: 'assetId', order: 'asc', limit: '1' }, {}, 'Bearer original'); assert.equal(one.devices.length, 1); assert.equal(one.total, 2);
+ const two = await agents.fleet({ sort: 'assetId', order: 'asc', page: '2', limit: '1' }, {}, 'Bearer original'); assert.equal(two.devices.length, 1); assert.deepEqual(new Set([one.devices[0].id, two.devices[0].id]), new Set([unit.id, created.id]));
+ const csv = await agents.fleet({}, {}, 'Bearer original', true); assert.match(csv.csv, /"'=DANGEROUS\(\)"/); assert.match(csv.csv, /"Quoted ""model"""/);
+ const checkpoint = inventory.checkpoint.bind(inventory); inventory.checkpoint = async (...args) => { revoked = true; return checkpoint(...args); };
+ await assert.rejects(agents.fleet({}, {}, 'Bearer original'), { status: 401 });
+});
+test('a heartbeat committed after transaction begin but before snapshot acquisition is valid fleet evidence', async () => {
+ const registered = await enroll((await manage()).enrollmentToken);
+ const transaction = db.transaction.bind(db); let observed = false;
+ db.transaction = (operation, options = {}) => transaction(async client => {
+  if (options.readOnly && !observed) { observed = true; await new Promise(resolve => setTimeout(resolve, 30)); await heartbeat(registered.deviceToken); }
+  return operation(client);
+ }, options);
+ const fleet = await agents.fleet({}, {}, 'Bearer original'); assert.equal(fleet.fleet.counts.connected, 1); assert.ok(Date.parse(fleet.fleet.connections[0].lastSeen) <= Date.parse(fleet.fleet.checkedAt));
+});
+
 test('real persisted enrollment, heartbeat and revocation remain separate from inventory and assignment', async () => {
  assert.equal((await get()).status, 'not-enrolled');
  const issued = await manage(); assert.match(issued.enrollmentToken, /^odae_[A-Za-z0-9_-]{43}$/); assert.equal(issued.connection.status, 'pending');

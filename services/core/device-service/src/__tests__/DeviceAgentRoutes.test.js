@@ -7,10 +7,19 @@ const { randomUUID } = require('node:crypto');
 const { createInventoryApp } = require('../inventoryServer');
 let agents, app; const id = randomUUID();
 beforeEach(() => {
- agents = Object.fromEntries(['get','manage','register','heartbeat'].map(method => [method, jest.fn()]));
+ jest.clearAllMocks();
+ agents = Object.fromEntries(['get','manage','register','heartbeat','fleet'].map(method => [method, jest.fn()]));
  const value = { deviceId: id, revision: '1' }; agents.get.mockResolvedValue(value); agents.manage.mockResolvedValue(value); agents.register.mockResolvedValue(value); agents.heartbeat.mockResolvedValue(value);
  jwtVerify.mockResolvedValue({ payload: { actor_type: 'user', token_use: 'access' } });
  app = createInventoryApp({ db: {}, inventory: {}, returns: {}, agents });
+});
+test('fleet read and export use the original human bearer and preserve exact query selectors', async () => {
+ agents.fleet.mockResolvedValueOnce({ fleet: { counts: { total: 0 } } });
+ const response = await request(app).get('/api/devices/fleet?connectionStatus=offline').set('Authorization', 'Bearer original');
+ expect(response.status).toBe(200); expect(response.headers['cache-control']).toBe('no-store'); expect(agents.fleet).toHaveBeenLastCalledWith({ connectionStatus: 'offline' }, { actor_type: 'user', token_use: 'access' }, 'Bearer original');
+ agents.fleet.mockResolvedValueOnce({ tenantId: id, count: 0, csv: 'header\r\n' });
+ const csv = await request(app).get('/api/devices/fleet/export?connectionStatus=offline').set('Authorization', 'Bearer original');
+ expect(csv.status).toBe(200); expect(csv.headers['x-inventory-tenant']).toBe(id); expect(csv.headers['content-type']).toMatch(/^text\/csv/); expect(agents.fleet).toHaveBeenLastCalledWith({ connectionStatus: 'offline' }, expect.any(Object), 'Bearer original', true);
 });
 test('only exact machine registration reaches the device kernel without invoking human authentication', async () => {
  const input = { token: 'odae_' + 'a'.repeat(43), report: {} }; const response = await request(app).post('/api/device-agent/register').send(input);

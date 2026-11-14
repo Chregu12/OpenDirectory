@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import DeviceAgentPanel from '@/components/views/DeviceAgentPanel';
 import { readAgent, manageAgent } from '@/lib/deviceAgents';
-jest.mock('@/lib/deviceAgents', () => ({ readAgent: jest.fn(), manageAgent: jest.fn() }));
+jest.mock('@/lib/deviceAgents', () => ({ ...jest.requireActual('@/lib/deviceAgents'), readAgent: jest.fn(), manageAgent: jest.fn() }));
 const id = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';
 const device: any = { id, tenantId: actor, assetId: 'DEVICE-01', serialNumber: 'SERIAL-01', platform: 'linux', lifecycle: 'available', revision: '1' };

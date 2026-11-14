@@ -47,6 +47,25 @@ test('creation sends precisely normalized inventory values with defaults and bin
   expect((api.get as jest.Mock).mock.calls.filter(([url]) => url === '/api/devices/capabilities')).toHaveLength(2);
 });
 
+const fleetPage = () => ({ ...page(), fleet: { protocol: 1, tenantId, checkedAt: new Date().toISOString(), counts: { total: 1, 'not-enrolled': 1, connected: 0, offline: 0, pending: 0, expired: 0, revoked: 0 }, connections: [{ deviceId, status: 'not-enrolled', enrolledAt: null, lastSeen: null, credentialExpiresAt: null, enrollmentExpiresAt: null, report: null }] } });
+test('fleet binds current actor, tenant, inventory filters, connection status and complete counts', async () => {
+ const client = await ready({ inventoryProtocol: 2 }); (api.get as jest.Mock).mockResolvedValue({ status: 200, data: fleetPage() });
+ const result = await client.fleet(1, 'INV-001', undefined, { platform: 'linux' }, 'not-enrolled'); expect(result.fleet?.counts.total).toBe(1);
+ expect(api.get).toHaveBeenLastCalledWith('/api/devices/fleet', { params: { page: 1, limit: 25, search: 'INV-001', platform: 'linux', connectionStatus: 'not-enrolled' }, signal: expect.any(AbortSignal) });
+});
+test.each(['actor', 'tenant', 'counts', 'device', 'status', 'secret', 'timestamp'])('fleet rejects unconfirmed %s evidence', async issue => {
+ const client = await ready({ inventoryProtocol: 2 }); const result: any = fleetPage();
+ if (issue === 'actor') result.actorUserId = otherId;
+ if (issue === 'tenant') result.fleet.tenantId = otherId;
+ if (issue === 'counts') result.fleet.counts.connected = 1;
+ if (issue === 'device') result.fleet.connections[0].deviceId = otherId;
+ if (issue === 'status') result.fleet.connections[0].status = 'connected';
+ if (issue === 'secret') result.fleet.connections[0].credential_hash = 'secret';
+ if (issue === 'timestamp') result.fleet.connections[0].lastSeen = '2099-01-01T00:00:00.000Z';
+ (api.get as jest.Mock).mockResolvedValue({ status: 200, data: result });
+ await expect(client.fleet()).rejects.toThrow(); await expect(client.fleet()).rejects.toThrow();
+});
+
 test.each([
   { assetId: ' ' }, { serialNumber: '' }, { manufacturer: 'secret\nvalue' }, { model: 'x'.repeat(121) },
   { purchaseDate: '2026-02-30' }, { purchaseDate: '0000-01-01' }, { purchaseDate: '2026-10-19', warrantyEnd: '2026-10-18' },

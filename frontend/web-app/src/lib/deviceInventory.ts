@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { api } from './api';
 import { directoryUsers, UserPage } from './directoryUsers';
+import { agentStatuses, agentSummarySchema } from './deviceAgents';
 
 export const deviceClasses = ['smartphone', 'tablet', 'laptop', 'desktop', 'shared', 'kiosk', 'other'] as const;
 export const devicePlatforms = ['macos', 'ios', 'ipados', 'windows', 'linux', 'android', 'other'] as const;
 export const deviceLifecycles = ['available', 'assigned', 'maintenance', 'retired'] as const;
 const filtersSchema = z.object({ platform: z.enum(devicePlatforms).optional(), lifecycle: z.enum(deviceLifecycles).optional(), ownership: z.enum(['corporate', 'byod', 'shared']).optional(), deviceClass: z.enum(deviceClasses).optional(), sort: z.enum(['assetId', 'createdAt', 'updatedAt']).optional(), order: z.enum(['asc', 'desc']).optional() }).strict();
 export type DeviceFilters = z.infer<typeof filtersSchema>;
+export type ConnectionStatus = typeof agentStatuses[number];
 const permissions = ['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign'] as const;
 const uuid = z.string().length(36).regex(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
 const revision = z.string().regex(/^[1-9][0-9]{0,18}$/).refine(value => !/\s/.test(value) && BigInt(value) <= BigInt('9223372036854775807'));
@@ -40,6 +42,12 @@ const capabilitiesSchema = z.object({
   permissions: z.array(z.enum(permissions)).refine(values => new Set(values).size === values.length),
   managementMode: z.literal('inventory-only'), supportedActions: z.array(z.never()),
 }).strict();
+const count = z.number().int().nonnegative().safe();
+const fleetSchema = z.object({ protocol: z.literal(1), tenantId: uuid, checkedAt: timestamp,
+  counts: z.object({ total: count, 'not-enrolled': count, pending: count, connected: count, offline: count, expired: count, revoked: count }).strict(),
+  connections: z.array(z.object({ deviceId: uuid, ...agentSummarySchema.shape }).strict()).max(100),
+}).strict();
+export type DeviceFleet = z.infer<typeof fleetSchema>;
 const stateSchema = z.object({ assignedUserId: uuid.nullable(), assignmentId: uuid.nullable(), revision }).strict()
   .refine(value => (value.assignedUserId === null) === (value.assignmentId === null));
 const eventSchema = z.object({
@@ -64,7 +72,7 @@ export type Device = z.infer<typeof deviceSchema>;
 export type DeviceInput = z.input<typeof valuesSchema>;
 export type DeviceCapabilities = z.infer<typeof capabilitiesSchema>;
 export type DeviceHistoryEvent = z.infer<typeof eventSchema>;
-export interface DevicePage { devices: Device[]; total: number; page: number; limit: number }
+export interface DevicePage { devices: Device[]; total: number; page: number; limit: number; fleet?: DeviceFleet }
 export interface DeviceHistoryPage { events: DeviceHistoryEvent[]; total: number; page: number; limit: number }
 
 const unconfirmed = () => new Error('Geräteantwort nicht bestätigt. Bitte neu laden; die Aktion wird nicht automatisch wiederholt.');
@@ -204,6 +212,34 @@ export class DeviceInventoryClient {
     }, signal);
   }
 
+  async fleet(page = 1, search = '', signal?: AbortSignal, filters: DeviceFilters = {}, connectionStatus?: ConnectionStatus): Promise<DevicePage> {
+    return this.run(async (requestSignal, check) => {
+      const context = this.require('devices.inventory.read');
+      if (context.inventoryProtocol !== 2) throw unconfirmed();
+      const selected = filtersSchema.parse(filters);
+      if (connectionStatus !== undefined) z.enum(agentStatuses).parse(connectionStatus);
+      const response = await api.get('/api/devices/fleet', { params: { page: pageNumber(page), limit: 25, ...(query(search) ? { search: query(search) } : {}), ...selected, ...(connectionStatus ? { connectionStatus } : {}) }, signal: requestSignal });
+      check();
+      if (response.status !== 200 || !response.data || typeof response.data !== 'object') throw unconfirmed();
+      const { fleet: raw, ...data } = response.data;
+      const result = parsePage(data, 'devices', page, context.userId) as DevicePage;
+      const fleet = fleetSchema.parse(raw);
+      if (fleet.tenantId !== context.tenantId || fleet.counts.total !== agentStatuses.reduce((sum, status) => sum + fleet.counts[status], 0)
+        || result.total !== (connectionStatus ? fleet.counts[connectionStatus] : fleet.counts.total) || fleet.connections.length !== result.devices.length
+        || agentStatuses.some(status => fleet.connections.filter(connection => connection.status === status).length > fleet.counts[status])) throw unconfirmed();
+      result.devices.forEach((device, index) => {
+        const connection = fleet.connections[index];
+        if (device.tenantId !== context.tenantId || connection.deviceId !== device.id || connectionStatus && connection.status !== connectionStatus
+          || Object.entries(selected).some(([field, value]) => value !== undefined && !['sort', 'order'].includes(field) && device[field] !== value)
+          || ['connected', 'offline'].includes(connection.status) && connection.report?.platform !== device.platform
+          || ['connected', 'offline'].includes(connection.status) && (!connection.enrolledAt || !connection.lastSeen || !connection.credentialExpiresAt || !connection.report)
+          || connection.lastSeen && Date.parse(connection.lastSeen) > Date.parse(fleet.checkedAt)
+          || connection.status === 'connected' && (Date.parse(fleet.checkedAt) - Date.parse(connection.lastSeen!) > 180000 || Date.parse(connection.credentialExpiresAt!) <= Date.parse(fleet.checkedAt))) throw unconfirmed();
+      });
+      return { ...result, fleet };
+    }, signal);
+  }
+
   async history(deviceId: string, page = 1, signal?: AbortSignal): Promise<DeviceHistoryPage> {
     return this.run(async (requestSignal, check) => {
       const context = this.require('devices.inventory.read');
@@ -276,12 +312,13 @@ export class DeviceInventoryClient {
     }, signal);
   }
 
-  async exportCsv(search = '', filters: DeviceFilters = {}, signal?: AbortSignal): Promise<Blob> {
+  async exportCsv(search = '', filters: DeviceFilters = {}, signal?: AbortSignal, fleet = false, connectionStatus?: ConnectionStatus): Promise<Blob> {
     return this.run(async (requestSignal, check) => {
       const context = this.require('devices.inventory.read'); if (context.inventoryProtocol !== 2) throw unconfirmed();
       await this.fresh(context, 'devices.inventory.read', requestSignal, check);
       if (this.context?.inventoryProtocol !== 2) throw unconfirmed();
-      const response = await api.get('/api/devices/export', { params: { ...filtersSchema.parse(filters), ...(query(search) ? { search: query(search) } : {}) }, responseType: 'blob', signal: requestSignal });
+      if (connectionStatus !== undefined && (!fleet || !agentStatuses.includes(connectionStatus))) throw unconfirmed();
+      const response = await api.get(fleet ? '/api/devices/fleet/export' : '/api/devices/export', { params: { ...filtersSchema.parse(filters), ...(query(search) ? { search: query(search) } : {}), ...(connectionStatus ? { connectionStatus } : {}) }, responseType: 'blob', signal: requestSignal });
       check();
       const count = String(response.headers?.['x-inventory-count'] || '');
       if (response.status !== 200 || response.headers?.['x-inventory-tenant'] !== context.tenantId || !/^text\/csv\b/i.test(String(response.headers?.['content-type'] || ''))

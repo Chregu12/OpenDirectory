@@ -58,6 +58,8 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
     if(Object.keys(req.query).length)throw Object.assign(new Error('No inventory capability selectors'),{status:400});res.json(await inventory.capabilities(req.user,req.headers.authorization));
   }));
   app.get('/api/devices',route(async(req,res)=>res.json(await inventory.list(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/fleet',route(async(req,res)=>res.json(await agents.fleet(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/fleet/export',route(async(req,res)=>{const value=await agents.fleet(req.query,req.user,req.headers.authorization,true);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
   app.get('/api/devices/export',route(async(req,res)=>{const value=await inventory.exportCsv(req.query,req.user,req.headers.authorization);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.get('/api/devices/:id/agent',route(async(req,res)=>{const value=await agents.get(req.params.id,req.query,req.user,req.headers.authorization);res.set('ETag',agentEtag(value.deviceId,value.revision)).json(value);}));

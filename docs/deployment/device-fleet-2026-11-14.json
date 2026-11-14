@@ -1,0 +1,278 @@
+{
+  "checkedAt": "2026-11-14T14:34:35.725442+00:00",
+  "url": "https://opendirectory.heusser.local/devices",
+  "namespace": "opendirectory",
+  "release": "opendirectory",
+  "chart": "opendirectory-lite-0.1.48",
+  "appVersion": "1.0.45",
+  "baselineCommit": "342dc0110a880115c99372266787ae3e5c8b3bfd",
+  "features": [
+    "Actual tenant-bound fleet status counts and contact reports from one PostgreSQL snapshot",
+    "Server-side connection filter, pagination and matching formula-safe CSV export",
+    "Automatic 30-second refresh with original session and MFA enforcement",
+    "Retained revoked reports after an allowed inventory platform correction",
+    "Production Next.js routes for fleet export and lifecycle commands"
+  ],
+  "validation": {
+    "frontendFullUnit": {
+      "suites": 151,
+      "passed": 3197,
+      "note": "Full run before two later targeted regression additions"
+    },
+    "frontendTargetedAfter": {
+      "agentClientPassed": 11,
+      "buildConfigurationPassed": 3,
+      "overlapWithFullRun": 12
+    },
+    "deviceUnit": {
+      "suites": 22,
+      "passed": 629
+    },
+    "devicePostgres": {
+      "passed": 117,
+      "actualCompiledMacosRustHttpClient": true,
+      "includesSnapshotAcquisitionConcurrency": true
+    },
+    "signedOAuthPimGatewayPostgres": {
+      "passed": 1
+    },
+    "developmentBrowser": {
+      "passed": 5
+    },
+    "finalProductionImageBrowser": {
+      "passed": 5
+    },
+    "finalProductionImageHttpRouting": {
+      "isolatedHttpReceiver": true,
+      "checks": [
+        {
+          "path": "/api/devices/fleet?connectionStatus=offline",
+          "method": "GET",
+          "forwardedExactly": true
+        },
+        {
+          "path": "/api/devices/fleet/export?connectionStatus=offline",
+          "method": "GET",
+          "forwardedExactly": true
+        },
+        {
+          "path": "/api/devices/export?platform=linux",
+          "method": "GET",
+          "forwardedExactly": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/lifecycle",
+          "method": "POST",
+          "forwardedExactly": true
+        }
+      ]
+    },
+    "typeCheck": "passed",
+    "openApiContractTests": 31,
+    "generatedOpenApiEqualsRepository": true,
+    "gitDiffCheck": "passed",
+    "helmLint": "passed",
+    "desktopAndMobileVisuallyInspected": true
+  },
+  "rollout": {
+    "resourceCount": 49,
+    "phase1": {
+      "phase": 1,
+      "revision": 70,
+      "readyDeployments": 11,
+      "runtime": {
+        "device-service": {
+          "pod": "opendirectory-device-service-58476fddb9-8s7v4",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/device-service:1.0.44",
+            "digest": "sha256:09d2d7cb845a08f3397b0bda2cd3a00e69a352b5fe5193a5ec00a8dc4e116ee7"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceAgents.js": "5e983a53d324b497dbfa3da7110843d72a0c9df58b9e9af444fd8a8027058a4a",
+            "/app/src/DeviceInventory.js": "11e1ec857a5f090fc6c81eb08d0a1140b4def6b6e105049b7cf385adca4a3580",
+            "/app/src/inventoryServer.js": "d8d1c4891a12368911fc3da684f9a617aa5f81edacc4069108e9292776b4cea0",
+            "/app/migrations/008_device_agents.sql": "cb936e99b2d1fdd6f80b16e2650429970e9ce14e903cb538ac24946b1eca9747"
+          }
+        }
+      },
+      "unrelatedDeploymentSpecsUnchanged": true
+    },
+    "phase2": {
+      "phase": 2,
+      "revision": 71,
+      "readyDeployments": 11,
+      "runtime": {
+        "device-service": {
+          "pod": "opendirectory-device-service-58476fddb9-8s7v4",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/device-service:1.0.44",
+            "digest": "sha256:09d2d7cb845a08f3397b0bda2cd3a00e69a352b5fe5193a5ec00a8dc4e116ee7"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/DeviceAgents.js": "5e983a53d324b497dbfa3da7110843d72a0c9df58b9e9af444fd8a8027058a4a",
+            "/app/src/DeviceInventory.js": "11e1ec857a5f090fc6c81eb08d0a1140b4def6b6e105049b7cf385adca4a3580",
+            "/app/src/inventoryServer.js": "d8d1c4891a12368911fc3da684f9a617aa5f81edacc4069108e9292776b4cea0",
+            "/app/migrations/008_device_agents.sql": "cb936e99b2d1fdd6f80b16e2650429970e9ce14e903cb538ac24946b1eca9747"
+          }
+        },
+        "web-app": {
+          "pod": "opendirectory-web-app-787d88bd64-rq8w2",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.44",
+            "digest": "sha256:04969ae838827baf6bfbef25bb0ef934812b2076ad9fe67bc867ebe3b6f42a6a"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "-Vzi-VPT0RJWw5DR-OihS",
+          "hashes": {
+            "src/components/views/DeviceInventoryView.tsx": "f3b7834c983dae3c46fa2e06253760749ebf727b0656d48d52a4d349d2224a27",
+            "src/components/views/DeviceAgentPanel.tsx": "aa2abc30ac5feb93816d5241eafcd700e94761e8efad56e4f9b307f56c7a85fa",
+            "src/lib/deviceAgents.ts": "61a93f332855ee7c9d8d0ecb3248d8f483e0522c00702aeade0845936ca671dd",
+            "src/lib/deviceInventory.ts": "712d76f255e4c2c32025c49bdf89bc3bc103ac470793efe9bf12dc68bc5d749b"
+          }
+        }
+      },
+      "unrelatedDeploymentSpecsUnchanged": true
+    },
+    "routingCorrection": {
+      "revision": 72,
+      "readyDeployments": 11,
+      "unrelatedDeploymentSpecsUnchanged": true,
+      "runtime": {
+        "web-app": {
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.45",
+            "digest": "sha256:655971948b328c19f227fce8040d57bdf14e55bd7448349d04ff14b4f83a4d48"
+          },
+          "pod": "opendirectory-web-app-7c566d97f9-8nmjx",
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "561SkL4IAAh6UfwrK0ueA",
+          "hashes": {
+            "src/components/views/DeviceInventoryView.tsx": "f3b7834c983dae3c46fa2e06253760749ebf727b0656d48d52a4d349d2224a27",
+            "src/components/views/DeviceAgentPanel.tsx": "aa2abc30ac5feb93816d5241eafcd700e94761e8efad56e4f9b307f56c7a85fa",
+            "src/lib/deviceAgents.ts": "61a93f332855ee7c9d8d0ecb3248d8f483e0522c00702aeade0845936ca671dd",
+            "src/lib/deviceInventory.ts": "712d76f255e4c2c32025c49bdf89bc3bc103ac470793efe9bf12dc68bc5d749b",
+            "next.config.js": "a6a9bd876ca675be158944472028a6297390bb226eda460538d776379bd7fa1e"
+          }
+        }
+      }
+    },
+    "initialPublicProbeFinding": {
+      "image": "web-app:1.0.44",
+      "path": "/api/devices/fleet/export",
+      "observedStatus": 404,
+      "correctedIn": "web-app:1.0.45"
+    },
+    "newDatabaseMigrations": 0,
+    "deviceSqlReceiversVerified": true
+  },
+  "backup": {
+    "database": "devices",
+    "format": "pg_dump custom format",
+    "bytes": 110656,
+    "sha256": "3b9b1feb21b0e78d81ba681b3d15c4cbd2be0d067da55913fe0a106233583534",
+    "tocEntries": 134
+  },
+  "publicChecks": {
+    "devicesPage": 200,
+    "/api/devices": 401,
+    "/api/devices/fleet": 401,
+    "/api/devices/fleet/export": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent": 401,
+    "/api/device-agent/register": 401,
+    "/api/device-agent/heartbeat": 401,
+    "/api/device-agent/register?tenantId=foreign": 400,
+    "lifecycleUnauthenticated": 401,
+    "cssSha256": "af006d9c602b440a019b155457cdab9a3b4f1a5c6fae209bdf1c6db9abaf3e55",
+    "tlsVerified": true,
+    "productionHumanLoginPerformed": false
+  },
+  "businessDataBefore": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_requests": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_connections": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "businessDataAfter": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_requests": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_connections": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "limits": [
+    "No personal production login, MFA, PIM grant or business device created; positive flows use disposable databases and identities",
+    "Actual Rust host test is macOS; Windows/Linux hardware and autostart remain unaccepted",
+    "Remote commands, compliance, software distribution and external MDM provider operations remain open",
+    "Signed installers, prebuilt cross-platform downloads and large-fleet load acceptance remain open",
+    "Agent reports are not hardware-attested; existing original human authority and fresh MFA remain necessary"
+  ]
+}

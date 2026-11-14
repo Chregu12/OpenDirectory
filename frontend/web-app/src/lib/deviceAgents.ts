@@ -3,19 +3,21 @@ import { api } from './api';
 import type { Device } from './deviceInventory';
 const uuid = z.string().regex(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
 const timestamp = z.string().datetime({ offset: true });
-const report = z.object({ hostname: z.string().min(1).max(255), platform: z.enum(['windows', 'macos', 'linux']), architecture: z.string().min(1).max(40), osVersion: z.string().max(120), agentVersion: z.string().min(1).max(40) }).strict();
+export const agentStatuses = ['not-enrolled', 'pending', 'connected', 'offline', 'expired', 'revoked'] as const;
+export const agentStatusLabels: Record<typeof agentStatuses[number], string> = { 'not-enrolled': 'Nicht verbunden', pending: 'Registrierung ausstehend', connected: 'Online', offline: 'Offline', expired: 'Zugang abgelaufen', revoked: 'Zugang widerrufen' };
+export const agentReportSchema = z.object({ hostname: z.string().min(1).max(255), platform: z.enum(['windows', 'macos', 'linux']), architecture: z.string().min(1).max(40), osVersion: z.string().max(120), agentVersion: z.string().min(1).max(40) }).strict();
+export const agentSummarySchema = z.object({ status: z.enum(agentStatuses), enrolledAt: timestamp.nullable(), lastSeen: timestamp.nullable(), credentialExpiresAt: timestamp.nullable(), enrollmentExpiresAt: timestamp.nullable(), report: agentReportSchema.nullable() }).strict();
 const connection = z.object({
   schemaVersion: z.literal(1), agentProtocol: z.literal(1), actorUserId: uuid, tenantId: uuid, deviceId: uuid,
   revision: z.string().regex(/^(0|[1-9][0-9]{0,18})$/).refine(value => BigInt(value) <= BigInt('9223372036854775807')),
-  status: z.enum(['not-enrolled', 'pending', 'connected', 'offline', 'expired', 'revoked']),
-  enrolledAt: timestamp.nullable(), lastSeen: timestamp.nullable(), credentialExpiresAt: timestamp.nullable(), enrollmentExpiresAt: timestamp.nullable(), report: report.nullable(),
+  ...agentSummarySchema.shape,
   history: z.object({ total: z.number().int().nonnegative().safe(), page: z.number().int().min(1).max(1000000), limit: z.literal(25), events: z.array(z.object({ id: uuid, action: z.enum(['issue', 'register', 'revoke']), actorUserId: uuid.nullable(), reason: z.string().min(10).max(500).nullable(), correlationId: uuid, createdAt: timestamp }).strict()).max(25) }).strict(),
 }).strict().refine(value => value.history.events.length === Math.min(25, Math.max(0, value.history.total - (value.history.page - 1) * 25)) && new Set(value.history.events.map(event => event.id)).size === value.history.events.length
   && (value.status !== 'connected' && value.status !== 'offline' || Boolean(value.enrolledAt && value.lastSeen && value.credentialExpiresAt && value.report)));
 export type AgentConnection = z.infer<typeof connection>;
 export function parseAgent(value: unknown, device: Device, actor: string, page = 1) {
   const result = connection.parse(value);
-  if (result.deviceId !== device.id || result.tenantId !== device.tenantId || result.actorUserId !== actor || result.history.page !== page || result.report && result.report.platform !== device.platform) throw new Error('Unconfirmed agent response');
+  if (result.deviceId !== device.id || result.tenantId !== device.tenantId || result.actorUserId !== actor || result.history.page !== page || ['connected', 'offline'].includes(result.status) && result.report?.platform !== device.platform) throw new Error('Unconfirmed agent response');
   return result;
 }
 export async function readAgent(device: Device, actor: string, page: number, signal: AbortSignal) {

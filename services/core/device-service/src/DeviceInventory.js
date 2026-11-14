@@ -119,4 +119,4 @@ class DeviceInventory {
     },{readOnly:true});await this.checkpoint(source,user,authorization);return result;
   }
 }
-module.exports={DeviceInventory,pageQuery};
+module.exports={DeviceInventory,pageQuery,selectionWhere,inventoryDevice:device};

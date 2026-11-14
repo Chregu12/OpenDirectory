@@ -1,5 +1,7 @@
 # Geräte mit OpenDirectory verbinden
 
+Die [Geräteübersicht ab 1.0.45](device-fleet.md) zeigt tatsächlichen Verbindungsstatus und Kontaktzeiten bereits in der Liste, mit Statusfilter, CSV-Export und automatischer Aktualisierung.
+
 Unter `/devices` lassen sich Windows-, macOS- und Linux-Inventargeräte mit dem Rust-Agenten verbinden. Inventar und Agent-Verbindung haben getrennte Versionen: Ein Heartbeat verändert weder Stammdaten noch Benutzerzuweisungen. Dieser Weg liefert Registrierung und tatsächliche Kontaktmeldungen, kein vollständiges MDM.
 
 ## In der Oberfläche

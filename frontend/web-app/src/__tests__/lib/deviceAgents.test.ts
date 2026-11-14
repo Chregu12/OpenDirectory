@@ -6,6 +6,12 @@ const device: any = { id, tenantId: actor, platform: 'linux' };
 const state: any = { schemaVersion: 1, agentProtocol: 1, actorUserId: actor, tenantId: actor, deviceId: id, revision: '0', status: 'not-enrolled', enrolledAt: null, lastSeen: null, credentialExpiresAt: null, enrollmentExpiresAt: null, report: null, history: { page: 1, limit: 25, total: 0, events: [] } };
 beforeEach(() => jest.clearAllMocks());
 test('matches original actor, tenant, device and history page', () => { expect(parseAgent(state, device, actor)).toEqual(state); });
+test('a revoked historical report survives a later permitted inventory platform correction', () => {
+ const report = { hostname: 'old-host', platform: 'macos', architecture: 'arm64', osVersion: 'macOS', agentVersion: '1.1.0' };
+ expect(parseAgent({ ...state, status: 'revoked', report }, device, actor).report).toEqual(report);
+ const time = '2026-11-14T12:00:00.000Z';
+ expect(() => parseAgent({ ...state, status: 'connected', enrolledAt: time, lastSeen: time, credentialExpiresAt: time, report }, device, actor)).toThrow();
+});
 test.each([{ actorUserId: id }, { tenantId: id }, { deviceId: actor }, { credential_hash: 'secret' }, { status: 'connected' }, { revision: '9223372036854775808' }, { history: { page: 1, limit: 25, total: 1, events: [] } }])('rejects an inconsistent or foreign response %j', change => { expect(() => parseAgent({ ...state, ...change }, device, actor)).toThrow(); });
 test('uses the exact original agent ETag and explicit confirmation', async () => {
  (api.post as jest.Mock).mockResolvedValue({ status: 200, data: { ...state, status: 'revoked', revision: '1' } }); const controller = new AbortController();
