@@ -297,3 +297,6 @@ audit-logs/
 *.audit
 *.compliance
 .claude/worktrees/
+
+# Keep the device-agent application dependency graph reproducible.
+!agent-rust/Cargo.lock

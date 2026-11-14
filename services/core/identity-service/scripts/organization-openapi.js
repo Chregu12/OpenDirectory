@@ -199,7 +199,7 @@ function organizationOpenApi() {
   };
   document.paths['/api/ous/{id}/members/{membershipId}'] = { delete: { operationId: 'removeOwnTenantOuMember', summary: 'Conditionally unlink one exact current membership incarnation', description: membershipDescription + ' Empty body required. Returns 200 with retained removed membership and current unit, not 204. Re-adding the pair generates a new ID; an old remove cannot unlink it. Active memberships block user or OU deletion until explicitly removed. History remains after local target retirement; removing a membership is not offboarding or external deprovisioning.', parameters: [...resourceParameter, { name: 'membershipId', in: 'path', required: true, schema: identifier }, membershipVersion], responses: { 200: membershipReply('Actual exact unlink and incremented OU version; no implicit removal of other assignments'), ...directoryErrors } } };
   const inventory = require('../../device-service/scripts/inventory-openapi').deviceInventoryOpenApi();
-  Object.assign(document.paths, inventory.paths); Object.assign(document.components.schemas, inventory.components.schemas);
+  Object.assign(document.paths, inventory.paths); Object.assign(document.components.schemas, inventory.components.schemas); Object.assign(document.components.securitySchemes, inventory.components.securitySchemes);
   document.info.title = 'OpenDirectory Business API'; document.info.version = '1.9.0';
   document.components.securitySchemes.bearerAuth.description = 'Issuer-verified original API bearer with current canonical human context. Only the explicitly documented dedicated tenant-bound workload sources accept application tokens.';
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.licenseSnapshotProtocol = { const: 1 };
@@ -264,7 +264,7 @@ function organizationOpenApi() {
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyPimProtocol={const:1};
   const companyPimApprovals=require('./company-pim-approval-openapi').companyPimApprovalOpenApi();Object.assign(document.paths,companyPimApprovals.paths);Object.assign(document.components.schemas,companyPimApprovals.components.schemas);
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyPimApprovalProtocol={const:1};
-  document.info.version = '1.35.0';
+  document.info.version = '1.36.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

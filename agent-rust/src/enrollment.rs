@@ -2,7 +2,7 @@ use crate::config::AgentConfig;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.2.0";
 pub fn client(cfg: &AgentConfig) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let url = reqwest::Url::parse(&cfg.server_url)?;
     if url.scheme() != "https"
@@ -147,13 +147,14 @@ pub async fn heartbeat(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Erro
     if !device_id(id) || !token(credential, "odad_") {
         return Err("Invalid saved device credential".into());
     }
+    let inventory = tokio::task::spawn_blocking(crate::inventory::collect).await?;
     let response = client(cfg)?
         .post(format!(
             "{}/api/device-agent/heartbeat",
             cfg.server_url.trim_end_matches('/')
         ))
         .bearer_auth(credential)
-        .json(&serde_json::json!({"deviceId": id, "report": report()}))
+        .json(&serde_json::json!({"deviceId": id, "report": report(), "inventory": inventory}))
         .send()
         .await?;
     if response.status() != reqwest::StatusCode::OK {

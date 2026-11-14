@@ -8,10 +8,16 @@ const { createInventoryApp } = require('../inventoryServer');
 let agents, app; const id = randomUUID();
 beforeEach(() => {
  jest.clearAllMocks();
- agents = Object.fromEntries(['get','manage','register','heartbeat','fleet'].map(method => [method, jest.fn()]));
+ agents = Object.fromEntries(['get','manage','register','heartbeat','fleet','inventoryReport'].map(method => [method, jest.fn()]));
  const value = { deviceId: id, revision: '1' }; agents.get.mockResolvedValue(value); agents.manage.mockResolvedValue(value); agents.register.mockResolvedValue(value); agents.heartbeat.mockResolvedValue(value);
  jwtVerify.mockResolvedValue({ payload: { actor_type: 'user', token_use: 'access' } });
  app = createInventoryApp({ db: {}, inventory: {}, returns: {}, agents });
+});
+test('hardware report reads preserve the original human bearer and never accept a device credential as a human', async () => {
+ agents.inventoryReport.mockResolvedValue({ status: 'missing' });
+ const response = await request(app).get('/api/devices/' + id + '/agent/inventory').set('Authorization', 'Bearer original');
+ expect(response.status).toBe(200); expect(response.headers['cache-control']).toBe('no-store'); expect(agents.inventoryReport).toHaveBeenCalledWith(id, {}, { actor_type: 'user', token_use: 'access' }, 'Bearer original');
+ jwtVerify.mockRejectedValueOnce(new Error('Device token is not human')); expect((await request(app).get('/api/devices/' + id + '/agent/inventory').set('Authorization', 'Bearer odad_' + 'x'.repeat(43))).status).toBe(401);
 });
 test('fleet read and export use the original human bearer and preserve exact query selectors', async () => {
  agents.fleet.mockResolvedValueOnce({ fleet: { counts: { total: 0 } } });

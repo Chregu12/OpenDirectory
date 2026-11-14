@@ -63,6 +63,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
   app.get('/api/devices/export',route(async(req,res)=>{const value=await inventory.exportCsv(req.query,req.user,req.headers.authorization);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.get('/api/devices/:id/agent',route(async(req,res)=>{const value=await agents.get(req.params.id,req.query,req.user,req.headers.authorization);res.set('ETag',agentEtag(value.deviceId,value.revision)).json(value);}));
+  app.get('/api/devices/:id/agent/inventory',route(async(req,res)=>res.json(await agents.inventoryReport(req.params.id,req.query,req.user,req.headers.authorization))));
   for(const action of ['issue','revoke'])app.post('/api/devices/:id/agent/'+action,route(async(req,res)=>{
     const value=await agents.manage(req.params.id,action,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);
     const connection=value.connection || value;res.set('ETag',agentEtag(connection.deviceId,connection.revision)).status(action==='issue'?201:200).json(value);
@@ -81,7 +82,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   });
   return app;
 }
-async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_agent_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
+async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_agent_inventory_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
 if(require.main===module)start().then(server=>{
   const close=()=>{server.closeAllConnections();server.close(()=>database.pool.end().then(()=>process.exit(0)));};process.once('SIGTERM',close);process.once('SIGINT',close);
 }).catch(()=>{process.stderr.write('Device inventory startup requires migrated PostgreSQL and configured receiving dependencies.\n');process.exitCode=1;database.pool.end().catch(()=>{});});

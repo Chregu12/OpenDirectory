@@ -4,6 +4,7 @@ import type { Device } from '@/lib/deviceInventory';
 import { deviceInventoryError } from '@/lib/deviceInventory';
 import { AgentConnection, readAgent, manageAgent, agentStatusLabels as labels } from '@/lib/deviceAgents';
 import { DirectoryConfirmation } from './UserDetailPanel';
+import DeviceHardwarePanel from './DeviceHardwarePanel';
 const events = { issue: 'Registrierungscode erstellt · vorheriger Zugang gesperrt', register: 'Agent registriert', revoke: 'Gerätezugang widerrufen' };
 const date = (value: string | null) => value ? new Date(value).toLocaleString('de-CH') : '—';
 export default function DeviceAgentPanel({ device, actor, canManage, disabled, onBusy, onSecurityError, onChanged }: { device: Device; actor: string; canManage: boolean; disabled: boolean; onBusy: (busy: boolean) => void; onSecurityError: (failure: unknown) => void; onChanged?: () => void }) {
@@ -80,6 +81,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
       {canManage && <div className="flex flex-wrap gap-3">{supported && ['available', 'assigned'].includes(device.lifecycle) && <button className="fluent-btn-primary" disabled={disabled || working} onClick={() => { setReason(''); setAction('issue'); setSecret(null); }}>Registrierungscode erstellen</button>}
         {!['not-enrolled', 'revoked'].includes(state.status) && <button className="fluent-btn-secondary" disabled={disabled || working} onClick={() => { setReason(''); setAction('revoke'); setSecret(null); }}>Gerätezugang widerrufen</button>}</div>}
       {!supported && <p className="text-sm">Für diese Plattform ist noch kein Agent verfügbar.</p>}
+      <DeviceHardwarePanel device={device} actor={actor} connection={state} onSecurityError={onSecurityError} />
       {secret && <div className="rounded border border-[var(--border)] p-4 space-y-3">
         <p className="font-medium">Einmaliger Registrierungscode</p><p className="text-sm">Gültig bis {date(state.enrollmentExpiresAt)}. Nur auf diesem Gerät verwenden. Der Code wird nur jetzt angezeigt und nach fünf Minuten ausgeblendet.</p>
         <label className="block text-sm">Registrierungscode<input className="input-apple font-mono" readOnly value={secret} autoComplete="off" spellCheck={false} onFocus={event => event.target.select()} /></label>

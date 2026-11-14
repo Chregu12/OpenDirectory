@@ -4,13 +4,14 @@ use std::time::Duration;
 
 mod config;
 mod enrollment;
+mod inventory;
 
 use config::AgentConfig;
 
 #[derive(Parser)]
 #[command(
     name = "od-agent-service",
-    version = "1.1.0",
+    version = "1.2.0",
     about = "OpenDirectory MDM Agent"
 )]
 struct Cli {
@@ -34,6 +35,8 @@ enum Commands {
     Compliance,
     /// Send one authenticated heartbeat
     Heartbeat,
+    /// Show local hardware inventory without credentials
+    Inventory,
     /// Show current configuration
     Status,
     /// Install as system service
@@ -68,6 +71,13 @@ async fn main() {
             Err("Compliance policies are not configured for agent protocol 1".into())
         }
         Commands::Heartbeat => enrollment::heartbeat(&cfg).await,
+        Commands::Inventory => match serde_json::to_string_pretty(&inventory::collect()) {
+            Ok(value) => {
+                println!("{}", value);
+                Ok(())
+            }
+            Err(error) => Err(error.into()),
+        },
         Commands::Status => {
             println!("Server URL: {}", cfg.server_url);
             println!(

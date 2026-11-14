@@ -1,5 +1,7 @@
 # Geräte mit OpenDirectory verbinden
 
+Ab Server 1.0.46 und Rust-Agent 1.2.0 erscheinen [tatsächliche CPU-, Speicher-, Datenträger- und Laufzeitmeldungen](agent-hardware.md) in den Gerätedetails. Ältere Agenten bleiben kompatibel.
+
 Die [Geräteübersicht ab 1.0.45](device-fleet.md) zeigt tatsächlichen Verbindungsstatus und Kontaktzeiten bereits in der Liste, mit Statusfilter, CSV-Export und automatischer Aktualisierung.
 
 Unter `/devices` lassen sich Windows-, macOS- und Linux-Inventargeräte mit dem Rust-Agenten verbinden. Inventar und Agent-Verbindung haben getrennte Versionen: Ein Heartbeat verändert weder Stammdaten noch Benutzerzuweisungen. Dieser Weg liefert Registrierung und tatsächliche Kontaktmeldungen, kein vollständiges MDM.
@@ -19,7 +21,7 @@ Der Registrierungscode wird ausschließlich in der erfolgreichen Antwort ausgege
 Auf der jeweiligen Zielplattform mit installiertem Rust aus diesem Repository bauen:
 
 ```sh
-cargo build --release --manifest-path agent-rust/Cargo.toml
+cargo build --locked --release --manifest-path agent-rust/Cargo.toml
 ```
 
 Die Datei ist `agent-rust/target/release/od-agent-service`, unter Windows `od-agent-service.exe`. Diese Version stellt noch keine signierten Installationspakete oder vorgefertigten Windows-/Linux-Downloads bereit. Der vollständige HTTP-Prozess wurde mit einem tatsächlich kompilierten macOS-Agenten und einer separaten PostgreSQL-Testdatenbank geprüft; Windows-/Linux-Hardware und Autostart bleiben gesondert abzunehmen.
@@ -56,7 +58,7 @@ Windows speichert standardmäßig unter `%PROGRAMDATA%\OpenDirectory\agent.json`
 - `GET /api/devices/:id/agent?page=1`: eigener Verbindungsstand und echte paginierte Kontrollhistorie, 25 Ereignisse je Seite.
 - `POST /api/devices/:id/agent/issue` und `/revoke`: ursprünglicher menschlicher Bearer, Live-Inventarrecht `devices.inventory.create`, frische MFA, exakter `If-Match: "agent-UUID-Revision"`, `{reason, confirm:true}`. Ein noch nie verbundenes Gerät beginnt mit Revision `0`; fehlende Version `428`, überholte Version `412`.
 - `POST /api/device-agent/register`: genau `{token, report}`; kein menschlicher Bearer, keine URL-Credentials, keine Tenant- oder Geräteauswahl.
-- `POST /api/device-agent/heartbeat`: Geräte-Bearer `odad_…`, genau `{deviceId, report}`. `report` enthält ausschließlich `hostname`, `platform`, `architecture`, `osVersion`, `agentVersion`. Plattform muss zum Inventargerät passen. Zeit und Ablauf bestimmt der Server.
+- `POST /api/device-agent/heartbeat`: Geräte-Bearer `odad_…`, genau `{deviceId, report}`, ab Server 1.0.46 optional ergänzt um den [Hardwarebericht `inventory`](agent-hardware.md). `report` enthält ausschließlich `hostname`, `platform`, `architecture`, `osVersion`, `agentVersion`. Plattform muss zum Inventargerät passen. Zeit und Ablauf bestimmt der Server.
 
 Device-Migration `008_device_agents.sql` ergänzt zwei Tabellen. Je Gerät besteht höchstens eine Verbindung. 256-Bit-Geheimnisse werden serverseitig ausschließlich als SHA-256-Hashes gespeichert; Bootstrap zehn Minuten, Gerätecredential 90 Tage. Neu registrieren rotiert den Zugang. Originaler menschlicher Autorisierungsnachweis, Akteur, Begründung, Zeitpunkt, Korrelations-ID und geheimnisfreie Vorher-/Nachher-Stände werden für Ausstellung und Widerruf erhalten; die Registrierung protokolliert den Geräteakteur. Heartbeats aktualisieren den tatsächlichen Kontakt, ohne eine neue Auditzeile je Minute zu erzeugen.
 

@@ -4,6 +4,7 @@ const { randomBytes, randomUUID, createHash } = require('node:crypto');
 const { validUuid } = require('../../../../packages/identity-authorization-contract');
 const { DeviceInventory, pageQuery, selectionWhere, inventoryDevice } = require('./DeviceInventory');
 const { DEVICE_FIELDS } = require('../../../../packages/device-inventory-contract');
+const { validateInventory } = require('./AgentInventory');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const digest = token => createHash('sha256').update(token).digest('hex');
 const identifier = id => { if (!validUuid(id) || id !== id.toLowerCase()) fail(400, 'Canonical agent device required'); return id; };
@@ -37,7 +38,27 @@ class DeviceAgents {
   constructor(database, { inventory = new DeviceInventory(database), secret = () => randomBytes(32).toString('base64url') } = {}) {
     this.database = database; this.inventory = inventory; this.secret = secret;
   }
-  async receiving(client) { await client.query('SELECT device_agent_receiving()'); }
+  async receiving(client) { await client.query('SELECT device_agent_inventory_receiving()'); }
+  async inventoryReport(id, query, user, authorization) {
+    identifier(id); if (Object.keys(query).length) fail(400, 'No inventory report selectors');
+    const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    const result = await this.database.transaction(async client => {
+      await this.receiving(client); await this.inventory.current(client, source.tenant.id, id);
+      const checkedAt = iso((await client.query('SELECT clock_timestamp() AS moment')).rows[0].moment);
+      const row = (await client.query(`SELECT connection.*,${statusSql('$3::timestamptz')} AS connection_status,
+       coalesce((inventory_report->>'enrolledAt')::timestamptz=enrolled_at,false) AS inventory_same_enrollment FROM device_agent_connections connection WHERE device_id=$1 AND tenant_id=$2`, [id, source.tenant.id, checkedAt])).rows[0];
+      const stored = row?.inventory_report;
+      let inventory = null, status = 'missing';
+      if (stored) {
+        try { validateInventory(stored.facts); } catch { fail(503, 'Stored agent inventory unavailable'); }
+        inventory = { ...stored, receivedAt: iso(stored.receivedAt), enrolledAt: iso(stored.enrolledAt) };
+        const same = row.inventory_same_enrollment && row.platform === stored.platform && ['connected', 'offline'].includes(row.connection_status);
+        status = !same ? 'historical' : row.connection_status === 'connected' && Date.parse(checkedAt) - Date.parse(stored.receivedAt) <= 300000 ? 'current' : 'stale';
+      }
+      return { schemaVersion: 1, inventoryProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, deviceId: id, checkedAt, connectionStatus: row?.connection_status || 'not-enrolled', status, inventory };
+    }, { readOnly: true });
+    await this.inventory.checkpoint(source, user, authorization); return result;
+  }
   async fleet(query, user, authorization, exportCsv = false) {
     const { connectionStatus, ...selectors } = query;
     if (connectionStatus !== undefined && !statuses.includes(connectionStatus)) fail(400, 'Invalid connection filter');
@@ -122,14 +143,16 @@ class DeviceAgents {
     });
   }
   async heartbeat(input, authorization) {
-    exact(input, ['deviceId', 'report']); identifier(input.deviceId); const values = report(input.report);
+    const hasInventory = input && Object.hasOwn(input, 'inventory');
+    exact(input, hasInventory ? ['deviceId', 'report', 'inventory'] : ['deviceId', 'report']); identifier(input.deviceId); const values = report(input.report);
+    const inventory = hasInventory ? validateInventory(input.inventory) : undefined;
     if (typeof authorization !== 'string' || !/^Bearer odad_[A-Za-z0-9_-]{43}$/.test(authorization)) fail(401, 'Device-only credential required');
     return this.database.transaction(async client => {
       await this.receiving(client);
       const tokenHash = digest(authorization.slice(7));
       const row = (await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 AND credential_hash=$2 AND credential_expires_at>clock_timestamp() AND revoked_at IS NULL', [input.deviceId, tokenHash])).rows[0];
       if (!row) fail(401, 'Agent credential rejected');
-      await client.query('SELECT device_agent_change($1::jsonb)', [JSON.stringify({ action: 'heartbeat', deviceId: row.device_id, tokenHash, report: values })]);
+      await client.query('SELECT device_agent_change($1::jsonb)', [JSON.stringify({ action: 'heartbeat', deviceId: row.device_id, tokenHash, report: values, ...(hasInventory ? { inventory } : {}) })]);
       return { schemaVersion: 1, agentProtocol: 1, deviceId: row.device_id, receivedAt: iso((await client.query('SELECT last_seen FROM device_agent_connections WHERE device_id=$1', [row.device_id])).rows[0].last_seen) };
     });
   }

@@ -48,7 +48,7 @@ test('device agent enrollment and revocation require confirmation and show the a
  await fixture(page);let connection:any={schemaVersion:1,agentProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,revision:'0',status:'not-enrolled',enrolledAt:null,lastSeen:null,credentialExpiresAt:null,enrollmentExpiresAt:null,report:null,history:{total:0,page:1,limit:25,events:[]}};
  const writes:any[]=[];const token='odae_'+'a'.repeat(43);
  await page.route(/\/api\/devices\/[^/]+\/agent(?:\/|\?|$)/,async route=>{
-  const request=route.request();if(request.method()==='GET')return route.fulfill({json:connection});
+  const request=route.request();if(request.method()==='GET'&&new URL(request.url()).pathname.endsWith('/inventory'))return route.fulfill({json:{schemaVersion:1,inventoryProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,checkedAt:new Date().toISOString(),connectionStatus:connection.status,status:'missing',inventory:null}});if(request.method()==='GET')return route.fulfill({json:connection});
   const action=new URL(request.url()).pathname.endsWith('/issue')?'issue':'revoke';const body=request.postDataJSON();writes.push({action,body,etag:request.headers()['if-match']});
   if(request.headers()['if-match']!==`"agent-${deviceId}-${connection.revision}"`)return route.fulfill({status:412,json:{error:'stale'}});
   const expiresAt=new Date(Date.now()+600000).toISOString();connection={...connection,revision:String(Number(connection.revision)+1),status:action==='issue'?'pending':'revoked',enrollmentExpiresAt:action==='issue'?expiresAt:null};
@@ -62,4 +62,19 @@ test('device agent enrollment and revocation require confirmation and show the a
  await panel.getByRole('button',{name:'Gerätezugang widerrufen'}).click();dialog=page.getByRole('alertdialog');await dialog.getByLabel('Begründung').fill('Verbindung nach bestätigtem Test widerrufen');await dialog.getByRole('button',{name:'Bestätigen'}).click();await expect(panel.getByText('Zugang widerrufen',{exact:true})).toBeVisible();
  expect(writes.map(write=>write.etag)).toEqual([`"agent-${deviceId}-0"`,`"agent-${deviceId}-3"`]);expect(writes.every(write=>write.body.confirm===true&&write.body.reason.length>=10)).toBe(true);
  await page.setViewportSize({width:390,height:844});await panel.getByRole('heading',{name:'Geräteverbindung',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'/private/tmp/opendirectory-agent-mobile.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
+
+test('hardware arrives from the registered agent and survives revocation as historical data on desktop and mobile', async ({page}) => {
+ const writes=await fixture(page);let phase='missing';let deny=false;const enrolledAt=new Date(Date.now()-3600000).toISOString(),receivedAt=new Date(Date.now()-1000).toISOString();
+ await page.route(/\/api\/devices\/[^/]+\/agent(?:\/|\?|$)/,async route=>{
+  const status=phase==='historical'?'revoked':'connected';
+  if(new URL(route.request().url()).pathname.endsWith('/inventory'))return route.fulfill({status:deny?428:200,json:deny?{error:'Fresh MFA required'}:{schemaVersion:1,inventoryProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,checkedAt:new Date().toISOString(),connectionStatus:status,status:phase,inventory:phase==='missing'?null:{schemaVersion:1,receivedAt,enrolledAt,revision:'3',platform:'linux',agentVersion:'1.2.0',facts:{schemaVersion:1,cpu:{model:'Measured fixture CPU',logicalProcessors:8},memory:{totalBytes:'34359738368',availableBytes:'17179869184'},systemDisk:{totalBytes:'549755813888',availableBytes:'274877906944'},uptimeSeconds:'86461'}}}});
+  return route.fulfill({json:{schemaVersion:1,agentProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,revision:phase==='historical'?'4':'3',status,enrolledAt,lastSeen:receivedAt,credentialExpiresAt:new Date(Date.now()+86400000).toISOString(),enrollmentExpiresAt:null,report:{hostname:'measured-workstation',platform:'linux',architecture:'x86_64',osVersion:'Linux',agentVersion:phase==='missing'?'1.1.0':'1.2.0'},history:{total:0,page:1,limit:25,events:[]}}});
+ });
+ await create(page);const panel=page.getByRole('region',{name:'Geräteverbindung'});const hardware=page.getByRole('region',{name:'System und Hardware'});
+ await expect(hardware).toContainText('Noch keine Systemdaten gemeldet');phase='current';await panel.getByRole('button',{name:'Verbindungsstatus aktualisieren'}).click();
+ await expect(hardware).toContainText('Measured fixture CPU');await expect(hardware).toContainText('32 GiB gesamt');await expect(hardware).toContainText('512 GiB gesamt');await expect(hardware.getByRole('progressbar',{name:'Arbeitsspeicher belegt'})).toHaveAttribute('value','50');
+ await hardware.scrollIntoViewIfNeeded();await page.screenshot({path:'/private/tmp/od-hardware-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await hardware.scrollIntoViewIfNeeded();await page.screenshot({path:'/private/tmp/od-hardware-mobile.png'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ phase='historical';await panel.getByRole('button',{name:'Verbindungsstatus aktualisieren'}).click();await expect(hardware).toContainText('Frühere Geräteverbindung');await expect(hardware).toContainText('Measured fixture CPU');
+ deny=true;await panel.getByRole('button',{name:'Verbindungsstatus aktualisieren'}).click();await expect(page.getByRole('alert').filter({hasText:'fünf Minuten'})).toBeVisible();await expect(page.getByText('Measured fixture CPU')).toHaveCount(0);expect(writes).toHaveLength(1);
 });

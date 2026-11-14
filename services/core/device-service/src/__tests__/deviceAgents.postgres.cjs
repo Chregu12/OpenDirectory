@@ -31,6 +31,62 @@ const get = () => agents.get(unit.id, {}, {}, 'Bearer original');
 const manage = async (action = 'issue', revision) => agents.manage(unit.id, action, decision, agentEtag(unit.id, revision ?? (await get()).revision), {}, 'Bearer original', randomUUID());
 const enroll = token => agents.register({ token, report }, randomUUID());
 const heartbeat = token => agents.heartbeat({ deviceId: unit.id, report }, 'Bearer ' + token);
+const hardware = () => ({ schemaVersion: 1, cpu: { model: 'Native fixture CPU', logicalProcessors: 8 }, memory: { totalBytes: '9007199254740993', availableBytes: '4000000000' }, systemDisk: { totalBytes: '1000000000000', availableBytes: '200000000000' }, uptimeSeconds: '86461' });
+const systemReport = () => agents.inventoryReport(unit.id, {}, {}, 'Bearer original');
+const hardwareHeartbeat = (token, inventory = hardware()) => agents.heartbeat({ deviceId: unit.id, report, inventory }, 'Bearer ' + token);
+
+test('hardware heartbeat persists exact measured counters and server-owned receipt without mutating inventory or audit', async () => {
+ assert.equal((await systemReport()).status, 'missing');
+ const registered = await enroll((await manage()).enrollmentToken); assert.equal((await systemReport()).status, 'missing');
+ await hardwareHeartbeat(registered.deviceToken);
+ const result = await systemReport(); assert.equal(result.status, 'current'); assert.deepEqual(result.inventory.facts, hardware()); assert.equal(result.inventory.agentVersion, report.agentVersion);
+ assert.ok(Date.parse(result.inventory.receivedAt) <= Date.parse(result.checkedAt)); assert.equal(result.inventory.revision, (await get()).revision);
+ assert.equal((await inventory.get(unit.id, {}, 'Bearer original')).revision, unit.revision); assert.equal((await get()).history.total, 2);
+ const receipt = result.inventory; await heartbeat(registered.deviceToken); assert.deepEqual((await systemReport()).inventory, receipt);
+ const updated = hardware(); updated.memory = null; await hardwareHeartbeat(registered.deviceToken, updated); assert.equal((await systemReport()).inventory.facts.memory, null);
+ assert.ok(!JSON.stringify(result).includes('_hash')); assert.ok(!JSON.stringify(result).includes(registered.deviceToken));
+});
+test('historical hardware is retained but never adopted by a newly issued or registered connection', async () => {
+ const first = await enroll((await manage()).enrollmentToken); await hardwareHeartbeat(first.deviceToken); const receipt = (await systemReport()).inventory;
+ await manage('revoke'); assert.equal((await systemReport()).status, 'historical'); assert.deepEqual((await systemReport()).inventory, receipt);
+ const code = await manage(); assert.equal((await systemReport()).status, 'historical'); const current = await enroll(code.enrollmentToken);
+ assert.equal((await systemReport()).status, 'historical'); await assert.rejects(hardwareHeartbeat(first.deviceToken), { status: 401 });
+ await hardwareHeartbeat(current.deviceToken); assert.equal((await systemReport()).status, 'current'); assert.notEqual((await systemReport()).inventory.revision, receipt.revision);
+});
+test('hardware shape rejects unsafe counters, false measurements, added identity fields and caller timestamps at both boundaries', async () => {
+ const { validateInventory } = require('../AgentInventory');
+ const registered = await enroll((await manage()).enrollmentToken);
+ const invalid = [null, {}, { ...hardware(), tenantId: source.tenant.id }, { ...hardware(), receivedAt: new Date().toISOString() }, { ...hardware(), memory: { totalBytes: 16, availableBytes: '1' } }, { ...hardware(), memory: { totalBytes: '0', availableBytes: '0' } }, { ...hardware(), systemDisk: { totalBytes: '10', availableBytes: '11' } }, { ...hardware(), uptimeSeconds: '1\n' }, { ...hardware(), uptimeSeconds: '9223372036854775808' }, { ...hardware(), cpu: { model: 'invalid\nmodel', logicalProcessors: 2 } }, { ...hardware(), cpu: { model: 'CPU', logicalProcessors: 1.5 } }];
+ for (const value of invalid) {
+  assert.throws(() => validateInventory(value), { status: 400 });
+  assert.equal((await pool.query('SELECT device_agent_inventory_valid($1::jsonb) AS valid', [JSON.stringify(value)])).rows[0].valid, false);
+  await assert.rejects(hardwareHeartbeat(registered.deviceToken, value), { status: 400 });
+ }
+ assert.equal((await systemReport()).status, 'missing');
+});
+test('hardware reads enforce the same own tenant, original live authority and exact selectors', async () => {
+ await assert.rejects(agents.inventoryReport(unit.id, { tenantId: source.tenant.id }, {}, 'Bearer original'), { status: 400 });
+ source.tenant.id = randomUUID(); await assert.rejects(systemReport(), { status: 404 });
+ revoked = true; await assert.rejects(systemReport(), { status: 401 });
+});
+test('missing hardware receiver or late report drift prevents successful writes at physical commit', async () => {
+ const registered = await enroll((await manage()).enrollmentToken);
+ await assert.rejects(pool.query("UPDATE device_agent_connections SET inventory_report='{}'::jsonb"));
+ await pool.query('ALTER TABLE device_agent_connections DROP CONSTRAINT device_agent_inventory_shape'); await assert.rejects(systemReport()); await assert.rejects(hardwareHeartbeat(registered.deviceToken));
+ await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations/009_agent_inventory.sql'), 'utf8'));
+ await pool.query(`CREATE FUNCTION poison_hardware() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.inventory_report=jsonb_set(NEW.inventory_report,'{facts,memory,availableBytes}','"0"');RETURN NEW;END; $$; CREATE TRIGGER z_poison_hardware BEFORE UPDATE ON device_agent_connections FOR EACH ROW EXECUTE FUNCTION poison_hardware()`);
+ await assert.rejects(hardwareHeartbeat(registered.deviceToken), { code: '42501' }); assert.equal((await systemReport()).status, 'missing');
+});
+test('hardware receipts survive migration replay and stale contact never presents live system data', async () => {
+ const registered = await enroll((await manage()).enrollmentToken); await hardwareHeartbeat(registered.deviceToken); const original = (await systemReport()).inventory;
+ for (const file of ['008_device_agents.sql','009_agent_inventory.sql']) await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations', file), 'utf8'));
+ assert.deepEqual((await systemReport()).inventory, original);
+ // Only this disposable fixture moves the clock-bound rows; production guards stay active.
+ await pool.query('ALTER TABLE device_agent_connections DISABLE TRIGGER USER');
+ try { await pool.query(`UPDATE device_agent_connections SET last_seen=statement_timestamp()-interval '6 minutes',enrolled_at=statement_timestamp()-interval '1 hour',inventory_report=inventory_report||jsonb_build_object('enrolledAt',statement_timestamp()-interval '1 hour','receivedAt',statement_timestamp()-interval '6 minutes')`); }
+ finally { await pool.query('ALTER TABLE device_agent_connections ENABLE TRIGGER USER'); }
+ assert.equal((await systemReport()).status, 'stale');
+});
 
 test('fleet reads real agent status and counts in one own-tenant snapshot without changing inventory', async () => {
  const registered = await enroll((await manage()).enrollmentToken); await heartbeat(registered.deviceToken);
@@ -176,6 +232,7 @@ test('actual Rust binary enrolls through HTTP gateway, stores a private credenti
   const stored = JSON.parse(fs.readFileSync(configPath, 'utf8')); assert.equal(stored.enrollment_token, null); assert.match(stored.device_token, /^odad_/); assert.equal(stored.device_id, unit.id);
   if (process.platform !== 'win32') assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
   assert.equal((await run('heartbeat')).code, 0); assert.equal((await get()).status, 'connected');
+  const measured = await systemReport(); assert.equal(measured.status, 'current'); assert.equal(measured.inventory.agentVersion, '1.2.0'); assert.ok(Number(measured.inventory.facts.cpu.logicalProcessors) > 0); assert.ok(BigInt(measured.inventory.facts.memory.totalBytes) > 0n);
   assert.equal((await fetch(endpoint + '/api/devices', { headers: { Authorization: 'Bearer ' + stored.device_token } })).status, 401);
   assert.equal((await fetch(endpoint + '/api/device-agent/heartbeat?deviceId=foreign', { method: 'POST' })).status, 404);
   await manage('revoke'); const denied = await run('heartbeat'); assert.equal(denied.code, 1); assert.match(denied.output, /401/); assert.ok(!denied.output.includes(stored.device_token));

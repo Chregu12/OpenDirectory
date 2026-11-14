@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.35.0",
+    "version": "1.36.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -44957,6 +44957,872 @@
           }
         }
       }
+    },
+    "/api/devices/{id}/agent/inventory": {
+      "get": {
+        "operationId": "readOwnDeviceAgentInventory",
+        "summary": "Read actual reported own-device hardware and source freshness",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Only current canonical administration, the current Engineering device-enrollment-operator duty or the actual original own-company owner receives the three bounded inventory duties. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. Actual agent facts remain distinct from manually edited inventory. Missing values are null. One database timestamp and exact enrollment generation determine current, stale after five minutes/offline, or historical after reissue/revocation/expiry. No provider compliance or attestation is inferred. No selectors or body.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bound source receipt and unmodified byte strings; no credentials or hashes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInventoryPage"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid exact fields/selectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original token revoked, expired or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own inventory duty required; no workload/claim bypass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or canonical recipient absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate asset/serial, same assignment or conflicting local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh verified MFA and exact strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Inventory only: no supported enrollment or provider/remote action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistent database, original live source or receiving evidence unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/device-agent/heartbeat": {
+      "post": {
+        "operationId": "receiveDeviceAgentHeartbeat",
+        "summary": "Receive an actual credential-bound agent contact and optional hardware report",
+        "description": "Only the currently registered device credential can report for that exact device. Human JWTs, tenant overrides, caller timestamps, unknown fields and invalid capacities are rejected. inventory is optional for older agents. Storage, source receipt and heartbeat update commit atomically through the device row lock and physical expiry guards. No inventory, assignment or compliance revision is changed.",
+        "security": [
+          {
+            "deviceCredential": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "deviceId",
+                  "report"
+                ],
+                "properties": {
+                  "deviceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "report": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "hostname",
+                      "platform",
+                      "architecture",
+                      "osVersion",
+                      "agentVersion"
+                    ],
+                    "properties": {
+                      "hostname": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "platform": {
+                        "enum": [
+                          "macos",
+                          "windows",
+                          "linux"
+                        ]
+                      },
+                      "architecture": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "osVersion": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "agentVersion": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      }
+                    }
+                  },
+                  "inventory": {
+                    "$ref": "#/components/schemas/AgentInventoryFacts"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual server-owned contact time; credentials are never returned on heartbeat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "agentProtocol",
+                    "deviceId",
+                    "receivedAt"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "agentProtocol": {
+                      "const": 1
+                    },
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "receivedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid exact fields/selectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original token revoked, expired or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actual own inventory duty required; no workload/claim bypass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or canonical recipient absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate asset/serial, same assignment or conflicting local state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Exact device revision changed; reload, never automatically retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Narrow export to at most 5000 inventory assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh verified MFA and exact strong If-Match required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Inventory only: no supported enrollment or provider/remote action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistent database, original live source or receiving evidence unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -44996,6 +45862,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Read-only Auth workload: RS256, typ od-credential-state+jwt, audience opendirectory-credential-authorization, purpose credential-state-read, scope credentials.authorization.read, exact subject/path and at most 30 seconds."
+      },
+      "deviceCredential": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "OpenDirectory device credential",
+        "description": "Exact currently registered opaque odad_ device credential; never a human or workload token."
       }
     },
     "schemas": {
@@ -62839,6 +63711,227 @@
                 }
               }
             }
+          }
+        }
+      },
+      "AgentInventoryFacts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "cpu",
+          "memory",
+          "systemDisk",
+          "uptimeSeconds"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "cpu": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "model",
+                  "logicalProcessors"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "logicalProcessors": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65536
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "totalBytes",
+                  "availableBytes"
+                ],
+                "properties": {
+                  "totalBytes": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Positive exact byte count"
+                  },
+                  "availableBytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "description": "Exact available bytes, no greater than totalBytes"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "systemDisk": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "totalBytes",
+                  "availableBytes"
+                ],
+                "properties": {
+                  "totalBytes": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Positive exact byte count"
+                  },
+                  "availableBytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "description": "Exact available bytes, no greater than totalBytes"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uptimeSeconds": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "description": "Canonical nonnegative decimal integer, at most 9223372036854775807; byte counters are never JSON numbers."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AgentInventoryReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "facts",
+          "receivedAt",
+          "enrolledAt",
+          "revision",
+          "platform",
+          "agentVersion"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "facts": {
+            "$ref": "#/components/schemas/AgentInventoryFacts"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enrolledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+          },
+          "platform": {
+            "enum": [
+              "macos",
+              "windows",
+              "linux"
+            ]
+          },
+          "agentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        }
+      },
+      "AgentInventoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "inventoryProtocol",
+          "actorUserId",
+          "tenantId",
+          "deviceId",
+          "checkedAt",
+          "connectionStatus",
+          "status",
+          "inventory"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "inventoryProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "connectionStatus": {
+            "enum": [
+              "not-enrolled",
+              "pending",
+              "connected",
+              "offline",
+              "expired",
+              "revoked"
+            ]
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "current",
+              "stale",
+              "historical"
+            ]
+          },
+          "inventory": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AgentInventoryReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

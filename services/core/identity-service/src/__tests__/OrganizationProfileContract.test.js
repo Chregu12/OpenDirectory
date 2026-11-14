@@ -46,7 +46,7 @@ test('every minimal license or policy source documents the mandatory receiving p
 });
 test('company license operations document real finite inventory, exact versions and explicit original source without a global licensing permission', () => {
   const document = require('../../scripts/organization-openapi').organizationOpenApi(); const schemas = document.components.schemas;
-  expect(document.info.version).toBe('1.35.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
+  expect(document.info.version).toBe('1.36.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
   expect(schemas.CompanyLicensePool.properties.allocationMode.const).toBe('local-only'); expect(schemas.CompanyLicenseCapabilities.properties.permissions.const).toEqual(['company.apps.read', 'company.apps.create', 'company.apps.assign']);
   expect(document.paths['/api/licenses/company/pools/{id}/assignments'].post.parameters).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'If-Match', required: true })]));
   expect(document.paths['/api/licenses/company/pools/{id}/assignments/{assignmentId}/revoke'].post.requestBody.content['application/json'].schema.properties.confirm.const).toBe(true);
@@ -68,4 +68,13 @@ test('company license operations document real finite inventory, exact versions 
   expect(document.paths['/api/users/{userId}/company-offboarding'].post.requestBody.content['application/json'].schema.required).toEqual(['workflowId', 'expectedRevision', 'confirm']);
   expect(document.paths['/api/licenses/company/offboarding-workflows/{id}/continue'].post.requestBody.content['application/json'].schema.properties.assignments.maxItems).toBe(25);
   expect(schemas.CompanyOffboardingCapability.properties.scope.const).toBe('account-and-local-licenses');
+});
+
+test('agent hardware uses a dedicated device credential and optional exact hardware facts while reads remain human', () => {
+ const document = require('../../scripts/organization-openapi').organizationOpenApi();
+ const write = document.paths['/api/device-agent/heartbeat'].post;
+ expect(write.security).toEqual([{ deviceCredential: [] }]); expect(document.components.securitySchemes.deviceCredential.bearerFormat).toBe('OpenDirectory device credential');
+ expect(write.requestBody.content['application/json'].schema.required).toEqual(['deviceId', 'report']);
+ expect(document.paths['/api/devices/{id}/agent/inventory'].get.parameters.map(item => item.name)).toEqual(['id']);
+ expect(document.components.schemas.AgentInventoryFacts.properties.memory.oneOf).toEqual(expect.arrayContaining([{ type: 'null' }]));
 });
