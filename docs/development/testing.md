@@ -82,6 +82,20 @@ nonempty role history refuses cleanup. `fixtureReset.postgres.cjs` covers retain
 history, rollback, rejected namespaces/commands and historical pre-role schemas.
 Production retention guards are unchanged.
 
+Migration replay tests must run the complete ordered migration set, as service
+startup does. A hand-maintained subset can overwrite a function without updating
+later pinned manifests and correctly makes current authorization unavailable.
+Physical MFA-expiry tests leave admission headroom, wait past the original proof
+cutoff only after the application callback, and assert that the commit checkpoint
+was reached before accepting the SQL denial and unchanged data.
+
+The 2026-11-14 root lock cleanup removes unused Lerna/Turbo dependencies and pins
+both gRPC workspaces to `@grpc/grpc-js >=1.14.7 <2`. A clean Node 20 install passes
+the high-severity audit gate; the scan still reports six low and nine moderate
+findings. These are not suppressed or treated as proof that nested production
+service images have been audited. Apple MDM, Monitoring and Quick Actions locks
+also include their previously missing declared dependencies.
+
 The release workflow validates version input as data, shares the exact normalized
 tag with its archive job, and creates the archive outside its source directory.
 Validating these steps locally does not publish or prove a GitHub Release.
