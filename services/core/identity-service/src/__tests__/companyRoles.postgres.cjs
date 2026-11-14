@@ -22,6 +22,11 @@ async function person(label='employee'){
 }
 const createRole=async extra=>(await roles.create(definition(extra),owner.user,bearer)).role;
 const assign=(role,target,extra={})=>roles.assign(role.id,{targetType:'user',targetId:target,scopeType:'tenant',ouId:null,durationSeconds:3600,reason,confirm:true,...extra},C.etag('role',role),owner.user,bearer);
+test('directory work keeps its transaction budget after the independently bounded canonical authority lookup',async()=>{
+ const delegate=await person('reader-budget');await assign(await createRole({permissions:['users.read']}),delegate.id);
+ const tenant=await reader.read(['users.read'],delegate.user,bearer,async(client,tenantId)=>{await client.query('SELECT pg_sleep(1.1)');return tenantId;});
+ assert.equal(tenant,owner.receipt.tenantId);
+});
 test('actual custom role grants own directory read and profile updates without global token roles',async()=>{
  const delegate=await person('delegate'),target=await person('target');await assert.rejects(reader.users({},delegate.user,bearer),{status:403});
  const role=await createRole();const result=await assign(role,delegate.id);assert.equal(result.grant.status,'active');assert.deepEqual(delegate.user.roles,[]);

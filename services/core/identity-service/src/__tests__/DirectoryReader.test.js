@@ -28,7 +28,7 @@ test('durable storage is mandatory and an unavailable source never becomes an un
  database.isAvailable.mockReturnValue(false);await expect(reader.users({},user,'Bearer original')).rejects.toMatchObject({status:503});expect(verify).not.toHaveBeenCalled();
 });
 test.each([401,503])('a final original-token rejection or outage (%i) discards a completed SQL result',async status=>{
- verify.mockResolvedValueOnce(tenant).mockRejectedValueOnce(Object.assign(new Error('Original authority lost'),{status}));await expect(reader.users({},user,'Bearer original')).rejects.toMatchObject({status});expect(database.query).toHaveBeenCalledTimes(2);
+ verify.mockResolvedValueOnce(tenant).mockRejectedValueOnce(Object.assign(new Error('Original authority lost'),{status}));await expect(reader.users({},user,'Bearer original')).rejects.toMatchObject({status});expect(database.query).toHaveBeenCalledTimes(3);
 });
 test('a final tenant generation switch cannot be accepted as fresh scope',async()=>{
  verify.mockResolvedValueOnce(tenant).mockResolvedValueOnce({...tenant,generation:'8'});await expect(reader.users({},user,'Bearer original')).rejects.toMatchObject({status:401});
@@ -62,5 +62,5 @@ test.each([{tenantId:tenant.id},{membership:'all'},{enabled:'true'},{membership:
  await expect(reader.userGroups(crypto.randomUUID(),query,user,'Bearer original')).rejects.toMatchObject({status:400});expect(database.query).not.toHaveBeenCalled();
 });
 test('unknown and foreign user group targets are unavailable before any group metadata is read',async()=>{
- database.query.mockResolvedValue({rows:[]});await expect(reader.userGroups(crypto.randomUUID(),{},user,'Bearer original')).rejects.toMatchObject({status:404});expect(database.query).toHaveBeenCalledTimes(1);
+ database.query.mockResolvedValue({rows:[]});await expect(reader.userGroups(crypto.randomUUID(),{},user,'Bearer original')).rejects.toMatchObject({status:404});expect(database.query).toHaveBeenCalledTimes(2);
 });

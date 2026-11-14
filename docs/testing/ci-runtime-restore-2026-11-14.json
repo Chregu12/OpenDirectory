@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-14T22:13:29.104721+00:00",
+  "checkedAt": "2026-11-14T23:27:12.593827+00:00",
   "status": "restore-rehearsals-and-local-ci-followup-passed-rollout-prepared",
   "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00",
   "ci": {
@@ -257,5 +257,49 @@
         "anonymousPrincipals": 401
       }
     }
+  },
+  "nativeIntegrationFollowup": {
+    "observedRunId": 43647032607,
+    "sourceCommit": "e419ea34eaae382ccff61bf0c9c151716fb5a538",
+    "jobId": 132607018763,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43647032607",
+    "nativeOAuthPassed": 302,
+    "nativeOAuthFailed": 2,
+    "fullCiResult": "failure",
+    "failures": [
+      "DirectoryReader retained the nested 1-second authority statement timeout for scoped directory queries",
+      "Device duty fixture assumed compliance policy revision zero after Engineering maintenance"
+    ],
+    "directoryFix": {
+      "canonicalAuthorityBudgetMs": 1000,
+      "directoryTransactionBudgetMs": 15000,
+      "unitTestsPassed": 52,
+      "companyRolePostgresTestsPassed": 46,
+      "includesRealSqlOperationBeyondAuthorityBudget": true
+    },
+    "dutyRegression": {
+      "distinctPassed": 5,
+      "runs": "four successful duties followed by the Engineering/device pair after capturing the actual policy revision",
+      "permissionAndConditionalVersionGuardsUnchanged": true
+    },
+    "batchReturnFixture": {
+      "observedFailedRunId": 43646092115,
+      "testClientBudgetBeforeMs": 10000,
+      "testClientBudgetAfterMs": 30000,
+      "existingWebClientBudgetMs": 30000,
+      "actualTwoPoolReturnElapsedMs": 8969,
+      "wholeRegistrationGatewayCasePassed": true
+    },
+    "credentialGate": {
+      "runId": 43650208137,
+      "sourceCommit": "3d6cf46417d412da1dfa97a138bb9f5edae1625c",
+      "jobId": 132616755218,
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "actualLinuxAuthPostgresRedisHttp": true
+    },
+    "rollout": "still pending complete corrected CI",
+    "appStorePreparedChartFrozen": true
   }
 }

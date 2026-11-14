@@ -3467,7 +3467,10 @@ test('production gateway does not treat a real credential-bound pending company 
       const expiredMfaOwner = jwt.sign({ ...historicalOwner, aud: 'opendirectory-api', client_id: clientId, token_use: 'access', jti: randomUUID() }, ownerKeys.privateKey, { algorithm: 'RS256', keyid: ownerKeys.kid, expiresIn: 3600 });
       for (const method of ['GET', 'POST']) { const expired = await request(base, returnRoute, { method, token: expiredMfaOwner, ...(method === 'POST' ? { body: returnInput } : {}) }); assert.ok([401, 428].includes(expired.status), JSON.stringify(expired)); }
       assert.deepEqual(await returnState(), beforeReturns);
-      const returned = await request(base, returnRoute, { method: 'POST', token, body: { ...returnInput, reason: 'r'.repeat(500) } }); assert.equal(returned.status, 200, JSON.stringify(returned.body));
+      // Multi-pool returns use the existing web client's bounded 30-second budget.
+      const returnStarted = performance.now();
+      const returned = await request(base, returnRoute, { method: 'POST', token, body: { ...returnInput, reason: 'r'.repeat(500) }, timeout: 30000 }); assert.equal(returned.status, 200, JSON.stringify(returned.body));
+      process.stdout.write('Company license return: pools=' + captured.length + ' elapsedMs=' + Math.round(performance.now() - returnStarted) + '\n');
       assert.match(returned.body.correlationId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u); assert.equal(returned.headers.get('x-correlation-id'), returned.body.correlationId);
       assert.deepEqual(returned.body, { schemaVersion: 1, actorUserId: activated.body.administratorId, tenantId: activated.body.tenantId, userId: returnUserId, correlationId: returned.body.correlationId,
         results: captured.map(item => ({ poolId: item.poolId, assignmentId: item.assignmentId, status: 'released', code: 200 })) });
@@ -4465,7 +4468,9 @@ test('custom company device PIM uses original OAuth and real inventory complianc
   const retained=(await inventoryFixture.db.query('SELECT proof FROM device_inventory_events WHERE device_id=$1',[device.id])).rows[0].proof;assert.equal(retained.source.delegation.grants[1].source.activationId,activated.body.activation.id);
   assert.equal((await request(base,'/api/users',{token})).status,403);assert.equal((await request(base,'/api/devices/returns/capabilities',{token})).status,200);
   const policyPath='/api/devices/compliance/policies/linux',policyBody={settings:{enabled:true,maxReportAgeSeconds:3600,minimumOsVersion:'0',requireDiskEncryption:false,requireFirewall:false,minimumDiskFreePercent:null},reason:'Use the original independently delegated company compliance duty',confirm:true};
-  const policy=await request(base,policyPath,{method:'PUT',token,headers:{'If-Match':`"device-compliance-${cap.body.tenantId}-linux-0"`},body:policyBody});assert.equal(policy.status,200,JSON.stringify(policy.body));
+  const previousPolicies=await request(base,'/api/devices/compliance/policies',{token});assert.equal(previousPolicies.status,200,JSON.stringify(previousPolicies.body));
+  const previousPolicy=previousPolicies.body.policies.find(policy=>policy.platform==='linux');assert.ok(previousPolicy);
+  const policy=await request(base,policyPath,{method:'PUT',token,headers:{'If-Match':`"device-compliance-${cap.body.tenantId}-linux-${previousPolicy.revision}"`},body:policyBody});assert.equal(policy.status,200,JSON.stringify(policy.body));
   const ended=await request(base,'/api/identity/company-pim/activations/'+activated.body.activation.id+'/end',{method:'POST',token,headers:{'If-Match':`"company-activation-${activated.body.activation.id}-${activated.body.activation.revision}"`},body:{reason:'End the original custom device management work explicitly',confirm:true}});assert.equal(ended.status,200,JSON.stringify(ended.body));
   assert.equal((await request(base,'/api/devices/'+device.id,{token})).status,403);assert.equal((await request(base,'/api/devices/compliance/capabilities',{token})).status,403);
   assert.ok(!(await request(base,'/api/identity/access',{token})).body.permissions.includes('devices.inventory.read'));

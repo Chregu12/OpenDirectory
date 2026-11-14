@@ -37,6 +37,8 @@ class DirectoryReader {
       if (!current.active || !sameContext(current.context, user.identity_authorization) || !sameTenantContext(current.tenant, tenant)
         || !acceptsRoleAuthentication(current.authentication, user)) reject(401, 'Original directory authority changed');
       authentication = current.authentication;
+      // The nested authority lookup has a 1s budget; directory work keeps the transaction's 15s budget.
+      await client.query("SET LOCAL statement_timeout = '15s'");
       const authorize = async required => { const captured = await requireDirectoryPermissions(client,user,required); if (captured) checks.push({required,captured}); return captured; };
       const captured = await authorize(permissions);
       return operation(client, tenant.id, captured, authorize);
