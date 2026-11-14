@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-11-14T21:09:50.061418+00:00",
-  "status": "restore-rehearsals-passed-rollout-prepared",
+  "checkedAt": "2026-11-14T22:03:31.426996+00:00",
+  "status": "restore-rehearsals-and-local-ci-followup-passed-rollout-prepared",
   "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00",
   "ci": {
     "runId": 43635936047,
@@ -8,13 +8,25 @@
     "serviceTests": "success",
     "runtimeImages": "success",
     "securityScan": "success",
-    "nativeAndBrowserIntegration": "in_progress",
+    "nativeAndBrowserIntegration": "failure",
     "browserArtifact": {
       "id": 14129954741,
       "name": "frontend-browser-evidence",
       "sha256": "be88ad4d317a848050d9033d334d45b269ae5ad0ea12334d4a103fa01c202d7f"
     },
-    "nativeIdentityPostgreSQL": "success"
+    "nativeIdentityPostgreSQL": {
+      "passed": 805,
+      "failed": 0
+    },
+    "nativeLicensesPostgreSQL": {
+      "passed": 557,
+      "failed": 0
+    },
+    "nativeOAuthPostgreSQL": {
+      "passed": 295,
+      "failed": 9
+    },
+    "confidentialBrowserIntegration": "not_reached"
   },
   "preparedAppStore": {
     "version": "1.0.51",
@@ -84,7 +96,7 @@
     "separateConsistentSnapshotPerDatabase": true
   },
   "limits": [
-    "Native/cross-service integration CI remains running at this observation.",
+    "The follow-up complete GitHub CI run has not completed. The previous run failed nine native OAuth cases; all nine are locally reverified with corrected fixtures, along with all 58 actual confidential browser cases.",
     "Prepared image is not yet rolled out.",
     "Rehearsals cover these three database archives and selected receiving guards; they do not prove coordinated complete-platform disaster recovery, signing-key recovery, RTO/RPO, or physical agent reconnection."
   ],
@@ -139,6 +151,81 @@
         "ownershipAndPrivilegesRestoredFromArchive": true,
         "receiversPassed": []
       }
+    }
+  },
+  "localCiFollowup": {
+    "status": "passed",
+    "node": "20.20.2",
+    "oauthUnitTests": {
+      "passed": 524,
+      "failed": 0
+    },
+    "nativeFilterExecutionRegressionChecks": {
+      "passed": 2,
+      "failed": 0
+    },
+    "dedicatedApplicationGroupPrincipal": {
+      "passed": 1,
+      "failed": 0
+    },
+    "isolatedCompanyBlueprintJourneys": {
+      "passed": 2,
+      "failed": 0
+    },
+    "confidentialBrowserDefaultGroup": {
+      "passed": 35,
+      "failed": 0
+    },
+    "previouslyFailingNativeOAuthCases": {
+      "allNineReproducedAndPassedWithCorrectedFixtures": true,
+      "totalFocusedCasesIncludingOnePreviouslyPassingBlueprintJourney": 10
+    },
+    "confidentialBrowserGovernanceGroup": {
+      "passed": 13,
+      "failed": 0
+    },
+    "confidentialBrowserCompanyOnboarding": {
+      "passed": 1,
+      "failed": 0
+    },
+    "confidentialBrowserOwnerBlueprints": {
+      "passed": 1,
+      "failed": 0
+    },
+    "confidentialBrowserProfileMfaReview": {
+      "passed": 3,
+      "failed": 0,
+      "fixtureShutdownCompleted": true
+    },
+    "commit": "0510afa5691d452a75969480e882de0248530e40",
+    "browserMediationSecurity": {
+      "passed": 67,
+      "failed": 0
+    },
+    "confidentialBrowserIntegration": {
+      "passed": 58,
+      "failed": 0,
+      "distinctCaseNamesMatchCompleteSuite": true,
+      "freshFixtureGroupSizes": [
+        35,
+        13,
+        1,
+        1,
+        3,
+        1,
+        4
+      ],
+      "shutdownCompleted": true
+    },
+    "confidentialBrowserOwnerAssignments": {
+      "passed": 1,
+      "failed": 0,
+      "fixtureShutdownCompleted": true
+    },
+    "confidentialBrowserAutomation": {
+      "passed": 4,
+      "failed": 0,
+      "fixtureShutdownCompleted": true
     }
   }
 }
