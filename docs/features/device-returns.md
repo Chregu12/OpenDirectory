@@ -32,7 +32,7 @@ Verlorener HTTP-Erfolg ist kein Rollback. Tatsächliche Vorschau/Details/Histori
 
 ## Least Privilege und Kontogeneration
 
-Aktueller eigener Company-Owner oder tatsächlicher kanonischer Home-Tenant-Admin mit ursprünglichem menschlichem Bearer und unabhängig bestätigter MFA innerhalb von 300 Sekunden. Dieselben drei bisherigen Inventarfähigkeiten bleiben unverändert: `devices.inventory.read`, `devices.inventory.create`, `devices.inventory.assign`. Keine globale Rolle, neue Company-App-Fähigkeit, Service-Credential oder aus JWT-Behauptungen abgeleitete Ownership entsteht. Allgemeine delegierte Geräte-Rollen/OU-Scopes bleiben offen.
+Ursprünglicher menschlicher Bearer mit aktueller eigener Inventarhoheit und unabhängig bestätigter MFA innerhalb von 300 Sekunden. Owner, kanonischer Home-Tenant-Admin und Engineering behalten die drei bisherigen Inventarfähigkeiten: `devices.inventory.read`, `devices.inventory.create`, `devices.inventory.assign`. Keine globale Rolle, neue Company-App-Fähigkeit, Service-Credential oder aus JWT-Behauptungen abgeleitete Ownership entsteht. [Eigene getrennte Gerätepflichten über Firmenrollen/PIM](device-company-roles.md) unterstützen ab 1.0.50 tenantweite Leser und Zuweisungsverwalter. Operative Entscheidungen und Rückgabeanforderungen brauchen Lesen und Zuweisen; Bestandsverwaltung und Benutzerprofilrecht werden dadurch nicht erteilt. Geräte-OU-/Gerätegruppenscopes bleiben offen.
 
 Anfordern und Anforderungs-Recovery benötigen den echten ursprünglichen Identity-045-Account-Beleg für genau Tenant/Vorgang/Benutzer und weiterhin dieselbe negative Eligibility-Generation. Selbst-Offboarding, gelöschte/fremde Ziele, Reaktivierung oder erneutes Sperren in einer späteren Generation sperren. Ein legitimer Authorization-Revision-Wechsel durch Rollenentzug ist keine andere negative Eligibility und wird nicht dafür gehalten.
 
@@ -42,7 +42,7 @@ Allgemeine Rückgabeansicht und operative Entscheidungen benötigen unabhängig 
 
 Die zehn neuen [OpenAPI-Operationen](../api/openapi.yaml) trennen tatsächliche Herkunft, Anforderung und Entscheidung:
 
-- `POST /api/identity/device-offboarding` akzeptiert nur `{workflowId,userId}`. Die ursprüngliche Identity-Hoheit liefert genau 13 Quellfelder: bisherige Inventarquelle, Protokoll 1, negative Ziel-Eligibility und minimalen realen Parent-Beleg. Die bestehende 11-Feld-Inventarquelle bleibt unverändert.
+- `POST /api/identity/device-offboarding` akzeptiert nur `{workflowId,userId}`. Die ursprüngliche Identity-Hoheit liefert dreizehn Legacy-Quellfelder oder vierzehn bei tatsächlicher Delegation: bisherige Inventarquelle, Protokoll 1, negative Ziel-Eligibility und minimalen realen Parent-Beleg. Legacy-Inventarquellen behalten elf Felder; tatsächliche Firmenrollenquellen ergänzen die exakte Delegation als zwölftes Feld. Der Offboarding-Beleg hat entsprechend dreizehn oder vierzehn Felder und bleibt an denselben Originalbenutzer gebunden.
 - `GET /api/devices/returns/capabilities` bestätigt `deviceReturnsProtocol:1`; ein alter Inventarreceiver genügt nicht. Gateway und direkter Receiver prüfen unabhängig, kein Legacy-Fallback.
 - `GET /api/devices/returns`, `GET /api/devices/returns/{id}` und `GET /api/devices/returns/{id}/history` liefern wirkliche eigene Aufträge, beide Versionen und retained Events/Pending-Zustellung.
 - `POST /api/devices/returns/{id}/decision` verlangt exakten ETag und `{action:"returned"|"cancelled",reason,confirm:true}`.

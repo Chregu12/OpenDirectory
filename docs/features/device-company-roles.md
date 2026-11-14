@@ -36,6 +36,8 @@ Identity und Device verwenden getrennte Datenbanken. Live-Checkpoints verhindern
 
 ## Abnahme und offene Punkte
 
+[Prüf- und Liefernachweis](../deployment/device-company-roles-2026-11-14.json) für Version 1.0.50 und Helm-Revision 85.
+
 Echte getrennte PostgreSQL-Schemas prüfen Lesen/Zuweisen ohne Profilausweitung, PIM-basierte Geräteänderungen, Rücknahme während einer gehaltenen Schreibtransaktion mit vollständigem Rollback, abgelehnte Geräte-OU-Vergaben, Migration-Replay, unabhängige Compliance-Verwaltung sowie echte Offboarding-Rückgabe und atomaren Inventarentzug. Ein zusätzlicher signierter OAuth-/Gateway-/PostgreSQL-Prozess prüft die Geräte-PIM-Aktivierung ohne globale Engineering-/Adminrolle. Browser prüfen Definition/Eligibility, Leserechte und Beenden auf Desktop/Mobil sowie die bisherigen Geräteprozesse gegen das gebaute Produktionsimage. Die Tests verwenden isolierte Konten und Datenbanken.
 
 Geräte-OU-/Gerätegruppenscopes, weitere Geräte-/Lizenzaktionen, vollständiges MDM, Betriebssystemsignierung und physische Agent-Abnahmen bleiben Teil des [offenen Gesamtauftrags](../implementation-worklist.md).
