@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { randomBytes } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { readJson } = require('./lib/runtime-image-http.cjs');
 
 const root = path.resolve(__dirname, '..');
 const project = 'od-runtime-test-' + randomBytes(5).toString('hex');
@@ -67,9 +68,9 @@ async function address(name, port) {
 
 async function healthy(base, check) {
   return until(base + '/health', async () => {
-    const response = await fetch(base + '/health', { signal: AbortSignal.timeout(3000) });
+    const response = await readJson(base + '/health');
     if (!response.ok) return false;
-    const body = await response.json();
+    const body = response.body;
     return check(body) && body;
   });
 }
@@ -90,7 +91,7 @@ async function main() {
     console.log('Checking App Store startup, authorization and package storage');
     const storeAddress = await address(appstore, 3906);
     await healthy(storeAddress, body => body.status === 'healthy');
-    assert.equal((await fetch(storeAddress + '/api/store/catalog')).status, 401);
+    assert.equal((await readJson(storeAddress + '/api/store/catalog')).status, 401);
     const uid = await docker(['exec', appstore, 'node', '-p', 'process.getuid()']);
     assert.notEqual(uid, '0');
     await docker(['exec', appstore, 'node', '-e', "const fs=require('fs');fs.writeFileSync('/data/packages/.runtime-test','own image storage');fs.unlinkSync('/data/packages/.runtime-test')"]);
@@ -101,7 +102,7 @@ async function main() {
     await create(kerberos, ['-p', '127.0.0.1::3013', '--tmpfs', '/var/lib/krb5kdc', ...database, ...oidc, '-e', 'DB_NAME=kerberos', '-e', 'KRB5_REALM=CI.TEST', '-e', 'KDC_HOST=localhost', '-e', 'KRB5_DB_PASSWORD=' + masterPassword, '-e', 'KRB5_ADMIN_PASSWORD=' + adminPassword], images[1]);
     const kdcAddress = await address(kerberos, 3013);
     await healthy(kdcAddress, body => body.status === 'ok' && body.db === 'connected');
-    assert.equal((await fetch(kdcAddress + '/api/kerberos/principals')).status, 401);
+    assert.equal((await readJson(kdcAddress + '/api/kerberos/principals')).status, 401);
     assert.equal(await docker(['exec', kerberos, 'cat', '/proc/1/comm']), 'node');
     assert.match(await docker(['exec', kerberos, 'node', '--version']), /^v20\./);
     await docker(['exec', '-i', kerberos, 'kinit', '-c', '/tmp/runtime-test.ccache', 'admin/admin@CI.TEST'], { input: adminPassword + '\n' });

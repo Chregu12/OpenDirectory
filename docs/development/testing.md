@@ -71,6 +71,10 @@ storage, the patched gRPC dependency, preserved independent PostgreSQL/KDC
 passwords, the foreground Kerberos API and a real native `kinit`/`klist` ticket.
 It removes only its randomly named containers, network and image tags. It requires
 Node 20, Docker and Compose; it does not deploy or prove every other service image.
+Its HTTP deadline stays referenced until response JSON has been consumed:
+`AbortSignal.timeout()` alone can allow an idle Node process to exit while a
+probe remains pending. Child-process regression checks exercise both pending
+connections and pending response bodies; they fail if the timeout is never observed.
 
 The App Store image owns its default `/data/packages` directory. Its Compose build
 context must be the repository root because it copies shared packages. Kerberos

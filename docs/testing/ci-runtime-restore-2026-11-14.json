@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-14T22:03:31.426996+00:00",
+  "checkedAt": "2026-11-14T22:13:29.104721+00:00",
   "status": "restore-rehearsals-and-local-ci-followup-passed-rollout-prepared",
   "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00",
   "ci": {
@@ -96,7 +96,7 @@
     "separateConsistentSnapshotPerDatabase": true
   },
   "limits": [
-    "The follow-up complete GitHub CI run has not completed. The previous run failed nine native OAuth cases; all nine are locally reverified with corrected fixtures, along with all 58 actual confidential browser cases.",
+    "The follow-up complete GitHub CI is still running. Run 43646092115 has a failed image startup harness job; its referenced HTTP deadline repair passes 38 local script tests and actual App Store/Kerberos startup. Full Linux CI verification of this follow-up remains pending.",
     "Prepared image is not yet rolled out.",
     "Rehearsals cover these three database archives and selected receiving guards; they do not prove coordinated complete-platform disaster recovery, signing-key recovery, RTO/RPO, or physical agent reconnection."
   ],
@@ -226,6 +226,36 @@
       "passed": 4,
       "failed": 0,
       "fixtureShutdownCompleted": true
+    }
+  },
+  "runtimeProbeDeadlineFollowup": {
+    "observedRunId": 43646092115,
+    "observedSourceCommit": "1f6736c1f96b702d0d0dbd2f92d03cdcb6900c3d",
+    "failedJobId": 132604088523,
+    "observedFailure": "Runner exited after first startup probe began; unfinished-run guard rejected it.",
+    "node": "20.20.2",
+    "referencedDeadlineCoversResponseBody": true,
+    "helperSha256": "3e436954d66fcc329b151796af127cf9f5801713f78d3965dd1d233c7bf506ab",
+    "scriptHelperTests": {
+      "passed": 38,
+      "failed": 0
+    },
+    "includesIdleChildConnectionAndBodyDeadlineRegressions": true,
+    "localImageStartup": {
+      "appStore": {
+        "healthy": true,
+        "nonRootUid": "1001",
+        "writablePackageStorage": true,
+        "grpc": "1.14.7",
+        "anonymousCatalog": 401
+      },
+      "kerberos": {
+        "healthy": true,
+        "database": "connected",
+        "foregroundApi": true,
+        "nativeTicket": true,
+        "anonymousPrincipals": 401
+      }
     }
   }
 }
