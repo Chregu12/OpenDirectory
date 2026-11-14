@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.33.0",
+    "version": "1.34.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -3769,6 +3769,9 @@
                       "const": 1
                     },
                     "companyPimProtocol": {
+                      "const": 1
+                    },
+                    "companyPimApprovalProtocol": {
                       "const": 1
                     }
                   }
@@ -42571,7 +42574,7 @@
       "get": {
         "operationId": "readOwnCompanyRoleEligibilities",
         "summary": "Read paginated eligible assignments",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -42646,7 +42649,7 @@
       "post": {
         "operationId": "assignOwnCompanyRoleEligibility",
         "summary": "Independently assign person or protected-group eligibility",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -42725,7 +42728,7 @@
       "post": {
         "operationId": "revokeOwnCompanyRoleEligibility",
         "summary": "Withdraw eligibility and stop derived activation effects",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -42804,7 +42807,7 @@
       "post": {
         "operationId": "revokeOwnCompanyRoleActivation",
         "summary": "Independently stop one actual activation",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -42883,7 +42886,7 @@
       "get": {
         "operationId": "readSelfCompanyPim",
         "summary": "Read current original own eligible or running assignments",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -42969,7 +42972,7 @@
       "get": {
         "operationId": "readSelfCompanyPimHistory",
         "summary": "Read actual own activation and cancellation history",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43036,7 +43039,7 @@
       "post": {
         "operationId": "activateSelfCompanyRole",
         "summary": "Activate one original own eligibility with bounded duration",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43115,7 +43118,7 @@
       "post": {
         "operationId": "endSelfCompanyRoleActivation",
         "summary": "End one original own activation",
-        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. No synthetic global role, automatic write retry, scheduled activation or approval workflow for own roles is implied.",
+        "description": "Original issuer-verified human bearer and canonical home tenant. Independent actual company role manager assigns/revokes eligibility with fresh original bound MFA. Eligibility alone grants no directory action. Only the originally eligible person can activate, with fresh MFA and explicit reason/confirmation. Static protected group membership incarnation/reviews, recipient generation, scope generation, current role definition revision, original actor authorization/link context and MFA revision stay live. Activation is bounded by the role maximum, ten hours and remaining eligibility. Existing original issuer assurance policies remain binding; a valid activated source does not require repeating the separate direct-grant five-minute check. Own cancellation needs the current original user and exact activation ETag; manager revocation is independently authorized with fresh MFA. Retained exact effects, audit and local pending outbox are mandatory at physical SQL commit. Configured own-role approval policies are enforced through their separate original request, independent decision and single-use consumption protocol. Direct activation cannot bypass a required approval. No synthetic global role, automatic write retry or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43186,6 +43189,767 @@
           },
           "503": {
             "description": "Required receiver or retained receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-roles/{id}/approval-policy": {
+      "get": {
+        "operationId": "readOwnCompanyPimApprovalPolicy",
+        "summary": "Read the actual role approval policy",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimApprovalPolicyRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOwnCompanyPimApprovalPolicy",
+        "summary": "Version the role policy and invalidate old activations/requests",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-pim-policy-UUID-revision\" including virtual zero."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyPimApprovalPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimApprovalPolicyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/eligibilities/{id}": {
+      "get": {
+        "operationId": "readOwnCompanyPimApprovalOptions",
+        "summary": "Read actual personal eligibility approval options",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimApprovalOptions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/eligibilities/{id}/requests": {
+      "post": {
+        "operationId": "requestOwnCompanyPimApproval",
+        "summary": "Create one exact original activation intent",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-eligibility-UUID-revision\"."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyPimRequestInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/self": {
+      "get": {
+        "operationId": "readOwnCompanyPimRequests",
+        "summary": "Read only own retained requests",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "const": "all"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/requests": {
+      "get": {
+        "operationId": "readCompanyPimReviewQueue",
+        "summary": "Read the actual own-tenant independent review queue",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "const": 25
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "pending",
+                "approved",
+                "all"
+              ],
+              "default": "pending"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/requests/{id}/approve": {
+      "post": {
+        "operationId": "decideOwnCompanyPimRequestApprove",
+        "summary": "Independently approve one exact pending original request",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-request-UUID-revision\"."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/requests/{id}/deny": {
+      "post": {
+        "operationId": "decideOwnCompanyPimRequestDeny",
+        "summary": "Independently deny one exact pending original request",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-request-UUID-revision\"."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/requests/{id}/cancel": {
+      "post": {
+        "operationId": "decideOwnCompanyPimRequestCancel",
+        "summary": "Cancel an own unconsumed original request",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-request-UUID-revision\"."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimRequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
+          }
+        }
+      }
+    },
+    "/api/identity/company-pim-approvals/requests/{id}/activate": {
+      "post": {
+        "operationId": "consumeOwnCompanyPimApproval",
+        "summary": "Consume the exact independent approval with original fresh MFA",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong \"company-request-UUID-revision\"."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyRoleDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Actual own original result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPimApprovedActivationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact fields, target, version or bounded values rejected"
+          },
+          "401": {
+            "description": "Original authority or deadline expired"
+          },
+          "403": {
+            "description": "Independent current reviewer/manager duty missing"
+          },
+          "404": {
+            "description": "Own eligible source or request unavailable"
+          },
+          "409": {
+            "description": "Source, policy or request state changed, duplicate request or insufficient duration"
+          },
+          "412": {
+            "description": "Exact original revision changed; explicitly reload"
+          },
+          "428": {
+            "description": "Fresh original bound MFA, independent approval or strong If-Match required"
+          },
+          "503": {
+            "description": "Original receiver or mandatory receipt unavailable"
           }
         }
       }
@@ -59301,7 +60065,12 @@
                     "eligibility-revoke",
                     "activation-create",
                     "activation-cancel",
-                    "activation-revoke"
+                    "activation-revoke",
+                    "pim-policy-update",
+                    "pim-request-create",
+                    "pim-request-approve",
+                    "pim-request-deny",
+                    "pim-request-cancel"
                   ]
                 },
                 "resourceId": {
@@ -60080,7 +60849,11 @@
                   "enum": [
                     "activation-create",
                     "activation-cancel",
-                    "activation-revoke"
+                    "activation-revoke",
+                    "pim-request-create",
+                    "pim-request-approve",
+                    "pim-request-deny",
+                    "pim-request-cancel"
                   ]
                 },
                 "resourceId": {
@@ -60107,6 +60880,729 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CompanyPimApprovalPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roleId",
+          "revision",
+          "approvalRequired",
+          "windowSeconds"
+        ],
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "const": "0"
+              },
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            ]
+          },
+          "approvalRequired": {
+            "type": "boolean"
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          }
+        }
+      },
+      "CompanyPimApprovalPolicyRead": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "roleId",
+          "revision",
+          "approvalRequired",
+          "windowSeconds",
+          "canManage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "const": "0"
+              },
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            ]
+          },
+          "approvalRequired": {
+            "type": "boolean"
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          },
+          "canManage": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompanyPimApprovalPolicyInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approvalRequired",
+          "windowSeconds",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "approvalRequired": {
+            "type": "boolean"
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyPimApprovalPolicyResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "policy"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "const": "pim-policy-update"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/CompanyPimApprovalPolicy"
+          }
+        }
+      },
+      "CompanyPimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tenantId",
+          "roleId",
+          "roleRevision",
+          "roleName",
+          "permissions",
+          "scopeType",
+          "ouId",
+          "ouName",
+          "targetType",
+          "targetId",
+          "groupName",
+          "eligibilityId",
+          "eligibilityRevision",
+          "policyRevision",
+          "userId",
+          "durationSeconds",
+          "reason",
+          "state",
+          "status",
+          "revision",
+          "createdAt",
+          "expiresAt",
+          "decidedAt",
+          "decidedBy",
+          "decisionReason",
+          "approvalExpiresAt",
+          "activationId",
+          "activatedAt",
+          "closedAt",
+          "closedBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "roleRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "roleName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 14,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "users.read",
+                "users.create",
+                "users.update",
+                "users.status.manage",
+                "groups.read",
+                "groups.create",
+                "groups.update",
+                "groups.delete",
+                "groups.members.manage",
+                "ous.read",
+                "ous.create",
+                "ous.update",
+                "ous.delete",
+                "ous.members.manage"
+              ]
+            }
+          },
+          "scopeType": {
+            "enum": [
+              "tenant",
+              "ou"
+            ]
+          },
+          "ouId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ouName": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetType": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "groupName": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eligibilityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eligibilityRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "policyRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "approved",
+              "denied",
+              "cancelled",
+              "activated"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "denied",
+              "cancelled",
+              "activated",
+              "stale",
+              "expired"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decisionReason": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approvalExpiresAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activationId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activatedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CompanyPimRequestInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policyRevision",
+          "durationSeconds",
+          "reason",
+          "confirm"
+        ],
+        "properties": {
+          "policyRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 36000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "confirm": {
+            "const": true
+          }
+        }
+      },
+      "CompanyPimRequestResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "request"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "enum": [
+              "pim-request-create",
+              "pim-request-approve",
+              "pim-request-deny",
+              "pim-request-cancel"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/CompanyPimRequest"
+          }
+        }
+      },
+      "CompanyPimApprovalOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eligibilityId",
+          "eligibilityRevision",
+          "roleId",
+          "revision",
+          "approvalRequired",
+          "windowSeconds",
+          "canRequest",
+          "maximumDurationSeconds",
+          "existingRequest"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eligibilityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eligibilityRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "const": "0"
+              },
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            ]
+          },
+          "approvalRequired": {
+            "type": "boolean"
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          },
+          "canRequest": {
+            "type": "boolean"
+          },
+          "maximumDurationSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 36000
+          },
+          "existingRequest": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompanyPimRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CompanyPimRequestPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "audience",
+          "canReview",
+          "canActivate",
+          "page",
+          "limit",
+          "total",
+          "items"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "audience": {
+            "enum": [
+              "self",
+              "manage"
+            ]
+          },
+          "canReview": {
+            "type": "boolean"
+          },
+          "canActivate": {
+            "type": "boolean"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/CompanyPimRequest"
+            }
+          }
+        }
+      },
+      "CompanyPimApprovedActivationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "eventId",
+          "action",
+          "activation",
+          "requestId",
+          "requestRevision"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "action": {
+            "const": "activation-create"
+          },
+          "activation": {
+            "$ref": "#/components/schemas/CompanyPimActivation"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "requestRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive PostgreSQL BIGINT string, at most 9223372036854775807."
           }
         }
       }

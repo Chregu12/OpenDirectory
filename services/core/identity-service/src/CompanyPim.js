@@ -1,6 +1,7 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
 const C=require('./CompanyRoleContract');const A=require('./CompanyRoleAuthority');const {CompanyRoles,role,grant}=require('./CompanyRoles');
+const {sameContext}=require('../../../../packages/identity-authorization-contract');
 const {acceptsRoleAuthentication}=require('../../../../packages/role-authentication-contract');
 const iso=value=>value?new Date(value).toISOString():null;
 function eligible(row){const value=grant(row);return {...value,status:value.status==='active'?'eligible':value.status};}
@@ -43,16 +44,21 @@ class CompanyPim {
   }).catch(failure);
  }
  async history(query,user,bearer){const page=C.page(query);if(page.search)C.fail(400,'pim_history_search_not_supported');return this.read(user,bearer,async(client,tenant)=>{
-  const where="event.tenant_id=$1 AND event.action IN('activation-create','activation-cancel','activation-revoke') AND event.after_state->>'user_id'=$2";
+  const where="event.tenant_id=$1 AND event.action IN('activation-create','activation-cancel','activation-revoke','pim-request-create','pim-request-approve','pim-request-deny','pim-request-cancel') AND event.after_state->>'user_id'=$2";
   const params=[tenant,user.identity_authorization.userId];const total=Number((await client.query('SELECT count(*) AS count FROM identity_company_role_events event WHERE '+where,params)).rows[0].count);
   const rows=(await client.query('SELECT event.*,outbox.status AS delivery_status FROM identity_company_role_events event LEFT JOIN identity_company_role_outbox outbox USING(id) WHERE '+where+' ORDER BY event.created_at DESC,event.id DESC LIMIT 25 OFFSET $3',[...params,(page.page-1)*25])).rows;
   if(rows.some(row=>row.delivery_status!=='pending'))C.fail(503,'company_pim_history_receipt_unavailable');return {schemaVersion:1,actorUserId:user.identity_authorization.userId,tenantId:tenant,total,page:page.page,limit:25,events:rows.map(row=>({id:row.id,action:row.action,resourceId:row.resource_id,actorUserId:row.actor.context.userId,reason:row.reason,createdAt:iso(row.created_at),deliveryStatus:'pending'}))};
  }).catch(failure);}
- async change(action,id,values,expected,user,bearer,parentId=null){user=structuredClone(user);const self=action==='activation-create'||action==='activation-cancel';const fresh=action!=='activation-cancel';
-  const body=action==='eligibility-create'?C.eligibility(values):action==='activation-create'?C.activation(values):C.decision(values);
-  const kind=action==='eligibility-create'?'role':action==='activation-create'||action==='eligibility-revoke'?'eligibility':'activation';const revision=C.expected(kind,expected,parentId||id);
+ async change(action,id,values,expected,user,bearer,parentId=null,approval=null){user=structuredClone(user);const self=action==='activation-create'||action==='activation-cancel';const fresh=action!=='activation-cancel';
+  let body=approval?C.decision(values):action==='eligibility-create'?C.eligibility(values):action==='activation-create'?C.activation(values):C.decision(values);
+  const kind=action==='eligibility-create'?'role':action==='activation-create'||action==='eligibility-revoke'?'eligibility':'activation';let revision=approval?null:C.expected(kind,expected,parentId||id);
   return this.roles.commands(user).run(user,bearer,async client=>{
    const proof=await (self?A.actorProof(client,user,{fresh}):A.managerProof(client,user));await A.receiving(client);
+   if(approval){const original=(await client.query('SELECT request.*,identity_company_pim_request_status(request) AS effective_state FROM identity_company_pim_requests request WHERE id=$1 AND tenant_id=$2 AND user_id=$3',[approval.id,proof.tenant.id,proof.context.userId])).rows[0];
+    if(!original)C.fail(404,'company_pim_request_not_found');if(String(original.revision)!==approval.revision)C.fail(412,'company_pim_request_changed');
+    if(original.effective_state!=='approved'||original.actor.issuer!==user.iss||original.actor.subject!==user.sub||!sameContext(original.actor.context,user.identity_authorization)||original.actor.mfa.revision!==user.mfa_authorization?.revision)C.fail(409,'company_pim_request_not_approved');
+    parentId=original.eligibility_id;revision=String(original.eligibility_revision);body={durationSeconds:original.duration_seconds,...body};proof.validUntil=Math.min(proof.validUntil,Math.floor(new Date(original.approval_expires_at).getTime()/1000));
+   }
    const table=kind==='role'?'identity_company_roles':kind==='eligibility'?'identity_company_role_eligibilities':'identity_company_role_activations';
    const row=(await client.query('SELECT * FROM '+table+' WHERE id=$1 AND tenant_id=$2',[parentId||id,proof.tenant.id])).rows[0];if(!row)C.fail(404,'company_pim_target_not_found');
    if(row.revision.toString()!==revision)C.fail(412,'company_pim_target_changed');
@@ -60,17 +66,20 @@ class CompanyPim {
    if(action==='activation-revoke'&&row.user_id===proof.context.userId)C.fail(403,'independent_activation_revocation_required');
    if(action==='activation-create'&&!(await client.query("SELECT 1 FROM jsonb_array_elements(identity_company_role_pim_candidates($1,$2)) candidate WHERE candidate->>'id'=$3",[proof.context.userId,proof.tenant.id,parentId])).rows.length)C.fail(404,'company_pim_eligibility_not_found');
    if(action==='eligibility-create'&&(body.targetType==='user'&&body.targetId===proof.context.userId||body.targetType==='group'&&(await client.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',[body.targetId,proof.context.userId])).rows.length))C.fail(403,'independent_company_role_recipient_required');
-   const command={action,id,eventId:randomUUID(),actor:proof,values:body,expectedRevision:revision,...(action==='eligibility-create'?{roleId:parentId}:action==='activation-create'?{eligibilityId:parentId}:{})};
+   if(action==='activation-create'){const currentPolicy=(await client.query('SELECT identity_company_pim_approval_policy($1) AS policy',[row.role_id])).rows[0]?.policy;if(!currentPolicy)C.fail(503,'company_pim_policy_unavailable');if(currentPolicy.approvalRequired&&!approval)C.fail(428,'company_pim_approval_required');}
+   const command={action,id,eventId:randomUUID(),actor:proof,values:body,expectedRevision:revision,...(approval?{requestId:approval.id,requestRevision:approval.revision}:{}),...(action==='eligibility-create'?{roleId:parentId}:action==='activation-create'?{eligibilityId:parentId}:{})};
    const eventId=(await client.query('SELECT identity_company_role_pim_change($1::jsonb) AS id',[JSON.stringify(command)])).rows[0]?.id;
    const event=(await client.query("SELECT event.* FROM identity_company_role_events event JOIN identity_company_role_outbox outbox USING(id) WHERE event.id=$1 AND event.tenant_id=$2 AND event.actor=$3::jsonb AND event.transaction_id=txid_current() AND outbox.tenant_id=event.tenant_id AND outbox.status='pending'",[eventId,proof.tenant.id,JSON.stringify(proof)])).rows[0];
    if(!event||event.action!==action||event.resource_id!==id)C.fail(503,'company_pim_receipt_unavailable');
    const target=action.startsWith('eligibility-')?'identity_company_role_eligibilities':'identity_company_role_activations';const actual=(await client.query('SELECT * FROM '+target+' WHERE id=$1 AND tenant_id=$2',[id,proof.tenant.id])).rows[0];
-   if(!actual||(await client.query("SELECT to_jsonb(row)=(event.after_state"+(action.startsWith('activation-')?"-'role_id'":"")+") AS confirmed FROM "+target+" row JOIN identity_company_role_events event ON event.resource_id=row.id WHERE row.id=$1 AND event.id=$2",[id,eventId])).rows[0]?.confirmed!==true)C.fail(503,'company_pim_effect_unavailable');
-   return {schemaVersion:1,actorUserId:proof.context.userId,tenantId:proof.tenant.id,eventId,action,...(action.startsWith('eligibility-')?{eligibility:eligible({...actual,definition_current:true,expired:false,effective:!actual.revoked_at})}:{activation:activation({...actual,expired:false,effective:!actual.ended_at})})};
+   if(!actual||(await client.query("SELECT to_jsonb(row)=(event.after_state"+(action.startsWith('activation-')?"-ARRAY['role_id','approval_request_before','approval_request_after']::text[]":"")+") AS confirmed FROM "+target+" row JOIN identity_company_role_events event ON event.resource_id=row.id WHERE row.id=$1 AND event.id=$2",[id,eventId])).rows[0]?.confirmed!==true)C.fail(503,'company_pim_effect_unavailable');
+   let consumed={};if(approval){const receipt=(await client.query("SELECT revision::text FROM identity_company_pim_requests WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND activation_id=$4 AND state='activated'",[approval.id,proof.tenant.id,proof.context.userId,actual.id])).rows[0];if(!receipt||actual.approval_request_id!==approval.id||BigInt(receipt.revision)!==BigInt(approval.revision)+1n)C.fail(503,'company_pim_consumed_request_unavailable');consumed={requestId:actual.approval_request_id,requestRevision:receipt.revision};}
+   return {schemaVersion:1,actorUserId:proof.context.userId,tenantId:proof.tenant.id,eventId,action,...consumed,...(action.startsWith('eligibility-')?{eligibility:eligible({...actual,definition_current:true,expired:false,effective:!actual.revoked_at})}:{activation:activation({...actual,expired:false,effective:!actual.ended_at})})};
   },{actor:user.sub},fresh?A.FRESH:undefined).catch(failure);
  }
  assign(id,values,expected,user,bearer){C.identifier(id);return this.change('eligibility-create',randomUUID(),values,expected,user,bearer,id);}
  revokeEligibility(id,values,expected,user,bearer){C.identifier(id);return this.change('eligibility-revoke',id,values,expected,user,bearer);}
+ activateApproved(id,values,expected,user,bearer){C.identifier(id);const revision=C.expected('request',expected,id);return this.change('activation-create',randomUUID(),values,null,user,bearer,null,{id,revision});}
  activate(id,values,expected,user,bearer){C.identifier(id);return this.change('activation-create',randomUUID(),values,expected,user,bearer,id);}
  end(id,values,expected,user,bearer,manager=false){C.identifier(id);return this.change(manager?'activation-revoke':'activation-cancel',id,values,expected,user,bearer);}
 }

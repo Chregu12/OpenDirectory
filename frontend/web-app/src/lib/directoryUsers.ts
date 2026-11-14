@@ -32,6 +32,7 @@ export interface DirectoryAccess {
   companyOwner?: boolean;
   companyRolesProtocol?: number;
   companyPimProtocol?: number;
+  companyPimApprovalProtocol?: number;
 }
 
 export type UserProfile = Pick<DirectoryUser, 'username' | 'email' | 'displayName' | 'department' | 'title'>;

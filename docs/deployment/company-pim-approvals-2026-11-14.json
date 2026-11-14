@@ -1,0 +1,224 @@
+{
+  "checkedAt": "2026-11-14T14:11:45.815769+00:00",
+  "url": "https://opendirectory.heusser.local/pim",
+  "chart": "opendirectory-lite-0.1.46",
+  "appVersion": "1.0.43",
+  "baselineCommit": "3f5536acee9f65dc1c102ff51d9c7cd8864efce8",
+  "features": [
+    "Independent approval policy for actual own company PIM roles",
+    "Original own requests with captured scope, actions, MFA, role, policy and eligibility revisions",
+    "Independent actual reviewer decision and single-use original-person activation",
+    "Versioned policy edits invalidate older leases and requests",
+    "Actual retained audit and pending outbox receipts"
+  ],
+  "validation": {
+    "identityUnit": {
+      "suites": 68,
+      "passed": 1258
+    },
+    "frontendUnit": {
+      "suites": 151,
+      "passed": 3189
+    },
+    "companyRolesNative": {
+      "passed": 39
+    },
+    "additionalTenantNative": {
+      "passed": 1
+    },
+    "groupOuNativeRegression": {
+      "passed": 87
+    },
+    "signedOAuthGatewayNative": {
+      "passed": 1
+    },
+    "productionImageBrowser": {
+      "passed": 20
+    },
+    "typeCheck": "passed",
+    "openApiTests": 31,
+    "gitDiffCheck": "passed",
+    "helmLint": "passed"
+  },
+  "rollout": {
+    "phase1": {
+      "phase": 1,
+      "revision": 68,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-c68fd786c-7n8vm",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.43",
+            "digest": "sha256:00ebf710c67110bbd8e67608619aedf4da3dcf0d3e88fd307ecd1488a1266905"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/CompanyPimApprovals.js": "7fb766c8b02679896596cd79d99ee64af07e5e37d50599fd5457485848057af7",
+            "/app/src/CompanyPimApprovalRoutes.js": "a9f7783cbab5e87670f866cab5cc095b7227e32f1d379f6d5ea0da259a5997b6",
+            "/app/src/CompanyPimApprovalContract.js": "4219985b1bf355046831702c197507ae4ebfd9465e3ecae2b111a8756b2d0552",
+            "/app/src/CompanyPim.js": "d167a98ec35ea3bb97e7357fe2f80c947a0cd07a09f3cb31c627dfa7fd4ab0f7",
+            "/app/src/CompanyRoleContract.js": "b73714abe61552b120a50f966528ce527f848ab5317428934583d9715d1e64b1",
+            "/app/src/CompanyRoleRoutes.js": "d60f2f08da25d5c431d67d9b507c8a2ed05d843519ad175adef9a9ef6dc152a9",
+            "/app/src/index.js": "2f73bd16616681ac8778febf29702092f2f58191984c9806ae08b8dd1519b69d",
+            "/app/src/middleware/identityAccess.js": "b353eef464109c424e933a39e02031d4c1d3cc9f5787e8382064f96868d37a70",
+            "/app/migrations/059_company_pim_approvals.sql": "32aa627b80ee39efb25e3e583f57497bad77f96fd142cdb9b1291695f6d34b5e"
+          }
+        }
+      },
+      "unrelatedDeploymentSpecsUnchanged": true
+    },
+    "phase2": {
+      "phase": 2,
+      "revision": 69,
+      "readyDeployments": 11,
+      "runtime": {
+        "identity-service": {
+          "pod": "opendirectory-identity-service-c68fd786c-7n8vm",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/identity-service:1.0.43",
+            "digest": "sha256:00ebf710c67110bbd8e67608619aedf4da3dcf0d3e88fd307ecd1488a1266905"
+          },
+          "arch": "x64",
+          "uid": 100,
+          "hashes": {
+            "/app/src/CompanyPimApprovals.js": "7fb766c8b02679896596cd79d99ee64af07e5e37d50599fd5457485848057af7",
+            "/app/src/CompanyPimApprovalRoutes.js": "a9f7783cbab5e87670f866cab5cc095b7227e32f1d379f6d5ea0da259a5997b6",
+            "/app/src/CompanyPimApprovalContract.js": "4219985b1bf355046831702c197507ae4ebfd9465e3ecae2b111a8756b2d0552",
+            "/app/src/CompanyPim.js": "d167a98ec35ea3bb97e7357fe2f80c947a0cd07a09f3cb31c627dfa7fd4ab0f7",
+            "/app/src/CompanyRoleContract.js": "b73714abe61552b120a50f966528ce527f848ab5317428934583d9715d1e64b1",
+            "/app/src/CompanyRoleRoutes.js": "d60f2f08da25d5c431d67d9b507c8a2ed05d843519ad175adef9a9ef6dc152a9",
+            "/app/src/index.js": "2f73bd16616681ac8778febf29702092f2f58191984c9806ae08b8dd1519b69d",
+            "/app/src/middleware/identityAccess.js": "b353eef464109c424e933a39e02031d4c1d3cc9f5787e8382064f96868d37a70",
+            "/app/migrations/059_company_pim_approvals.sql": "32aa627b80ee39efb25e3e583f57497bad77f96fd142cdb9b1291695f6d34b5e"
+          }
+        },
+        "web-app": {
+          "pod": "opendirectory-web-app-6fcdd7798f-5grl5",
+          "image": {
+            "image": "harbor.heusser.local/opendirectory/web-app:1.0.43",
+            "digest": "sha256:895a962929ab84ea0b1abd5b8ef1f73575c27aab6b998dc34e5ea33686f277f2"
+          },
+          "arch": "x64",
+          "uid": 1001,
+          "buildId": "WSbPBdssUaQgz7eOIiU9m",
+          "hashes": {
+            "src/components/views/CompanyPimPanel.tsx": "9f482d520647268700ab1bda14328c0b8a5e09d1481d0a27ff4e9b4c4c33517e",
+            "src/components/views/CompanyPimRequestPanel.tsx": "975879a52f9da2a30a3c92e0bbde02b3f29022f67581557de55aa70cdf51c2dc",
+            "src/components/views/CompanyPimPolicyPanel.tsx": "066c8024769dbd579d07d6fe63ec4e42019778e0a8ea96eb0191d2b135ab2541",
+            "src/lib/companyPimApprovals.ts": "879de04b3deff1cd6baf7810283d1a845a8b2ebe5f56a9096418dd111d52a034",
+            "src/lib/companyPim.ts": "d34018392aaa6d6646a9b3ef0c0b6edf96547cce541991c762d7ac1ca953cf8a",
+            "src/lib/companyRoles.ts": "073dba70e58215e1fd3b19d5e5036e767ca2886f98ed38f9ab76565882ac44b7",
+            "src/components/views/CompanyRolesView.tsx": "bff5cadb6d9ceba8f6d23c045e675ecb8a0988fcdcc323de34c564d89a9afff1",
+            "src/lib/directoryUsers.ts": "3bea0c72a5161e5ad0344219da1a806acb0be84d1937c3703acb0411b3ce2764",
+            "src/components/views/DeviceAgentPanel.tsx": "1af0b84b100ddb48b85a94ac4c31f219b9e398f0678ea3b331aa547067a1aed4"
+          }
+        }
+      },
+      "unrelatedDeploymentSpecsUnchanged": true
+    }
+  },
+  "sqlReceiving": {
+    "roles": "",
+    "pim": "",
+    "approvals": "",
+    "roleManifest": 17,
+    "pimManifest": 8,
+    "approvalManifest": 6,
+    "policies": 0,
+    "requests": 0
+  },
+  "backup": {
+    "database": "identity",
+    "format": "pg_dump custom format",
+    "bytes": 3637461,
+    "sha256": "f69d90d700648ce188ac7437fc3f4557eb01fbf26f4606062d1d2b9f63ca7c50",
+    "tocEntries": 6088
+  },
+  "publicChecks": {
+    "checkedAt": "2026-11-14T14:10:59.981381+00:00",
+    "https": {
+      "/company-roles": 200,
+      "/users": 200,
+      "/devices": 200,
+      "/pim": 200,
+      "/.well-known/openid-configuration": 200,
+      "/api/identity/company-pim-approvals/self": 401,
+      "/api/identity/company-pim-approvals/requests": 401,
+      "/api/identity/company-pim": 401,
+      "/api/identity/company-pim/history": 401,
+      "/api/identity/company-roles": 401,
+      "/api/users": 401,
+      "/api/users/11111111-1111-4111-8111-111111111111/groups": 401,
+      "/api/identity/roles/catalog": 401
+    },
+    "compiledStylesheets": [
+      {
+        "path": "/_next/static/chunks/1k_pl6jk9v6lj.css",
+        "sha256": "1908b363c8cd634f18c1a07233d494ca5379f6ef67f3c3b27e8693c0093555b6"
+      }
+    ]
+  },
+  "devicePublicRegression": {
+    "devicesPage": 200,
+    "/api/devices": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent": 401,
+    "/api/device-agent/register": 401,
+    "/api/device-agent/heartbeat": 401,
+    "/api/device-agent/register?tenantId=foreign": 400,
+    "cssSha256": "1908b363c8cd634f18c1a07233d494ca5379f6ef67f3c3b27e8693c0093555b6",
+    "tlsVerified": true,
+    "productionHumanLoginPerformed": false
+  },
+  "businessDataBefore": {
+    "users": {
+      "count": 1,
+      "md5": "0f1d075bac747b5ac26277e2ccb0b62b"
+    },
+    "groups": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "group_members": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "identity_role_assignments": {
+      "count": 1,
+      "md5": "40b1d3732913da887ada1d4d59c4daa1"
+    },
+    "identity_pim_eligibilities": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "businessDataAfter": {
+    "users": {
+      "count": 1,
+      "md5": "0f1d075bac747b5ac26277e2ccb0b62b"
+    },
+    "groups": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "group_members": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "identity_role_assignments": {
+      "count": 1,
+      "md5": "40b1d3732913da887ada1d4d59c4daa1"
+    },
+    "identity_pim_eligibilities": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  },
+  "limits": [
+    "No personal production login, MFA, business roles or grants created; positive tests use disposable accounts and databases",
+    "Per-role selected approver groups, periodic reviews, notification delivery and scheduling remain open",
+    "Device inventory duties and other service rights remain independently enforced",
+    "Other BR-001–012 and WF-001–005 work remains open"
+  ]
+}

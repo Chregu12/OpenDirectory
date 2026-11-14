@@ -42,12 +42,12 @@ function activation(input){exact(input,['durationSeconds','reason','confirm']);i
 function group(input) { exact(input,['name','description','reason','confirm']); return {name:text(input.name,2,120),description:text(input.description,0,1000,true),reason:explanation(input),confirm:true}; }
 function decision(input) { exact(input, ['reason', 'confirm']); return { reason: explanation(input), confirm: true }; }
 function etag(kind, value) {
-  if (!['role', 'grant','eligibility','activation'].includes(kind) || !validRevision(value?.revision)) fail(400, 'invalid_company_role_revision');
+  if (!['role', 'grant','eligibility','activation','request'].includes(kind) || !validRevision(value?.revision)) fail(400, 'invalid_company_role_revision');
   return `"company-${kind}-${identifier(value.id)}-${value.revision}"`;
 }
 function expected(kind, value, id) {
   if (value === undefined || value === '') fail(428, 'company_role_if_match_required');
-  const match = typeof value === 'string' && /^"company-(role|grant|eligibility|activation)-([a-f0-9-]{36})-([1-9][0-9]{0,18})"$/.exec(value);
+  const match = typeof value === 'string' && /^"company-(role|grant|eligibility|activation|request)-([a-f0-9-]{36})-([1-9][0-9]{0,18})"$/.exec(value);
   if (!match || match[0] !== value || match[1] !== kind || match[2] !== identifier(id) || !validRevision(match[3])) fail(400, 'invalid_company_role_if_match');
   return match[3];
 }

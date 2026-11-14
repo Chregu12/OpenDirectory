@@ -262,7 +262,9 @@ function organizationOpenApi() {
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyRolesProtocol={const:1};
   const companyPim=require('./company-pim-openapi').companyPimOpenApi();Object.assign(document.paths,companyPim.paths);Object.assign(document.components.schemas,companyPim.components.schemas);
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyPimProtocol={const:1};
-  document.info.version = '1.33.0';
+  const companyPimApprovals=require('./company-pim-approval-openapi').companyPimApprovalOpenApi();Object.assign(document.paths,companyPimApprovals.paths);Object.assign(document.components.schemas,companyPimApprovals.components.schemas);
+  document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyPimApprovalProtocol={const:1};
+  document.info.version = '1.34.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

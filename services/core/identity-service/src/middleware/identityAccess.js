@@ -46,9 +46,12 @@ const ROLE_PERMISSIONS = {
 };
 const ALL_PERMISSIONS = [...new Set([...Object.values(ROLE_PERMISSIONS).flat(), 'users.delete', 'identities.links.manage', 'organization.read', 'organization.manage', 'organization.delegations.manage'])];
 const ROUTES = [
+  ['GET', /^\/identity\/company-pim-approvals\/(?:self|requests|eligibilities\/[a-f0-9-]{36})\/?$/, []],
+  ['POST', /^\/identity\/company-pim-approvals\/(?:eligibilities\/[a-f0-9-]{36}\/requests|requests\/[a-f0-9-]{36}\/(?:approve|deny|cancel|activate))\/?$/, []],
+  ['PUT', /^\/identity\/company-roles\/[a-f0-9-]{36}\/approval-policy\/?$/, ['company.roles.manage']],
   ['GET', /^\/identity\/company-pim(?:\/history)?\/?$/, []],
   ['POST', /^\/identity\/company-pim\/(?:eligibilities\/[a-f0-9-]{36}\/activate|activations\/[a-f0-9-]{36}\/end)\/?$/, []],
-  ['GET', /^\/identity\/company-roles(?:\/[a-f0-9-]{36}(?:\/(?:history|eligibilities))?)?\/?$/, ['company.roles.read']],
+  ['GET', /^\/identity\/company-roles(?:\/[a-f0-9-]{36}(?:\/(?:history|eligibilities|approval-policy))?)?\/?$/, ['company.roles.read']],
   ['POST', /^\/identity\/company-roles(?:\/groups|\/[a-f0-9-]{36}\/(?:grants|eligibilities)|\/(?:grants|eligibilities|activations)\/[a-f0-9-]{36}\/revoke)?\/?$/, ['company.roles.manage']],
   ['PUT', /^\/identity\/company-roles\/[a-f0-9-]{36}\/?$/, ['company.roles.manage']],
   ['GET', /^\/groups\/[a-f0-9-]{36}\/rule(?:\/(?:preview|history))?\/?$/, []],
