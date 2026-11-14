@@ -231,6 +231,7 @@ apps:
       OAUTH_API_AUDIENCE: opendirectory-api
       AUTH_SERVICE_URL: "http://{{ .Release.Name }}-auth-service:3002"
       OAUTH_IDENTITY_AUTHORITY_URL: "http://{{ .Release.Name }}-identity-service:3001/internal/identity/authorization-state"
+      IDENTITY_SERVICE_URL: "http://{{ .Release.Name }}-identity-service:3001"
       OAUTH_POLICY_SOURCE_URL: "http://{{ .Release.Name }}-policy-service:3004"
       OAUTH_SIGNING_KEY_FILE: /run/opendirectory/oauth-signing.pem
       OAUTH_MFA_KEY_FILE: /run/opendirectory/mfa-encryption.key

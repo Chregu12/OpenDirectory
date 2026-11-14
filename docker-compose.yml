@@ -245,6 +245,7 @@ services:
       - OAUTH_ISSUER=${OAUTH_ISSUER:-https://opendirectory.local}
       - OAUTH_API_AUDIENCE=${OAUTH_API_AUDIENCE:-opendirectory-api}
       - OAUTH_IDENTITY_AUTHORITY_URL=${OAUTH_IDENTITY_AUTHORITY_URL:-http://identity-service:3001/internal/identity/authorization-state}
+      - IDENTITY_SERVICE_URL=http://identity-service:3001
       - COMPANY_REGISTRATION_ENABLED=${COMPANY_REGISTRATION_ENABLED:-false}
       - COMPANY_ACTIVATION_ENABLED=${COMPANY_ACTIVATION_ENABLED:-false}
       - COMPANY_CONSOLE_CLIENT_ID=${COMPANY_CONSOLE_CLIENT_ID:-web-app}

@@ -8,7 +8,8 @@ LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE revision TEXT;
 BEGIN
   IF input_value IS NULL THEN RETURN TRUE; END IF;
-  IF jsonb_typeof(input_value)<>'object' OR jsonb_object_length(input_value)<>5
+  IF jsonb_typeof(input_value)<>'object' THEN RETURN FALSE; END IF;
+  IF (SELECT count(*) FROM jsonb_object_keys(input_value))<>5
     OR NOT (input_value ?& ARRAY['schemaVersion','subjectId','userId','invitationId','securityRevision'])
     OR input_value->'schemaVersion'<>'1'::jsonb
     OR input_value->>'subjectId' IS NULL

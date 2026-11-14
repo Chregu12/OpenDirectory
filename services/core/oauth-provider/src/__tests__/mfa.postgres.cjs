@@ -257,6 +257,37 @@ async function enrollmentFixture(fixture) {
   const enrollment = () => new MfaEnrollment({ mfa: fixture.create(), clients, identity, applications, issuer: 'https://mfa-policy.test' });
   return { ...fixture, clients, client, management, applications, enrollment, begin: () => enrollment().start(client.clientId, 'owner-subject') };
 }
+test('credential-bound MFA enrollment accepts the original SQL binding and retains it through confirmation and migration replay', () => authority(async fixture => {
+  const prepared=await enrollmentFixture(fixture);const {pool,identity,payload,enrollment,client,migrate}=prepared;
+  const binding={schemaVersion:1,subjectId:randomUUID(),userId:payload.identity_authorization.userId,invitationId:randomUUID(),securityRevision:'2'};
+  const snapshot={schemaVersion:1,subjectId:binding.subjectId,securityRevision:binding.securityRevision};
+  const read=identity.state;identity.state=async()=>({...await read(),credentialAuthorization:structuredClone(binding)});
+  const valid=async value=>(await pool.query('SELECT oauth_valid_credential_authorization($1::jsonb) AS valid',[JSON.stringify(value)])).rows[0].valid;
+  assert.equal(await valid(binding),true);assert.equal(await valid({...binding,invitationId:null}),true);
+  for(const invalid of [{...binding,securityRevision:2},{...binding,securityRevision:'0'},{...binding,securityRevision:'9223372036854775808'},{...binding,subjectId:'foreign'},{...binding,invitationId:'other'},{...binding,extra:true},[],false])assert.equal(await valid(invalid),false);
+  const started=await enrollment().start(client.clientId,binding.subjectId,snapshot);
+  const id=started.challenge.split('.')[0];assert.deepEqual((await pool.query('SELECT credential_authorization FROM oauth_mfa_enrollments WHERE id=$1',[id])).rows[0].credential_authorization,binding);
+  await assert.rejects(pool.query('UPDATE oauth_mfa_enrollments SET credential_authorization=NULL WHERE id=$1',[id]));
+  const original=fs.readFileSync(path.join(__dirname,'../../migrations/015_credential_authorization.sql'),'utf8').replace("  IF jsonb_typeof(input_value)<>'object' THEN RETURN FALSE; END IF;\n  IF (SELECT count(*) FROM jsonb_object_keys(input_value))<>5","  IF jsonb_typeof(input_value)<>'object' OR jsonb_object_length(input_value)<>5");
+  await pool.query(original);assert.equal(await valid(binding),false);
+  await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/017_credential_binding_validation.sql'),'utf8'));assert.equal(await valid(binding),true);
+  await migrate();assert.deepEqual((await pool.query('SELECT credential_authorization FROM oauth_mfa_enrollments WHERE id=$1',[id])).rows[0].credential_authorization,binding);
+  binding.securityRevision='3';await assert.rejects(enrollment().confirm(started.challenge,'123456'),{code:'enrollment_authorization_changed'});binding.securityRevision='2';
+  await enrollment().confirm(started.challenge,totp(started.secret,Math.floor(Date.now()/30000)-1));
+  assert.ok((await pool.query('SELECT consumed_at FROM oauth_mfa_enrollments WHERE id=$1',[id])).rows[0].consumed_at);
+}));
+test('credential-bound recovery preserves the original password revision and cannot adopt a later credential change', () => authority(async fixture => {
+  const {recoveryCodes,recovery,identity,payload,pool,migrate,service,proof}=await recoveryFixture(fixture);
+  const binding={schemaVersion:1,subjectId:randomUUID(),userId:payload.identity_authorization.userId,invitationId:null,securityRevision:'1'};
+  const snapshot={schemaVersion:1,subjectId:binding.subjectId,securityRevision:'1'};
+  const read=identity.state;identity.state=async()=>({...await read(),credentialAuthorization:structuredClone(binding)});
+  await assert.rejects(recovery().start(binding.subjectId,payload.identity_authorization,recoveryCodes[0]),{code:'recovery_identity_changed'});
+  const started=await recovery().start(binding.subjectId,payload.identity_authorization,recoveryCodes[0],snapshot),id=started.challenge.split('.')[0];
+  assert.deepEqual((await pool.query('SELECT credential_authorization FROM oauth_mfa_recovery_challenges WHERE id=$1',[id])).rows[0].credential_authorization,binding);
+  await assert.rejects(pool.query('UPDATE oauth_mfa_recovery_challenges SET credential_authorization=NULL WHERE id=$1',[id]));
+  await migrate();binding.securityRevision='2';await assert.rejects(recovery().confirm(started.challenge,'123456'),{code:'recovery_identity_changed'});binding.securityRevision='1';
+  await recovery().confirm(started.challenge,totp(started.secret,Math.floor(Date.now()/30000)-1));assert.equal(await service.matches(proof),false);
+}));
 test('assigned required-MFA enrollment creates only a bounded, encrypted, purpose-specific factor ticket and no OAuth session', () => authority(async fixture => {
   const { begin, pool, payload, service } = await enrollmentFixture(fixture); const weaker = claims(payload, await service.login(payload.identity_authorization.userId));
   const started = await begin(); assert.deepEqual(Object.keys(started).sort(), ['challenge','expiresAt','otpauthUri','secret']);

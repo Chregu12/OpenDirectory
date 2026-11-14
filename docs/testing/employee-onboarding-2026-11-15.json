@@ -1,0 +1,69 @@
+{
+  "checkedAt": "2026-11-14T23:45:12.305396+00:00",
+  "sourceBaseCommit": "3d6cf46417d412da1dfa97a138bb9f5edae1625c",
+  "node": "20.20.2",
+  "chromium": "157.0.8103.78",
+  "mfaPostgres": {
+    "passed": 31,
+    "failed": 0,
+    "includesOriginalBindingUpgradeAndImmutableRecovery": true
+  },
+  "browser": {
+    "distinctPassed": 59,
+    "initialMultiGroupRun": {
+      "passed": 57,
+      "failed": 1,
+      "notReached": 1
+    },
+    "targetedOnboardingAndBasicLogin": {
+      "passed": 2,
+      "failed": 0
+    },
+    "targetedLicenseWatchAfterFixtureCorrection": {
+      "passed": 1,
+      "failed": 0
+    },
+    "successfulNamesSha256": "b5579b53072a1a42ca6efe3922ca528e5ab307b1ddfa4768fe17b34fba8990f2",
+    "singleFinalFullDriverRun": "pending GitHub CI"
+  },
+  "newEmployeeFlow": [
+    "actual shipped Auth process and Redis",
+    "separate Auth, Identity and issuer PostgreSQL schemas",
+    "new own invitation through production Next UI and OAuth",
+    "real password creation and wrong-password denial",
+    "canonical activation and original credential binding",
+    "first real central OTP enrollment",
+    "confidential callback, credential-bound session renewal and logout"
+  ],
+  "fixtureLimits": {
+    "ownerPassword": "explicit disposable fixture",
+    "ownerOtp": "actual central MFA verifier",
+    "otherLegacyBrowserPasswords": "explicit disposable fixtures",
+    "liveGraph": false,
+    "physicalAuthenticator": false
+  },
+  "fixedIssues": [
+    "valid nonempty credential binding rejected by nonexistent SQL object counter",
+    "missing release-prefixed invitation Identity receiver",
+    "mail acceptance confused with confirmed delivery",
+    "schedule fixture raced observation revision updates and misread graceful shutdown output"
+  ],
+  "productionReadOnlyObservations": {
+    "invalidMfaObjectCounterPresent": true,
+    "oauthIdentityReceiverAbsent": true,
+    "unprefixedIdentityDnsServiceAbsent": true,
+    "productionDatabaseWrites": 0,
+    "deploymentApplied": false
+  },
+  "configurationChecks": [
+    "actionlint 1.7.12",
+    "workflow Prettier",
+    "both Compose renderings with CI disposable values",
+    "Helm lint and exact rendered OAuth receiver origins"
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/migrations/015_credential_authorization.sql": "5892779331b9d4811b34f0678fbb12c9f2c06db87c7872fca7c35195cb56882a",
+    "services/core/oauth-provider/migrations/017_credential_binding_validation.sql": "8bca67a78eef7d5b666b66e0e332e7135b1cf19dcd0d531e3c146efc01c78ffd",
+    "frontend/web-app/src/components/views/EmployeeInvitationManager.tsx": "25e894659529423742a5038192a78c599ca3ceef2fee9bf827f9e37790b9949b"
+  }
+}

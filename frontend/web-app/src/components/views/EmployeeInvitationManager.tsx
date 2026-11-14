@@ -73,8 +73,9 @@ export default function EmployeeInvitationManager() {
         loginName: loginName.trim(), durationHours, reason: reason.trim(), confirm: true });
       if (result.created && result.invitationToken) {
         const url = new URL('/employees/accept', window.location.origin); url.hash = result.invitationToken; setInviteLink(url.href);
-        const delivery = result.mailStatus === 'sent' ? 'Der Einladungslink wurde per Microsoft Graph an die hinterlegte Adresse gesendet.'
-          : 'Graph-Mail wurde nicht zugestellt; teile den Einmal-Link vertraulich mit der eingeladenen Person.';
+        const delivery = result.mailStatus === 'sent' ? 'Microsoft Graph hat den Versandauftrag angenommen. Die Zustellung ist noch nicht bestätigt.'
+          : result.mailStatus === 'not_configured' ? 'E-Mail-Versand ist nicht eingerichtet. Teile den Einmal-Link vertraulich mit der eingeladenen Person.'
+          : 'E-Mail-Versand wurde nicht bestätigt. Prüfe den Status und teile den Einmal-Link bei Bedarf vertraulich.';
         setNotice(`Einladung erstellt. ${delivery}${groupIds.length ? ` ${groupIds.length} Gruppen wurden vorgemerkt.` : ''}${pendingReviews ? ` ${pendingReviews} Gruppenmitgliedschaft(en) warten auf eine unabhängige Prüfung.` : ''}`);
       } else setNotice('Diese Einladung wurde bereits erstellt. Das Original-Token wird aus Sicherheitsgründen nicht erneut ausgegeben. Widerrufe sie und erstelle bei Bedarf eine neue Einladung.');
       setInvitationId(''); setTarget(null); setConfirmed(false); setReason(''); setGroupIds([]); await loadInvitations(1, true);
@@ -119,7 +120,7 @@ export default function EmployeeInvitationManager() {
     <div><PageHeader title="Mitarbeitereinladungen" icon={EnvelopeIcon} /><p className="mt-2">Wähle einen eigenen deaktivierten Verzeichniseintrag. Erstellung und Widerruf verlangen frische MFA. Es wird kein Konto aktiviert, bevor die eingeladene Person selbst ein Passwort setzt.</p></div>
     {error && <p role="alert" className="border border-red-400 rounded p-3">{error}</p>}
     {notice && <p role="status" className="border border-green-500 rounded p-3">{notice}</p>}
-    {inviteLink && <section className="bg-[var(--bg-surface)] border rounded-lg p-4 space-y-3"><h2 className="font-semibold">Einmaliger Einladungslink</h2><div className="flex flex-wrap gap-2"><input className="border rounded p-2 min-w-0 flex-1" readOnly value={inviteLink} aria-label="Einmaliger Einladungslink" /><button className="border rounded px-3 py-2" onClick={() => void copyLink()}>Link kopieren</button><button className="border rounded px-3 py-2" onClick={() => setInviteLink('')}>Link schliessen</button></div><p className="text-sm">Der Link enthält ein vertrauliches Token im URL-Fragment. Versende es nur an die eingeladene Person; das Token wird nicht per E-Mail automatisch versendet.</p></section>}
+    {inviteLink && <section className="bg-[var(--bg-surface)] border rounded-lg p-4 space-y-3"><h2 className="font-semibold">Einmaliger Einladungslink</h2><div className="flex flex-wrap gap-2"><input className="border rounded p-2 min-w-0 flex-1" readOnly value={inviteLink} aria-label="Einmaliger Einladungslink" /><button className="border rounded px-3 py-2" onClick={() => void copyLink()}>Link kopieren</button><button className="border rounded px-3 py-2" onClick={() => setInviteLink('')}>Link schliessen</button></div><p className="text-sm">Der Link enthält ein vertrauliches Token im URL-Fragment. Teile ihn nur mit der eingeladenen Person und beachte den angezeigten E-Mail-Versandstatus.</p></section>}
 
     <section className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6">
       <div className="bg-[var(--bg-surface)] border rounded-lg p-4 space-y-4"><h2 className="text-lg font-semibold">Deaktivierte Verzeichniseinträge</h2>

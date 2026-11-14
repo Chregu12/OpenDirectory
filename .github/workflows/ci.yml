@@ -182,6 +182,11 @@ jobs:
       - name: Test browser mediation security boundaries
         working-directory: frontend/web-app
         run: npm run test:browser-auth
+      - name: Install actual browser credential receiver dependencies
+        working-directory: services/core/authentication-service
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install native Redis for actual browser credentials
+        run: sudo apt-get update && sudo apt-get install --yes redis-server
       - name: Test actual confidential browser login and persistent logout
         working-directory: services/core/oauth-provider
         run: npm run test:browser:integration

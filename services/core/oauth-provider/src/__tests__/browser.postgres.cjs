@@ -15,14 +15,16 @@ const { totp } = require('../MfaAuthority');
 const net = require('node:net');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
-const credentialContract = require('../../../../../packages/credential-authorization-contract');
 const { bootstrapApplications } = require('./fixtures/bootstrapApplications.cjs');
+const { startAuthenticationService } = require('../../../authentication-service/src/__tests__/fixtures/server.cjs');
 
 const frontend = path.resolve(__dirname, '../../../../../frontend/web-app');
 const webRequire = createRequire(path.join(frontend, 'package.json'));
 const schema = 'oauth_browser_' + randomUUID().replaceAll('-', '');
 const identitySchema = 'identity_browser_' + randomUUID().replaceAll('-', '');
 const policySchema='policy_browser_'+randomUUID().replaceAll('-','');
+const authSchema='auth_browser_'+randomUUID().replaceAll('-','');
+let actualAuth; let authDb;
 let policyDb; let policyServer; let policyBase;
 const readerUser = randomUUID();
 const browserTenant=randomUUID();const tenantBrowserUser=randomUUID();const tenantDirectoryReader=randomUUID();const tenantDirectoryCreator=randomUUID();
@@ -140,6 +142,7 @@ before(async () => {
   await administration.query(`CREATE SCHEMA ${schema}`);
   await administration.query(`CREATE SCHEMA ${identitySchema}`);
   await administration.query(`CREATE SCHEMA ${policySchema}`);
+  await administration.query(`CREATE SCHEMA ${authSchema}`);
   const databaseUrl = new URL(process.env.OAUTH_TEST_DATABASE_URL); databaseUrl.searchParams.set('options', `-c search_path=${schema},public`);
   database = databaseUrl.toString(); issuerDb = new Pool({ connectionString: database, max: 2 });
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'od-real-browser-'));
@@ -153,28 +156,22 @@ before(async () => {
   const policyProbe=net.createServer().listen(0,'127.0.0.1');policyBase=await serverBase(policyProbe);await new Promise(resolve=>policyProbe.close(resolve));
   credentialServer = http.createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json');
-    if (request.url === credentialContract.PATH && request.method === 'POST') {
-      try {
-        const chunks = []; for await (const chunk of request) chunks.push(chunk);
-        const body = JSON.parse(Buffer.concat(chunks)); const token = (request.headers.authorization || '').replace(/^Bearer /, '');
-        const verified = jwt.verify(token, require('node:crypto').createPublicKey(fs.readFileSync(signing)), { algorithms: ['RS256'], issuer: logicalIssuer, audience: credentialContract.AUDIENCE });
-        const header = jwt.decode(token, { complete: true }).header;
-        if (!credentialContract.exact(body, ['subject']) || !credentialContract.validSubject(body.subject)
-          || !credentialContract.exact(verified, ['iss','sub','aud','actor_type','token_use','scope','htm','htu','request_subject','jti','iat','exp'])
-          || Object.keys(header).length !== 3 || header.typ !== credentialContract.TYPE || verified.sub !== 'oauth-provider'
-          || verified.actor_type !== 'workload' || verified.token_use !== credentialContract.PURPOSE || verified.scope !== credentialContract.SCOPE
-          || verified.htm !== 'POST' || verified.htu !== credentialContract.PATH || verified.request_subject !== body.subject
-          || !credentialContract.uuid(verified.jti) || verified.exp <= Math.floor(Date.now() / 1000) || verified.exp - verified.iat > 30) throw new Error('Invalid credential state request');
-        return response.end(JSON.stringify({ schemaVersion: 1, credentialAuthenticationProtocol: 1, subject: body.subject,
-          known: false, ready: false, subjectId: null, securityRevision: null, invitation: null }));
-      } catch { response.statusCode = 401; return response.end('{}'); }
+    if (request.url.startsWith('/internal/auth/')) {
+      if (!actualAuth) { response.statusCode = 503; return response.end('{}'); }
+      const chunks=[];for await(const chunk of request)chunks.push(chunk);
+      const received=await fetch(actualAuth.url+request.url,{method:request.method,headers:request.headers,body:Buffer.concat(chunks),redirect:'error'});
+      response.writeHead(received.status,Object.fromEntries(received.headers));return response.end(Buffer.from(await received.arrayBuffer()));
     }
     if (request.url.startsWith('/api/users')) { legacyUserRequests++; return response.end(JSON.stringify({ users: [{ id: 'legacy-shadow', role: 'admin' }] })); }
     if (request.url !== '/api/auth/login' || request.method !== 'POST') { response.statusCode = 404; return response.end('{}'); }
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks)); credentialAttempts++;
     response.setHeader('Content-Type', 'application/json');
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if (credentials.username === 'invited-browser-employee') {
+      const result=await fetch(actualAuth.url+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentials),redirect:'error'});
+      response.statusCode=result.status;return response.end(Buffer.from(await result.arrayBuffer()));
+    }
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign','company-invitation-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -189,7 +186,10 @@ before(async () => {
     OAUTH_SIGNING_KEY_FILE: signing, OAUTH_VERIFICATION_JWKS_FILE: '', OAUTH_EPHEMERAL_SIGNING_KEYS: 'false', OAUTH_REVOCATION_DEMO_MODE: 'false',
     OAUTH_MFA_KEY_FILE: mfaKey,
     COMPANY_REGISTRATION_ENABLED: 'true', COMPANY_ACTIVATION_ENABLED: 'true', COMPANY_CONSOLE_CLIENT_ID: 'web-app',
-    AUTH_SERVICE_URL: credentialsBase, GRAFANA_CLIENT_SECRET: 'disposable-grafana', DEVPORTAL_CLIENT_SECRET: 'disposable-devportal',
+    AUTH_SERVICE_URL: credentialsBase, IDENTITY_SERVICE_URL: identityBase, GRAFANA_CLIENT_SECRET: 'disposable-grafana', DEVPORTAL_CLIENT_SECRET: 'disposable-devportal',
+    OAUTH_EMPLOYEE_INVITATION_AUTH_URL: credentialsBase, OAUTH_EMPLOYEE_INVITATION_IDENTITY_URL: identityBase,
+    OAUTH_EMPLOYEE_INVITATION_GRAPH_TENANT_ID: '', OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_ID: '', OAUTH_EMPLOYEE_INVITATION_GRAPH_CLIENT_SECRET: '',
+    OAUTH_EMPLOYEE_INVITATION_GRAPH_SENDER: '', OAUTH_EMPLOYEE_INVITATION_PUBLIC_URL: '',
     OAUTH_IDENTITY_AUTHORITY_URL: identityBase + '/internal/identity/authorization-state',
     OAUTH_POLICY_SOURCE_URL: policyBase,
     OAUTH_WEB_CLIENT_ID: 'web-app', OAUTH_WEB_CLIENT_SECRET_FILE: secret, OAUTH_WEB_REDIRECT_URIS: JSON.stringify([origin + '/auth/callback']), OAUTH_WEB_ALLOW_HTTP_LOOPBACK: 'true',
@@ -199,9 +199,12 @@ before(async () => {
     const match = /BROWSER_ISSUER_PORT (\d+)/.exec(issuerOutput); if (!match) return false;
     issuerBase = 'http://127.0.0.1:' + match[1]; return true;
   }, issuerProcess, () => issuerOutput);
+  const authUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL);authUrl.searchParams.set('options',`-c search_path=${authSchema},public`);
+  actualAuth=await startAuthenticationService(authUrl.toString(),false,{OIDC_ISSUER:logicalIssuer,JWKS_URI:issuerBase+'/.well-known/jwks.json',IDENTITY_SERVICE_URL:identityBase});
+  authDb=new Pool({connectionString:authUrl.toString(),max:2});
   const identityDatabaseUrl = new URL(process.env.OAUTH_TEST_DATABASE_URL); identityDatabaseUrl.searchParams.set('options', `-c search_path=${identitySchema},public`);
   Object.assign(process.env, { NODE_ENV: 'test', DATABASE_URL: identityDatabaseUrl.toString(), OIDC_ISSUER: logicalIssuer,
-    JWKS_URI: issuerBase + '/.well-known/jwks.json', OIDC_ACCESS_STATE_URL: issuerBase + '/oauth/access-state', IDENTITY_DEMO_MODE: 'false', POLICY_SERVICE_URL:policyBase });
+    JWKS_URI: issuerBase + '/.well-known/jwks.json', OIDC_ACCESS_STATE_URL: issuerBase + '/oauth/access-state', IDENTITY_DEMO_MODE: 'false', POLICY_SERVICE_URL:policyBase, AUTH_SERVICE_URL:credentialsBase });
   identityDb = require('../../../identity-service/src/db'); assert.equal(await identityDb.initDb(), true);
   await identityDb.query(fs.readFileSync(path.join(__dirname, '../../../identity-service/migrations/045_company_offboarding_receipts.sql'), 'utf8'));
   await identityDb.query(fs.readFileSync(path.join(__dirname, '../../../identity-service/migrations/046_company_offboarding_groups.sql'), 'utf8'));
@@ -288,6 +291,7 @@ before(async () => {
 after(async () => {
   process.stdout.write('Stopping browser clients before fixture services\n');
   if (browser) await browser.close(); await stop(nextProcess); await stop(quickProcess); await stop(issuerProcess);
+  if(actualAuth)await actualAuth.stop();
   process.stdout.write('Browser clients stopped; closing fixture services\n');
   if(inventoryFixture)await inventoryFixture.close();
   for (const server of [quickReceiver, credentialServer?.authorityProxy, credentialServer, identityServer,policyServer]) {
@@ -296,6 +300,8 @@ after(async () => {
   if (issuerDb) await issuerDb.end();
   if (identityDb) await identityDb.pool.end();
   if (policyDb) await policyDb.shutdown();
+  if(authDb)await authDb.end();
+  await administration.query(`DROP SCHEMA IF EXISTS ${authSchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${policySchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${identitySchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await administration.end();
@@ -311,6 +317,7 @@ async function context({ realQuick = false, onboarded = true } = {}) {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/platform/capabilities') return route.fulfill({ json: { configuredServices: realQuick ? ['quick-actions'] : [] } });
     if (pathname === '/api/company-registration' || pathname.startsWith('/api/company-registration/')) return route.continue();
+    if (pathname === '/api/employee-invitations' || pathname.startsWith('/api/employee-invitations/') || pathname === '/api/identity/employee-invitations') return route.continue();
     if (realQuick && pathname.startsWith('/api/quick/')) return route.continue();
     if (pathname.startsWith('/api/licenses')) return route.continue();
     if (pathname === '/api/policies' || pathname.startsWith('/api/policies/')) return route.continue();
@@ -368,6 +375,50 @@ async function mediated(page, action = 'session') {
     });
   }, action);
 }
+
+test('real employee invitation activates the actual password credential and completes first MFA through the confidential browser callback',{timeout:240000},async()=>{
+ const ownerUsername='company-invitation-owner',username='invited-browser-employee',password='Actual-Invited-Employee-Password-321!';
+ const company=await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb,identitySchema,logicalIssuer,{subject:ownerUsername+'-subject',username:ownerUsername});
+ const ownerContext=await context(),recipientContext=await context();const ownerPage=await ownerContext.newPage(),page=await recipientContext.newPage();
+ try{
+  await reviewFirstFactor(ownerPage,ownerUsername);await login(ownerPage,ownerUsername);const owner=await mediated(ownerPage);assert.equal(owner.status,200);
+  assert.deepEqual(JSON.parse(Buffer.from(owner.body.access_token.split('.')[1],'base64url')).roles,[]);
+  const created=await ownerPage.request.post(origin+'/api/users',{headers:{Authorization:'Bearer '+owner.body.access_token},data:{username,email:'invited-browser-employee@example.invalid',displayName:'Invited Browser Employee'}});
+  assert.equal(created.status(),201,await created.text());const employee=await created.json();assert.equal(employee.enabled,false);
+  await ownerPage.goto(origin+'/employee-invitations');await ownerPage.getByRole('heading',{name:'Mitarbeitereinladungen',exact:true}).waitFor();
+  await ownerPage.getByLabel('Suchen',{exact:true}).fill(username);await ownerPage.getByRole('button',{name:'Auswählen',exact:true}).click();
+  await ownerPage.getByLabel('Anmeldename',{exact:true}).fill(username);await ownerPage.getByLabel('Grund',{exact:true}).fill('Actual browser employee entry with the original password and first MFA');
+  await ownerPage.getByLabel('Ich bestätige die Einladung und die ausgewählten Gruppenmitgliedschaften für den Eintrag.',{exact:true}).check();
+  const creation=ownerPage.waitForResponse(result=>new URL(result.url()).pathname==='/api/employee-invitations/manage/create');
+  await ownerPage.getByRole('button',{name:'Einladung erstellen',exact:true}).click();const invitationResponse=await creation;
+  assert.equal(invitationResponse.status(),201,await invitationResponse.text());const invitation=await invitationResponse.json();assert.equal(invitation.created,true);assert.equal(invitation.mailStatus,'not_configured');await ownerPage.getByText(/E-Mail-Versand ist nicht eingerichtet/).waitFor();
+  const link=await ownerPage.getByLabel('Einmaliger Einladungslink',{exact:true}).inputValue();assert.equal(new URL(link).hash.slice(1),invitation.invitationToken);
+  assert.equal((await authDb.query('SELECT count(*)::int AS n FROM users')).rows[0].n,0);
+  await page.goto(link);await page.getByRole('heading',{name:'Einladung geprüft',exact:true}).waitFor();assert.equal(new URL(page.url()).hash,'');
+  const browserSecrets=await page.evaluate(()=>[document.cookie,...Object.values(localStorage),...Object.values(sessionStorage)].join('|'));assert.equal(browserSecrets.includes(invitation.invitationToken),false);
+  await page.getByLabel('Neues Passwort',{exact:true}).fill(password);await page.getByLabel('Passwort wiederholen',{exact:true}).fill(password);
+  const acceptance=page.waitForResponse(result=>new URL(result.url()).pathname==='/api/employee-invitations/accept');await page.getByRole('button',{name:'Einladung annehmen und Zugang aktivieren',exact:true}).click();const accepted=await acceptance;
+  assert.equal(accepted.status(),200,await accepted.text());await page.getByRole('heading',{name:'Konto aktiviert',exact:true}).waitFor();
+  const credential=(await authDb.query('SELECT id,is_locked,security_revision FROM users WHERE username=$1',[username])).rows[0];assert.ok(credential);assert.equal(credential.is_locked,false);
+  assert.equal((await identityDb.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,true);
+  assert.equal((await identityDb.query('SELECT subject FROM identity_subject_links WHERE issuer=$1 AND user_id=$2',[logicalIssuer,employee.id])).rows[0].subject,credential.id);
+  assert.equal((await recipientContext.cookies()).some(cookie=>cookie.name==='od_session'),false);
+  await page.getByRole('link',{name:'Mit OpenDirectory anmelden',exact:true}).click();await page.getByRole('button',{name:'Mit OpenDirectory anmelden',exact:true}).click();
+  await page.waitForURL(url=>url.origin===issuerBase&&url.pathname==='/oauth/authorize');await page.locator('input[name=username]').fill(username);await page.locator('input[name=password]').fill('wrong-password');
+  let pending=page.waitForResponse(result=>new URL(result.url()).pathname==='/oauth/authorize/login');await page.getByRole('button',{name:'Anmelden',exact:true}).click();let response=await pending;assert.equal(response.status(),401);assert.equal((await response.json()).error,'invalid_credentials');
+  await page.locator('input[name=password]').fill(password);pending=page.waitForResponse(result=>new URL(result.url()).pathname==='/oauth/authorize/login');await page.getByRole('button',{name:'Anmelden',exact:true}).click();response=await pending;assert.equal(response.status(),401);assert.equal((await response.json()).error,'mfa_enrollment_required');
+  pending=page.waitForResponse(result=>new URL(result.url()).pathname==='/oauth/mfa/enrollment/start');await page.getByRole('button',{name:'Faktor sicher vorbereiten',exact:true}).click();response=await pending;assert.equal(response.status(),200,response.status()>=400?(await response.json()).error:undefined);const factor=await response.json();
+  const counter=Math.floor(Date.now()/30000)-1;await page.getByLabel('Einmalcode des neuen Authenticators',{exact:true}).fill(totp(factor.secret,counter));
+  pending=page.waitForResponse(result=>new URL(result.url()).pathname==='/oauth/mfa/enrollment/confirm');await page.getByRole('button',{name:'Faktor bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),200);assert.equal((await response.json()).reauthenticationRequired,true);
+  assert.equal((await recipientContext.cookies()).some(cookie=>cookie.name==='od_session'),false);assert.equal(await page.locator('#enrollmentSecret').textContent(),'');
+  await page.locator('input[name=otpCode]').fill(totp(factor.secret,Math.floor(Date.now()/30000)));await page.getByRole('button',{name:'Anmelden',exact:true}).click();await page.waitForURL(origin+'/dashboard');
+  const session=await mediated(page);assert.equal(session.status,200);const claims=JSON.parse(Buffer.from(session.body.access_token.split('.')[1],'base64url'));
+  assert.equal(claims.sub,credential.id);assert.equal(claims.identity_authorization.userId,employee.id);assert.deepEqual(claims.roles,[]);assert.ok(claims.amr.includes('otp'));assert.equal(claims.credential_authorization.securityRevision,String(credential.security_revision));assert.equal(claims.credential_authorization.invitationId,invitation.invitation.id);assert.equal(claims.credential_authorization.userId,employee.id);
+  assert.equal((await authDb.query('SELECT status FROM auth_employee_invitations WHERE id=$1',[invitation.invitation.id])).rows[0].status,'accepted');
+  assert.equal((await identityDb.query('SELECT count(*)::int AS n FROM identity_role_assignments WHERE user_id=$1',[employee.id])).rows[0].n,0);
+  const refreshed=await mediated(page);assert.equal(refreshed.status,200);assert.equal(JSON.parse(Buffer.from(refreshed.body.access_token.split('.')[1],'base64url')).credential_authorization.invitationId,invitation.invitation.id);assert.equal((await mediated(page,'logout')).status,200);assert.equal((await mediated(page)).status,401);
+ }finally{await recipientContext.close();await ownerContext.close();}
+});
 
 test('real browser login uses protected confidential client, verified user and no browser-stored credentials', { timeout: 120000 }, async () => {
   const activeContext = await context();
@@ -3033,9 +3084,13 @@ test('real change-driven app worker assigns, expands and returns a group license
     const second=await completedJob(row=>row.status==='succeeded'&&JSON.parse(row.artifact_content).results.some(item=>item.userId===company.receipt.administratorId&&item.status==='removed'));
     assert.ok(Date.now()-removalStarted<60000);assert.equal((await policyDb.query('SELECT used_seats FROM license_catalog WHERE id=$1',[product.value.id])).rows[0].used_seats,1);
     await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();await page.locator('article').filter({hasText:second.id}).getByRole('button',{name:'Lizenzbericht anzeigen',exact:true}).click();await report.getByText(company.receipt.administratorId+' · Gruppenquelle nicht mehr zugewiesen',{exact:true}).waitFor();await page.screenshot({path:'/tmp/od-company-license-change-returned.png',fullPage:true});
-    await page.getByRole('button', { name: 'Zeitplan stoppen', exact: true }).click(); await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.', { exact: true }).waitFor();
+    // Finish worker observations before reading the version used by the explicit UI stop.
+    await stop(worker); assert.equal(worker.exitCode,0); worker = null;
+    await page.getByRole('button', { name: 'Automationen neu laden', exact: true }).click();
+    const stopping=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/identity/automation/schedules/'+schedule.id+'/disable');
+    await page.getByRole('button', { name: 'Zeitplan stoppen', exact: true }).click(); assert.equal((await stopping).status(),200); await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.', { exact: true }).waitFor();
     assert.equal((await identityDb.query('SELECT enabled FROM identity_automation_schedules WHERE id=$1', [schedule.id])).rows[0].enabled, false);
-    const lines = workerOutput.trim().split('\n').map(line => JSON.parse(line)); assert.ok(lines.length >= 2);
+    const lines = workerOutput.trim().split('\n').map(line => JSON.parse(line)); assert.deepEqual(lines.pop(),{workerStopped:true}); assert.ok(lines.length >= 2);
     for (const line of lines) { assert.equal(line.principal.kind, 'application'); assert.equal(line.principal.clientId, client.clientId); assert.equal(Object.hasOwn(line.principal, 'userId'), false); }
     assert.equal(workerOutput.includes(client.clientSecret), false); assert.equal(workerOutput.includes(owner.body.access_token), false);
   } finally { global.fetch = originalFetch; await stop(worker); await adminContext.close(); await ownerContext.close(); }
