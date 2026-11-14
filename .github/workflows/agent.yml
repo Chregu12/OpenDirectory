@@ -1,0 +1,87 @@
+name: Native Rust agent
+on:
+  push:
+    branches: [main]
+    tags: ['agent-v*']
+    paths: ['agent-rust/**', '.github/workflows/agent.yml']
+  pull_request:
+    paths: ['agent-rust/**', '.github/workflows/agent.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-agent-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install exact Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agent-rust/target
+          key: agent-${{ matrix.target }}-rust-1.95-${{ hashFiles('agent-rust/Cargo.lock') }}
+      - name: Native tests and release build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          test "$(rustc +1.95.0 -vV | sed -n 's/^host: //p')" = "$TARGET"
+          python -m unittest discover -s agent-rust/scripts -p test_package.py
+          cargo +1.95.0 test --locked --manifest-path agent-rust/Cargo.toml
+          cargo +1.95.0 build --locked --release --manifest-path agent-rust/Cargo.toml
+      - name: Actual native autostart and data collection
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          binary=agent-rust/target/release/od-agent-service
+          if [[ "$TARGET" == *windows* ]]; then binary+=.exe; fi
+          python agent-rust/scripts/test_installation.py --binary "$binary" --report agent-installation-result.json
+      - name: Package exact target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          binary=agent-rust/target/release/od-agent-service
+          if [[ "$TARGET" == *windows* ]]; then binary+=.exe; fi
+          python agent-rust/scripts/package.py --binary "$binary" --target "$TARGET" --commit "$GITHUB_SHA" --epoch "$(git show -s --format=%ct HEAD)"
+      - name: Attest trusted build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: agent-rust/dist/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: agent-${{ matrix.target }}
+          path: |
+            agent-rust/dist/*
+            agent-installation-result.json
+          if-no-files-found: warn
+          retention-days: 14

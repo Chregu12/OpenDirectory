@@ -6,6 +6,7 @@ mod commands;
 mod compliance;
 mod config;
 mod enrollment;
+mod installation;
 mod inventory;
 
 use config::AgentConfig;
@@ -13,12 +14,15 @@ use config::AgentConfig;
 #[derive(Parser)]
 #[command(
     name = "od-agent-service",
-    version = "1.4.0",
+    version = "1.5.0",
     about = "OpenDirectory MDM Agent"
 )]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    #[arg(long, env = "OD_CONFIG_PATH", global = true)]
+    config_path: Option<std::path::PathBuf>,
 
     #[arg(long, env = "OD_SERVER_URL")]
     server_url: Option<String>,
@@ -44,7 +48,14 @@ enum Commands {
     /// Show current configuration
     Status,
     /// Install as system service
-    Install,
+    Install {
+        /// Show paths without installing or starting anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Back up and replace an existing different OpenDirectory service definition
+        #[arg(long)]
+        replace_existing: bool,
+    },
 }
 
 #[tokio::main]
@@ -53,13 +64,14 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let mut cfg = match AgentConfig::load() {
-        Ok(cfg) => cfg,
-        Err(_) => {
-            error!("Cannot read agent configuration");
-            std::process::exit(1);
-        }
-    };
+    let mut cfg =
+        match AgentConfig::load_from(cli.config_path.unwrap_or_else(AgentConfig::config_path)) {
+            Ok(cfg) => cfg,
+            Err(_) => {
+                error!("Cannot read agent configuration");
+                std::process::exit(1);
+            }
+        };
 
     if let Some(url) = cli.server_url {
         cfg.server_url = url;
@@ -96,7 +108,10 @@ async fn main() {
             println!("Enrolled:   {}", cfg.device_token.is_some());
             Ok(())
         }
-        Commands::Install => install_service(),
+        Commands::Install {
+            dry_run,
+            replace_existing,
+        } => installation::install(&cfg, dry_run, replace_existing),
     };
 
     if let Err(e) = result {
@@ -125,36 +140,6 @@ async fn run_daemon(cfg: AgentConfig) -> Result<(), Box<dyn std::error::Error>> 
             }
             _ = tokio::signal::ctrl_c() => { info!("Agent stopped."); break; }
         }
-    }
-
-    Ok(())
-}
-
-fn install_service() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(windows)]
-    return Err("Use an elevated scheduled task to run od-agent-service run at startup; Windows service installation is not supported".into());
-    #[cfg(not(windows))]
-    let exe_path = std::env::current_exe()?;
-
-    #[cfg(target_os = "linux")]
-    {
-        let service_content = format!(
-            "[Unit]\nDescription=OpenDirectory MDM Agent\nAfter=network.target\n\n[Service]\nExecStart={} run\nRestart=always\nRestartSec=10\nEnvironment=RUST_LOG=info\n\n[Install]\nWantedBy=multi-user.target\n",
-            exe_path.display()
-        );
-        std::fs::write("/etc/systemd/system/od-agent.service", service_content)?;
-        println!("Installed systemd service. Run: systemctl enable --now od-agent");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let plist = format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>\n<key>Label</key><string>com.opendirectory.agent</string>\n<key>ProgramArguments</key><array><string>{}</string><string>run</string></array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><true/>\n</dict></plist>\n",
-            exe_path.display()
-        );
-        let plist_path = "/Library/LaunchDaemons/com.opendirectory.agent.plist";
-        std::fs::write(plist_path, plist)?;
-        println!("Installed LaunchDaemon. Run: launchctl load {}", plist_path);
     }
 
     Ok(())

@@ -2,7 +2,7 @@ use crate::config::AgentConfig;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: &str = "1.4.0";
+pub const VERSION: &str = "1.5.0";
 pub fn client(cfg: &AgentConfig) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let url = reqwest::Url::parse(&cfg.server_url)?;
     if url.scheme() != "https"
@@ -85,12 +85,12 @@ struct EnrollResponse {
     device_token: String,
     credential_expires_at: String,
 }
-fn device_id(value: &str) -> bool {
+pub(crate) fn device_id(value: &str) -> bool {
     uuid::Uuid::parse_str(value)
         .map(|id| id.to_string() == value)
         .unwrap_or(false)
 }
-fn token(value: &str, prefix: &str) -> bool {
+pub(crate) fn token(value: &str, prefix: &str) -> bool {
     value.len() == 48
         && value.starts_with(prefix)
         && value[5..]

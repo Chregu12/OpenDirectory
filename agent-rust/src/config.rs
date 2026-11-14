@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
+    #[serde(skip)]
+    pub(crate) path: Option<PathBuf>,
     pub server_url: String,
     pub enrollment_token: Option<String>,
     pub device_id: Option<String>,
@@ -18,6 +20,7 @@ pub struct AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
+            path: None,
             server_url: std::env::var("OD_SERVER_URL").unwrap_or_default(),
             enrollment_token: std::env::var("OD_ENROLLMENT_TOKEN").ok(),
             device_id: std::env::var("OD_DEVICE_ID").ok(),
@@ -49,11 +52,15 @@ impl AgentConfig {
         }
     }
 
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let path = Self::config_path();
+    pub fn path(&self) -> PathBuf {
+        self.path.clone().unwrap_or_else(Self::config_path)
+    }
+
+    pub fn load_from(path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         if path.exists() {
             let data = std::fs::read_to_string(&path)?;
             let mut cfg: Self = serde_json::from_str(&data)?;
+            cfg.path = Some(path);
             // Override from env
             if let Ok(v) = std::env::var("OD_SERVER_URL") {
                 cfg.server_url = v;
@@ -69,12 +76,15 @@ impl AgentConfig {
             }
             Ok(cfg)
         } else {
-            Ok(Self::default())
+            Ok(Self {
+                path: Some(path),
+                ..Self::default()
+            })
         }
     }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let path = Self::config_path();
+        let path = self.path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -112,5 +122,36 @@ impl AgentConfig {
             return Err(error.into());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn selected_path_survives_atomic_save_and_is_not_a_credential_field() {
+        let directory = std::env::temp_dir().join(format!("od-config-{}", uuid::Uuid::new_v4()));
+        let path = directory.join("config %with spaces.json");
+        let cfg = AgentConfig {
+            path: Some(path.clone()),
+            server_url: "http://127.0.0.1:12345".into(),
+            device_id: Some(uuid::Uuid::new_v4().to_string()),
+            device_token: Some(format!("odad_{}", "a".repeat(43))),
+            ..Default::default()
+        };
+        cfg.save().unwrap();
+        cfg.save().unwrap();
+        let loaded = AgentConfig::load_from(path.clone()).unwrap();
+        assert_eq!(loaded.path(), path);
+        assert!(serde_json::to_value(&loaded).unwrap().get("path").is_none());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }
