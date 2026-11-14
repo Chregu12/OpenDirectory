@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use log::{error, info, warn};
 use std::time::Duration;
 
+mod commands;
 mod compliance;
 mod config;
 mod enrollment;
@@ -12,7 +13,7 @@ use config::AgentConfig;
 #[derive(Parser)]
 #[command(
     name = "od-agent-service",
-    version = "1.3.0",
+    version = "1.4.0",
     about = "OpenDirectory MDM Agent"
 )]
 struct Cli {

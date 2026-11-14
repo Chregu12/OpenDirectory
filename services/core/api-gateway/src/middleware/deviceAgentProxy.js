@@ -10,7 +10,7 @@ function deviceAgentProxy(target) {
   return (req, res, next) => {
     if (!req.path.startsWith('/api/device-agent')) return next();
     res.set('Cache-Control', 'no-store');
-    if (req.method !== 'POST' || !['/api/device-agent/register', '/api/device-agent/heartbeat'].includes(req.path) || Object.keys(req.query).length) return res.status(404).json({ error: 'Agent operation not found' });
+    if (req.method !== 'POST' || !['/api/device-agent/register', '/api/device-agent/heartbeat', '/api/device-agent/sync/claim'].includes(req.path) || Object.keys(req.query).length) return res.status(404).json({ error: 'Agent operation not found' });
     if (req.headers['x-api-key'] || req.headers['x-enrollment-token']) return res.status(401).json({ error: 'Device-only credentials required' });
     proxy(req, res, next);
   };

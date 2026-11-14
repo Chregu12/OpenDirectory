@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import DeviceAgentPanel from '@/components/views/DeviceAgentPanel';
 import { readAgent, manageAgent } from '@/lib/deviceAgents';
 jest.mock('@/lib/deviceAgents', () => ({ ...jest.requireActual('@/lib/deviceAgents'), readAgent: jest.fn(), manageAgent: jest.fn() }));
+jest.mock('@/components/views/DeviceSyncPanel', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/views/DeviceHardwarePanel', () => ({ __esModule: true, default: () => null }));
 const id = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';

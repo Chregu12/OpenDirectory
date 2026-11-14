@@ -8,6 +8,7 @@ const path = require('node:path');
 const { DeviceInventory } = require('../DeviceInventory');
 const { DeviceAgents, agentEtag } = require('../DeviceAgents');
 const { DeviceCompliance, compliancePolicyEtag } = require('../DeviceCompliance');
+const {syncRequestEtag}=require('../DeviceSync');
 const C = require('../../../../../packages/device-compliance-contract');
 const { INVENTORY_PERMISSIONS } = require('../../../../../packages/device-inventory-contract');
 assert.ok(process.env.DEVICE_TEST_DATABASE_URL);
@@ -277,7 +278,7 @@ test('actual Rust binary enrolls through HTTP gateway, stores a private credenti
  const express = require('express');
  const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux';
  if (platform !== unit.platform) unit = await inventory.update(unit.id, { assetId: unit.assetId, serialNumber: unit.serialNumber, manufacturer: unit.manufacturer, model: unit.model, deviceClass: unit.deviceClass, platform, reason: 'Actual native Rust client host platform', confirm: true }, require('../../../../../packages/device-inventory-contract').deviceEtag(unit), {}, 'Bearer original', randomUUID());
- const receiver = createInventoryApp({ db, inventory, agents, returns: {} }).listen(0, '127.0.0.1'); await new Promise(resolve => receiver.once('listening', resolve));
+ const receiver = createInventoryApp({ db, inventory, agents, sync: agents.sync, returns: {} }).listen(0, '127.0.0.1'); await new Promise(resolve => receiver.once('listening', resolve));
  const gateway = express(); gateway.use(deviceAgentProxy('http://127.0.0.1:' + receiver.address().port)); gateway.use((_req, res) => res.status(401).json({ error: 'Human authentication required' }));
  const server = gateway.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'od-agent-rust-')); const configPath = path.join(folder, 'agent.json');
@@ -293,10 +294,11 @@ test('actual Rust binary enrolls through HTTP gateway, stores a private credenti
   const stored = JSON.parse(fs.readFileSync(configPath, 'utf8')); assert.equal(stored.enrollment_token, null); assert.match(stored.device_token, /^odad_/); assert.equal(stored.device_id, unit.id);
   if (process.platform !== 'win32') assert.equal(fs.statSync(configPath).mode & 0o777, 0o600);
   assert.equal((await run('heartbeat')).code, 0); assert.equal((await get()).status, 'connected');
-  const measured = await systemReport(); assert.equal(measured.status, 'current'); assert.equal(measured.inventory.agentVersion, '1.3.0'); assert.ok(Number(measured.inventory.facts.cpu.logicalProcessors) > 0); assert.ok(BigInt(measured.inventory.facts.memory.totalBytes) > 0n);
+  const measured = await systemReport(); assert.equal(measured.status, 'current'); assert.equal(measured.inventory.agentVersion, '1.4.0'); assert.ok(Number(measured.inventory.facts.cpu.logicalProcessors) > 0); assert.ok(BigInt(measured.inventory.facts.memory.totalBytes) > 0n);
   const unconfigured=await run('compliance');assert.equal(unconfigured.code,1);assert.match(unconfigured.output,/not-configured/);
   await compliance.save(platform,{settings:{...C.DEFAULTS,enabled:true,minimumOsVersion:'0'},reason:'Validate the actual Rust OS observation with a bounded fixture rule',confirm:true},compliancePolicyEtag(source.tenant.id,platform,'0'),{},'Bearer original',randomUUID());
-  const checked=await run('compliance');assert.equal(checked.code,0,checked.output);const actualAssessment=await assessment();assert.equal(actualAssessment.status,'compliant');assert.equal(actualAssessment.assessment.security.agentVersion,'1.3.0');assert.ok(C.security(actualAssessment.assessment.security.facts));
+  const queuedSync=await queueSync();
+  const checked=await run('compliance');assert.equal(checked.code,0,checked.output);const actualAssessment=await assessment();assert.equal(actualAssessment.status,'compliant');assert.equal(actualAssessment.assessment.security.agentVersion,'1.4.0');assert.ok(C.security(actualAssessment.assessment.security.facts));assert.equal((await syncPage()).requests[0].id,queuedSync.request.id);assert.equal((await syncPage()).requests[0].status,'completed');
   assert.equal((await fetch(endpoint + '/api/devices', { headers: { Authorization: 'Bearer ' + stored.device_token } })).status, 401);
   assert.equal((await fetch(endpoint + '/api/device-agent/heartbeat?deviceId=foreign', { method: 'POST' })).status, 404);
   await manage('revoke'); const denied = await run('heartbeat'); assert.equal(denied.code, 1); assert.match(denied.output, /401/); assert.ok(!denied.output.includes(stored.device_token));
@@ -335,4 +337,55 @@ test('compliance migration replay retains the actual policy, assessments and exa
  await pool.query('ALTER TABLE device_compliance_policies DISABLE TRIGGER USER');try{await pool.query("UPDATE device_compliance_policies SET revision=9007199254740993 WHERE tenant_id=$1 AND platform='linux'",[source.tenant.id]);}finally{await pool.query('ALTER TABLE device_compliance_policies ENABLE TRIGGER USER');}
  const saved=await savePolicy(baseline({minimumOsVersion:'24.04'}),'9007199254740993');assert.equal(saved.policy.revision,'9007199254740994');const history=await compliance.history('linux',{}, {},'Bearer original',true);assert.equal(history.events[0].before.revision,'9007199254740993');assert.equal(history.events[0].after.revision,'9007199254740994');
  await securityHeartbeat(registered.deviceToken);assert.equal((await assessment()).policyRevision,'9007199254740994');
+});
+
+const syncPage=()=>agents.sync.list(unit.id,{}, {},'Bearer original');
+const queueSync=async()=>agents.sync.write(unit.id,decision,(await syncPage()).connectionEtag,{},'Bearer original',randomUUID());
+const claimSync=token=>agents.sync.claim({deviceId:unit.id},'Bearer '+token,randomUUID());
+const finishSync=(token,command)=>agents.heartbeat({deviceId:unit.id,report,inventory:hardware(),security:security(),sync:{id:command.id,leaseToken:command.leaseToken}},'Bearer '+token,randomUUID());
+test('sync request completes only with actual new hardware and security in the same heartbeat commit',async()=>{
+ await savePolicy();const registered=await enroll((await manage()).enrollmentToken);const queued=await queueSync();assert.equal(queued.request.status,'queued');assert.ok(Date.parse(queued.request.expiresAt)<=source.validUntil*1000);
+ const claimed=await claimSync(registered.deviceToken);assert.equal(claimed.command.id,queued.request.id);assert.equal(claimed.command.type,'inventory.refresh');assert.match(claimed.command.leaseToken,/^odsl_/);
+ const result=await finishSync(registered.deviceToken,claimed.command);assert.deepEqual(result.sync,{id:queued.request.id,status:'completed'});
+ const complete=(await syncPage()).requests[0];assert.equal(complete.status,'completed');assert.equal(complete.revision,'3');assert.equal(complete.result.compliance.status,'compliant');assert.deepEqual(complete.result.inventory.facts,hardware());assert.equal(Date.parse(complete.result.receivedAt),new Date((await pool.query('SELECT last_seen AS value FROM device_agent_connections')).rows[0].value).getTime());
+ const history=await agents.sync.history(unit.id,complete.id,{}, {},'Bearer original');assert.deepEqual(history.events.map(row=>row.action),['queued','claimed','completed']);assert.ok(!JSON.stringify([complete,history]).includes(claimed.command.leaseToken));assert.ok(!JSON.stringify([complete,history]).includes('lease_hash'));
+ assert.equal((await claimSync(registered.deviceToken)).command,null);await heartbeat(registered.deviceToken);assert.deepEqual((await syncPage()).requests[0].result,complete.result);
+});
+test('concurrent device claims offer a queued sync once and duplicate pending requests are rejected',async()=>{
+ const registered=await enroll((await manage()).enrollmentToken);await queueSync();await assert.rejects(queueSync(),{code:'23514'});
+ const results=await Promise.all([claimSync(registered.deviceToken),claimSync(registered.deviceToken)]);assert.equal(results.filter(row=>row.command).length,1);assert.equal((await syncPage()).requests[0].attempts,1);
+});
+test('sync cancellation keeps its own actor and history and prevents a late device completion',async()=>{
+ const registered=await enroll((await manage()).enrollmentToken);const queued=await queueSync();const claimed=await claimSync(registered.deviceToken);
+ await assert.rejects(agents.sync.write(unit.id,decision,syncRequestEtag(queued.request),{},'Bearer original',randomUUID(),queued.request.id),{status:412});
+ const current=(await syncPage()).requests[0];const cancelled=await agents.sync.write(unit.id,decision,syncRequestEtag(current),{},'Bearer original',randomUUID(),current.id);assert.equal(cancelled.request.status,'cancelled');const old=(await get()).revision;
+ await assert.rejects(finishSync(registered.deviceToken,claimed.command),{code:'23514'});assert.equal((await get()).revision,old);assert.equal((await systemReport()).status,'missing');assert.equal((await claimSync(registered.deviceToken)).command,null);
+ assert.deepEqual((await agents.sync.history(unit.id,current.id,{}, {},'Bearer original')).events.map(row=>row.action),['queued','claimed','cancelled']);
+});
+test('sync leases require exact device scope, both new reports and the current registered credential',async()=>{
+ const registered=await enroll((await manage()).enrollmentToken);await queueSync();const claimed=await claimSync(registered.deviceToken);const before=(await get()).revision;
+ await assert.rejects(agents.heartbeat({deviceId:unit.id,report,sync:{id:claimed.command.id,leaseToken:claimed.command.leaseToken}},'Bearer '+registered.deviceToken),{status:400});
+ await assert.rejects(finishSync(registered.deviceToken,{...claimed.command,leaseToken:'odsl_'+'a'.repeat(43)}),{code:'23514'});assert.equal((await get()).revision,before);
+ await manage('revoke');assert.equal((await syncPage()).requests[0].status,'connection_changed');await assert.rejects(claimSync(registered.deviceToken),{code:'28000'});
+ const replacement=await enroll((await manage()).enrollmentToken);assert.equal((await claimSync(replacement.deviceToken)).command,null);await assert.rejects(finishSync(replacement.deviceToken,claimed.command),{code:'23514'});
+ await assert.rejects(agents.sync.list(unit.id,{tenantId:randomUUID()}, {},'Bearer original'),{status:400});source.tenant.id=randomUUID();await assert.rejects(syncPage(),{status:404});
+});
+test('expired syncs and exhausted leases remain visible and do not prevent an explicit new request',async()=>{
+ const registered=await enroll((await manage()).enrollmentToken);await queueSync();
+ await pool.query('ALTER TABLE device_sync_requests DISABLE TRIGGER USER');try{await pool.query("UPDATE device_sync_requests SET created_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute'");}finally{await pool.query('ALTER TABLE device_sync_requests ENABLE TRIGGER USER');}
+ assert.equal((await syncPage()).requests[0].status,'expired');assert.equal((await claimSync(registered.deviceToken)).command,null);const next=await queueSync();
+ for(let attempt=1;attempt<=3;attempt++){const claimed=await claimSync(registered.deviceToken);assert.equal(claimed.command.id,next.request.id);await pool.query('ALTER TABLE device_sync_requests DISABLE TRIGGER USER');try{await pool.query("UPDATE device_sync_requests SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[next.request.id]);}finally{await pool.query('ALTER TABLE device_sync_requests ENABLE TRIGGER USER');}}
+ assert.equal((await syncPage()).requests[0].status,'failed');assert.equal((await claimSync(registered.deviceToken)).command,null);assert.equal((await queueSync()).request.status,'queued');
+});
+
+test('sync raw writes, missing event receipts, source withdrawal and physical deadline expiry cannot report success',async()=>{
+ const registered=await enroll((await manage()).enrollmentToken);const queued=await queueSync();const offered=await claimSync(registered.deviceToken);
+ await assert.rejects(pool.query("UPDATE device_sync_requests SET status='cancelled'"),{code:'42501'});await assert.rejects(pool.query('TRUNCATE device_sync_events CASCADE'),{code:'42501'});
+ await pool.query("CREATE FUNCTION omit_sync_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='completed' THEN RETURN NULL;END IF;RETURN NEW;END; $$;CREATE TRIGGER z_omit_sync_completion BEFORE INSERT ON device_sync_events FOR EACH ROW EXECUTE FUNCTION omit_sync_completion()");
+ const before=(await get()).revision;await assert.rejects(finishSync(registered.deviceToken,offered.command),{code:'42501'});assert.equal((await get()).revision,before);assert.equal((await systemReport()).status,'missing');assert.equal((await syncPage()).requests[0].status,'claimed');
+ await pool.query('DROP TRIGGER z_omit_sync_completion ON device_sync_events');
+ const original=db.transaction;db.transaction=(operation,options={})=>original(operation,{...options,beforeCommit:async client=>{if(options.beforeCommit)await options.beforeCommit(client);const proof=(await client.query("SELECT current_setting('opendirectory.device_sync',true) AS proof")).rows[0].proof;if(proof)await client.query("SELECT set_config('opendirectory.device_sync',jsonb_set($1::jsonb,'{validUntil}',to_jsonb(extract(epoch FROM clock_timestamp())-1))::text,true)",[proof]);}});
+ await assert.rejects(finishSync(registered.deviceToken,offered.command),{code:'42501'});assert.equal((await get()).revision,before);db.transaction=original;
+ revoked=true;await assert.rejects(agents.sync.write(unit.id,decision,`"device-sync-${queued.request.id}-2"`,{},'Bearer original',randomUUID(),queued.request.id),{status:401});revoked=false;
+ await finishSync(registered.deviceToken,offered.command);const retained=(await syncPage()).requests;await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/011_device_sync.sql'),'utf8'));assert.deepEqual((await syncPage()).requests,retained);
 });

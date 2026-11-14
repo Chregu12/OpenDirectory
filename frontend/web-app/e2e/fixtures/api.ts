@@ -22,6 +22,7 @@ export async function mockApi(page:Page){
   if(p==='/api/devices/capabilities')return json({schemaVersion:1,inventoryProtocol:1,userId:actor,tenantId:tenant,permissions:['devices.inventory.read','devices.inventory.create','devices.inventory.assign'],managementMode:'inventory-only',supportedActions:[]});
   if(p==='/api/devices')return json({schemaVersion:1,actorUserId:actor,devices:[device],total:1,page:1,limit:25});
   if(p===`/api/devices/${deviceId}`)return json(device);
+  if(p===`/api/devices/${deviceId}/agent/sync`)return json({schemaVersion:1,syncProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,checkedAt:new Date().toISOString(),connectionEtag:null,page:1,limit:10,total:0,requests:[]});
   if(p===`/api/devices/${deviceId}/history`)return json({schemaVersion:1,actorUserId:actor,deviceId,events:[],total:0,page:1,limit:25});
   if(p==='/api/licenses/access')return json({subject:actor,identityState:'active',permissions:['licenses.catalog.read','licenses.catalog.manage','licenses.assignments.read','licenses.assignments.manage'],demoMode:false});
   if(p==='/api/licenses'&&m==='GET')return json({licenses,total:licenses.length});

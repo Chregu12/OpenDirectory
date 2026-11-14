@@ -2,7 +2,7 @@ use crate::config::AgentConfig;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: &str = "1.3.0";
+pub const VERSION: &str = "1.4.0";
 pub fn client(cfg: &AgentConfig) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let url = reqwest::Url::parse(&cfg.server_url)?;
     if url.scheme() != "https"
@@ -141,6 +141,13 @@ struct HeartbeatResponse {
     device_id: String,
     received_at: String,
     compliance: ComplianceResult,
+    sync: Option<SyncCompletion>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SyncCompletion {
+    id: String,
+    status: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -155,15 +162,20 @@ async fn transmit(cfg: &AgentConfig) -> Result<ComplianceResult, Box<dyn std::er
     if !device_id(id) || !token(credential, "odad_") {
         return Err("Invalid saved device credential".into());
     }
+    let command = crate::commands::claim(cfg, id, credential).await?;
     let inventory = tokio::task::spawn_blocking(crate::inventory::collect).await?;
     let security = crate::compliance::collect().await;
+    let mut body = serde_json::json!({"deviceId": id, "report": report(), "inventory": inventory, "security": security});
+    if let Some(command) = &command {
+        body["sync"] = serde_json::json!({"id":command.id,"leaseToken":command.lease_token});
+    }
     let response = client(cfg)?
         .post(format!(
             "{}/api/device-agent/heartbeat",
             cfg.server_url.trim_end_matches('/')
         ))
         .bearer_auth(credential)
-        .json(&serde_json::json!({"deviceId": id, "report": report(), "inventory": inventory, "security": security}))
+        .json(&body)
         .send()
         .await?;
     if response.status() != reqwest::StatusCode::OK {
@@ -191,6 +203,13 @@ async fn transmit(cfg: &AgentConfig) -> Result<ComplianceResult, Box<dyn std::er
         || chrono::DateTime::parse_from_rfc3339(&result.compliance.evaluated_at)?.timestamp() <= 0
     {
         return Err("Unconfirmed compliance assessment".into());
+    }
+    if !match (&command, &result.sync) {
+        (None, None) => true,
+        (Some(command), Some(receipt)) => receipt.id == command.id && receipt.status == "completed",
+        _ => false,
+    } {
+        return Err("Actual sync receipt unconfirmed".into());
     }
     Ok(result.compliance)
 }

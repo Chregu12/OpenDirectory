@@ -5,6 +5,7 @@ import { deviceInventoryError } from '@/lib/deviceInventory';
 import { AgentConnection, readAgent, manageAgent, agentStatusLabels as labels } from '@/lib/deviceAgents';
 import { DirectoryConfirmation } from './UserDetailPanel';
 import DeviceHardwarePanel from './DeviceHardwarePanel';
+import DeviceSyncPanel from './DeviceSyncPanel';
 const events = { issue: 'Registrierungscode erstellt · vorheriger Zugang gesperrt', register: 'Agent registriert', revoke: 'Gerätezugang widerrufen' };
 const date = (value: string | null) => value ? new Date(value).toLocaleString('de-CH') : '—';
 export default function DeviceAgentPanel({ device, actor, canManage, disabled, onBusy, onSecurityError, onChanged }: { device: Device; actor: string; canManage: boolean; disabled: boolean; onBusy: (busy: boolean) => void; onSecurityError: (failure: unknown) => void; onChanged?: () => void }) {
@@ -12,6 +13,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
   const page = useRef(1);
   const setPage = (value: number) => { page.current = value; setReload(previous => previous + 1); };
   const [reload, setReload] = useState(0);
+  const [syncVersion, setSyncVersion] = useState(0);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'issue' | 'revoke' | null>(null);
   const [reason, setReason] = useState('');
@@ -36,7 +38,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
     const session = () => { generation.current += 1; controller.abort(); command.current?.abort(); onBusy(false); setWorking(false); setState(null); setSecret(null); setAction(null); };
     window.addEventListener('od:session-error', session);
     return () => { generation.current += 1; controller.abort(); if (command.current) { command.current.abort(); command.current = null; onBusy(false); } window.removeEventListener('od:session-error', session); };
-  }, [device.id, device.revision, actor, canManage, reload]);
+  }, [device.id, device.revision, actor, canManage, reload, syncVersion]);
   useEffect(() => { if (!secret) return; const timer = window.setTimeout(() => setSecret(null), 5 * 60 * 1000); return () => window.clearTimeout(timer); }, [secret]);
   useEffect(() => {
     if (!state || disabled || working || action || secret) return;
@@ -76,7 +78,7 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
     {error && <p role="alert">{error}</p>}
     {!state && !error && <p role="status">Geräteverbindung wird geprüft …</p>}
     {state && <>
-      <p className="text-sm opacity-70">Der OpenDirectory-Agent meldet seinen Status alle 60 Sekunden. Nach drei Minuten ohne Meldung gilt er als offline. Geräteangaben stammen vom Agenten; Compliance ist unbekannt.</p>
+      <p className="text-sm opacity-70">Der OpenDirectory-Agent meldet seinen Status alle 60 Sekunden. Nach drei Minuten ohne Meldung gilt er als offline. Geräteangaben stammen aus Agentenmeldungen; die Compliance wird anhand der Firmenrichtlinie bewertet.</p>
       <dl className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">{Object.entries({ 'Letzter Kontakt': date(state.lastSeen), Registriert: date(state.enrolledAt), 'Zugang gültig bis': date(state.credentialExpiresAt), Hostname: state.report?.hostname || '—', Architektur: state.report?.architecture || '—', Agentversion: state.report?.agentVersion || '—' }).map(([label, value]) => <div key={label}><dt className="opacity-70">{label}</dt><dd className="break-words">{value}</dd></div>)}</dl>
       {canManage && <div className="flex flex-wrap gap-3">{supported && ['available', 'assigned'].includes(device.lifecycle) && <button className="fluent-btn-primary" disabled={disabled || working} onClick={() => { setReason(''); setAction('issue'); setSecret(null); }}>Registrierungscode erstellen</button>}
         {!['not-enrolled', 'revoked'].includes(state.status) && <button className="fluent-btn-secondary" disabled={disabled || working} onClick={() => { setReason(''); setAction('revoke'); setSecret(null); }}>Gerätezugang widerrufen</button>}</div>}
@@ -100,5 +102,6 @@ export default function DeviceAgentPanel({ device, actor, canManage, disabled, o
       <p>{device.assetId} · {device.serialNumber}</p><p className="mt-3">{action === 'issue' ? 'Ein neuer Code gilt zehn Minuten und ersetzt alle bisherigen Codes und den bisherigen Agent-Zugang dieses Geräts.' : 'Der Agent kann sich danach nicht mehr verbinden. Inventar und Benutzerzuweisung bleiben erhalten.'}</p>
       <label className="block mt-3">Begründung<input className="input-apple" minLength={10} maxLength={500} disabled={working} value={reason} onChange={event => setReason(event.target.value)} /></label>
     </DirectoryConfirmation>}
+    <DeviceSyncPanel device={device} actor={actor} canManage={canManage} disabled={disabled || working} onBusy={onBusy} onSecurityError={onSecurityError} onChanged={() => { setSyncVersion(value => value + 1); changed.current?.(); }} />
   </section>;
 }

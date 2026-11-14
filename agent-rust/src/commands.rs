@@ -1,105 +1,101 @@
-use log::{info, warn};
-use serde::Deserialize;
-use serde_json::Value;
 use crate::config::AgentConfig;
+use serde::Deserialize;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Command {
     pub id: String,
-    pub command: String,
-    pub payload: Option<Value>,
+    #[serde(rename = "type")]
+    kind: String,
+    pub lease_token: String,
+    expires_at: String,
 }
-
-pub async fn poll_and_execute(cfg: &AgentConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let device_id = cfg.device_id.as_deref().ok_or("not enrolled")?;
-    let token = cfg.device_token.as_deref().ok_or("no device token")?;
-
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(cfg.insecure_skip_verify)
-        .timeout(std::time::Duration::from_secs(15))
-        .build()?;
-
-    let url = format!("{}/api/devices/{}/commands/pending", cfg.server_url, device_id);
-    let resp = client.get(&url)
-        .bearer_auth(token)
-        .send().await?;
-
-    let cmds: Vec<Command> = resp.json().await?;
-
-    for cmd in cmds {
-        info!("Executing: {} ({})", cmd.command, cmd.id);
-        let (status, result) = execute_command(&cmd).await;
-        report_result(cfg, &cmd.id, &status, &result).await;
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Claim {
+    schema_version: u8,
+    sync_protocol: u8,
+    device_id: String,
+    command: Option<Command>,
+}
+fn valid(command: &Command) -> bool {
+    uuid::Uuid::parse_str(&command.id)
+        .ok()
+        .map(|id| id.to_string() == command.id)
+        .unwrap_or(false)
+        && command.kind == "inventory.refresh"
+        && command
+            .lease_token
+            .strip_prefix("odsl_")
+            .map(|part| {
+                part.len() == 43
+                    && part.bytes().all(|value| {
+                        value.is_ascii_alphanumeric() || value == b'_' || value == b'-'
+                    })
+            })
+            .unwrap_or(false)
+        && chrono::DateTime::parse_from_rfc3339(&command.expires_at)
+            .map(|time| {
+                time.timestamp_millis() > chrono::Utc::now().timestamp_millis()
+                    && time.timestamp_millis() <= chrono::Utc::now().timestamp_millis() + 45_000
+            })
+            .unwrap_or(false)
+}
+pub async fn claim(
+    cfg: &AgentConfig,
+    device_id: &str,
+    credential: &str,
+) -> Result<Option<Command>, Box<dyn std::error::Error>> {
+    let response = crate::enrollment::client(cfg)?
+        .post(format!(
+            "{}/api/device-agent/sync/claim",
+            cfg.server_url.trim_end_matches('/')
+        ))
+        .bearer_auth(credential)
+        .json(&serde_json::json!({"deviceId":device_id}))
+        .send()
+        .await?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!("Sync polling rejected: HTTP {}", response.status()).into());
     }
-
-    Ok(())
+    let result: Claim = response.json().await?;
+    if result.schema_version != 1
+        || result.sync_protocol != 1
+        || result.device_id != device_id
+        || result
+            .command
+            .as_ref()
+            .is_some_and(|command| !valid(command))
+    {
+        return Err("Unconfirmed device sync offer".into());
+    }
+    Ok(result.command)
 }
-
-async fn execute_command(cmd: &Command) -> (String, String) {
-    match cmd.command.as_str() {
-        "lock" => lock_screen(),
-        "restart" => schedule_restart(),
-        "collect_logs" => collect_logs(),
-        "update_policy" => ("completed".into(), "policy noted".into()),
-        "install_app" => {
-            let name = cmd.payload.as_ref()
-                .and_then(|p| p["name"].as_str())
-                .unwrap_or("unknown");
-            info!("App install queued: {}", name);
-            ("completed".into(), format!("install queued: {}", name))
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn command() -> Command {
+        Command {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: "inventory.refresh".into(),
+            lease_token: format!("odsl_{}", "a".repeat(43)),
+            expires_at: (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339(),
         }
-        "wipe" => {
-            warn!("WIPE command received!");
-            initiate_wipe()
-        }
-        other => ("failed".into(), format!("unknown command: {}", other)),
     }
-}
-
-fn lock_screen() -> (String, String) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("rundll32.exe")
-            .args(["user32.dll,LockWorkStation"]).spawn();
+    #[test]
+    fn only_bounded_read_only_sync_can_be_offered() {
+        assert!(valid(&command()));
+        let mut other = command();
+        other.kind = "restart".into();
+        assert!(!valid(&other));
+        let mut other = command();
+        other.lease_token = "arbitrary".into();
+        assert!(!valid(&other));
+        let mut other = command();
+        other.expires_at = (chrono::Utc::now() - chrono::Duration::seconds(1)).to_rfc3339();
+        assert!(!valid(&other));
+        let mut other = command();
+        other.expires_at = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
+        assert!(!valid(&other));
     }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("loginctl").arg("lock-sessions").spawn();
-    }
-    ("completed".into(), "screen locked".into())
-}
-
-fn schedule_restart() -> (String, String) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("shutdown")
-            .args(["/r", "/t", "60", "/c", "OpenDirectory scheduled restart"])
-            .spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = std::process::Command::new("sudo")
-            .args(["shutdown", "-r", "+1"]).spawn();
-    }
-    ("completed".into(), "restart scheduled in 60s".into())
-}
-
-fn collect_logs() -> (String, String) {
-    ("completed".into(), "log collection not implemented in v1".into())
-}
-
-fn initiate_wipe() -> (String, String) {
-    ("completed".into(), "wipe initiated".into())
-}
-
-async fn report_result(cfg: &AgentConfig, cmd_id: &str, status: &str, result: &str) {
-    let device_id = match cfg.device_id.as_deref() { Some(id) => id, None => return };
-    let token = match cfg.device_token.as_deref() { Some(t) => t, None => return };
-
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/devices/{}/commands/{}", cfg.server_url, device_id, cmd_id);
-    let _ = client.patch(&url)
-        .bearer_auth(token)
-        .json(&serde_json::json!({"status": status, "result": result}))
-        .send().await;
 }

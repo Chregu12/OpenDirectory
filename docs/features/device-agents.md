@@ -67,3 +67,6 @@ Private ownergebundene SQL-Befehle, Row-/Truncate-Guards, Geräte-Locks, endgül
 Der Gateway leitet ausschließlich die beiden exakten POST-Maschinenpfade an den unabhängig prüfenden Device-Service. Gerätecredentials gelten nicht für Personen-, Inventar-, PIM- oder andere Verwaltungs-APIs. Unbekannte Pfade, Methoden und Query-Overrides werden nicht durch diesen Proxy freigegeben. Der Service bleibt zusätzlich rate-limitiert; große Flotten benötigen eine gesonderte Lastabnahme.
 
 Apple-/Android-MDM, Intune, Compliance-Auswertung, LAPS/BitLocker, Softwareverteilung, Wipe und Fernbefehle sind nicht Bestandteil dieses Agent-Protokolls. Geräteberichte sind nicht attestiert. Eine Zuweisung oder Registrierung erteilt keinen Benutzerzugang. Es gibt hier keine bestätigte externe Providerwirkung oder ausgelieferte Ereignis-Outbox.
+
+
+Ab Agent 1.4.0 ergänzt [Gerät synchronisieren](device-sync.md) den tatsächlichen Verbindungsweg um befristete eigene Aufträge. Agent 1.4 benötigt den Server/Gateway ab 1.0.48. Der jeweilige Produktivstand steht im [Liefernachweis](../deployment/device-sync-2026-11-14.json).

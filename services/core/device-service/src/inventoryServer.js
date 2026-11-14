@@ -11,10 +11,11 @@ const { deviceEtag, deviceReturnEtag } = require('../../../../packages/device-in
 const { DeviceInventory } = require('./DeviceInventory');
 const { DeviceReturns } = require('./DeviceReturns');
 const { DeviceAgents, agentEtag } = require('./DeviceAgents');
+const {DeviceSync,syncRequestEtag}=require('./DeviceSync');
 const { DeviceCompliance, compliancePolicyEtag } = require('./DeviceCompliance');
 const database = require('./db');
 
-function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }), compliance = new DeviceCompliance(db, { inventory }) } = {}) {
+function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }), compliance = new DeviceCompliance(db, { inventory }), sync = new DeviceSync(db,{inventory}) } = {}) {
   const app=express();const issuer=process.env.OIDC_ISSUER || 'http://localhost:3001';const jwks=createRemoteJWKSet(new URL(process.env.JWKS_URI || 'http://localhost:3001/jwks'));const accessState=createAccessStateClient();
   app.disable('x-powered-by');app.use(helmet());app.use(cors({origin:(process.env.CORS_ORIGINS || 'http://localhost:3000').split(',')}));
   app.use(express.json({limit:'16kb',strict:true}));app.use(rateLimit({windowMs:60000,max:1000,standardHeaders:true,legacyHeaders:false}));
@@ -30,6 +31,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
     if(req.headers['x-api-key'] || req.headers['x-enrollment-token'])throw Object.assign(new Error('Device credential required'),{status:401});
     res.json(await agents.heartbeat(req.body,req.headers.authorization,req.correlationId));
   }));
+  app.post('/api/device-agent/sync/claim',agentLimit,route(async(req,res)=>{if(req.headers['x-api-key']||req.headers['x-enrollment-token'])throw Object.assign(new Error('Device credential required'),{status:401});res.json(await sync.claim(req.body,req.headers.authorization,req.correlationId));}));
   app.use('/api/device-agent',(_req,res)=>res.status(404).json({error:'Agent operation not found'}));
   app.use(async(req,res,next)=>{
     const authorization=req.headers.authorization;
@@ -71,6 +73,10 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
   app.get('/api/devices/export',route(async(req,res)=>{const value=await inventory.exportCsv(req.query,req.user,req.headers.authorization);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.get('/api/devices/:id/agent',route(async(req,res)=>{const value=await agents.get(req.params.id,req.query,req.user,req.headers.authorization);res.set('ETag',agentEtag(value.deviceId,value.revision)).json(value);}));
+  app.get('/api/devices/:id/agent/sync',route(async(req,res)=>res.json(await sync.list(req.params.id,req.query,req.user,req.headers.authorization))));
+  app.post('/api/devices/:id/agent/sync',route(async(req,res)=>{const value=await sync.write(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);res.set('ETag',syncRequestEtag(value.request)).status(201).json(value);}));
+  app.post('/api/devices/:id/agent/sync/:requestId/cancel',route(async(req,res)=>{const value=await sync.write(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId,req.params.requestId);res.set('ETag',syncRequestEtag(value.request)).json(value);}));
+  app.get('/api/devices/:id/agent/sync/:requestId/history',route(async(req,res)=>res.json(await sync.history(req.params.id,req.params.requestId,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/:id/agent/inventory',route(async(req,res)=>res.json(await agents.inventoryReport(req.params.id,req.query,req.user,req.headers.authorization))));
   for(const action of ['issue','revoke'])app.post('/api/devices/:id/agent/'+action,route(async(req,res)=>{
     const value=await agents.manage(req.params.id,action,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);
@@ -90,7 +96,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   });
   return app;
 }
-async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_compliance_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
+async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_sync_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
 if(require.main===module)start().then(server=>{
   const close=()=>{server.closeAllConnections();server.close(()=>database.pool.end().then(()=>process.exit(0)));};process.once('SIGTERM',close);process.once('SIGINT',close);
 }).catch(()=>{process.stderr.write('Device inventory startup requires migrated PostgreSQL and configured receiving dependencies.\n');process.exitCode=1;database.pool.end().catch(()=>{});});

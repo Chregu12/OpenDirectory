@@ -64,3 +64,6 @@ export function complianceError(error: unknown): string {
  const status = (error as { response?: { status?: number } })?.response?.status;
  return ({ 401: 'Die ursprüngliche Anmeldung ist nicht mehr gültig. Bitte erneut anmelden.', 403: 'Für diese Funktion fehlt die tatsächliche Compliance-Berechtigung. PIM-Aufgabe oder Firmenrolle prüfen.', 428: 'Eine höchstens fünf Minuten alte MFA-Anmeldung ist erforderlich. Bitte erneut anmelden.', 412: 'Die Richtlinie wurde geändert. Neu laden und die eigene Änderung erneut prüfen.', 409: 'Die Richtlinie ist unverändert oder der Zustand hat sich geändert. Bitte neu laden.', 400: 'Richtlinie oder Eingabefelder sind ungültig.', 503: 'Die Compliance-Quelle ist momentan nicht erreichbar. Bitte neu laden.' } as Record<number, string>)[status || 0] || 'Die Compliance-Antwort konnte nicht bestätigt werden. Bitte neu laden.';
 }
+
+export const deviceComplianceAssessmentSchema = assessment;
+export const agentSecurityReceiptSchema = source;

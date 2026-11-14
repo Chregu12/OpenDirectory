@@ -1,0 +1,415 @@
+{
+  "checkedAt": "2026-11-14T16:58:45.763998+00:00",
+  "status": "deployed",
+  "appVersion": "1.0.48",
+  "chart": "opendirectory-lite-0.1.51",
+  "rustAgentVersion": "1.4.0",
+  "baselineCommit": "1927db5dab66b8e0eba6d0ca93245effa1799c2d",
+  "url": "https://opendirectory.heusser.local/devices",
+  "features": [
+    "Actual bounded inventory refresh requests tied to original enrollment generation, own human inventory authority and original MFA deadline",
+    "Device-only single concurrent lease, at most three 45-second offers, explicit cancellation, expiry and connection replacement",
+    "New hardware/security/compliance snapshots and sync completion commit atomically with exact retained transition evidence",
+    "Rust 1.4 claims before actual collection and accepts only inventory.refresh; earlier request/response bodies remain compatible",
+    "Own responsive UI with reason, exact versions, actual status, original history, read-only controls and source-loss clearing"
+  ],
+  "validation": {
+    "frontendUnit": {
+      "suites": 156,
+      "passed": 3220,
+      "targetedAfterWriteMutexChange": {
+        "suites": 2,
+        "passed": 10
+      }
+    },
+    "deviceUnit": {
+      "suites": 24,
+      "passed": 638
+    },
+    "gatewayUnit": {
+      "suites": 12,
+      "passed": 215
+    },
+    "openApiUnit": {
+      "suites": 1,
+      "passed": 32
+    },
+    "devicePostgres": {
+      "passed": 138,
+      "actualCompiledRustHttpClient": true,
+      "concurrentClaimAndCancellation": true,
+      "physicalExpiryAndMissingEventRollback": true,
+      "migrationReplay": true
+    },
+    "rustUnit": {
+      "passed": 10,
+      "lockedDependencyGraph": true,
+      "host": "macos"
+    },
+    "signedOAuthPimGatewayPostgres": {
+      "passed": 1
+    },
+    "developmentBrowser": {
+      "passed": 13,
+      "updatedSyncFixturePassed": 3
+    },
+    "productionImageBrowser": {
+      "passed": 13,
+      "finalWriteMutexIncluded": true
+    },
+    "productionImageHttpRouting": {
+      "isolatedHttpReceiver": true,
+      "checks": [
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/cancel",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/history",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/device-agent/sync/claim",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/compliance",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/compliance/history?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance?status=unknown&platform=linux",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/capabilities",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies/linux/history?page=2",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/compliance/policies/linux",
+          "method": "PUT",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/device-agent/heartbeat",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/agent/inventory",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/fleet/export?connectionStatus=offline",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/export?platform=linux",
+          "method": "GET",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        },
+        {
+          "path": "/api/devices/11111111-1111-4111-8111-111111111111/lifecycle",
+          "method": "POST",
+          "forwardedExactly": true,
+          "authorizationForwarded": true
+        }
+      ]
+    },
+    "frontendTypecheck": true,
+    "gitDiffCheck": true,
+    "openApiReferences": {
+      "unchangedExistingPaths": 191,
+      "unchangedExistingSchemas": 210,
+      "validLocalReferences": 401
+    }
+  },
+  "runtimeSourceChecks": {
+    "backend": {
+      "device-service": {
+        "arch": "x64",
+        "uid": 100,
+        "hashes": {
+          "src/DeviceSync.js": "b507231b65446c160aa86bcd53feba766a8432f622b22cd74305123e0528daab",
+          "src/DeviceAgents.js": "822cf77a0cd7bde056c906d6ff71018695c8342bee7d943e0dd8f747643f4914",
+          "src/inventoryServer.js": "03300da5ebc78d0522623d47d2fe0c14d02c75dfe7fc044674bc7d52d1c2ccc5",
+          "migrations/011_device_sync.sql": "a1442498c15534f16b46a21da1130d9568f42b0a110fd510b5083c4a623e2e6d",
+          "/packages/device-compliance-contract.js": "81f92d8076d10ef2a136da4e6268bcf35158d877ef96168929c61aac0ac38f79"
+        }
+      },
+      "api-gateway": {
+        "arch": "x64",
+        "uid": 1001,
+        "hashes": {
+          "src/middleware/deviceAgentProxy.js": "8239920928f1cbe753b386393ecb4ce00c84b7e07c2629fc90f612fd4053db4c",
+          "/packages/device-compliance-contract.js": "81f92d8076d10ef2a136da4e6268bcf35158d877ef96168929c61aac0ac38f79"
+        }
+      }
+    },
+    "web": {
+      "arch": "x64",
+      "uid": 1001,
+      "buildId": "OvG_wAoUCPNjHrSb8WJTG",
+      "hashes": {
+        "src/components/views/DeviceInventoryView.tsx": "058ca084da0f8a99203130df94abec128ffbaed9b0b4552b8b31cf60c8d7b472",
+        "src/components/views/DeviceAgentPanel.tsx": "8193913d47640a54aba783dee7ddfade432d8981f5d2ad0ee24bf8c61e552263",
+        "src/lib/deviceAgents.ts": "61a93f332855ee7c9d8d0ecb3248d8f483e0522c00702aeade0845936ca671dd",
+        "src/lib/deviceInventory.ts": "712d76f255e4c2c32025c49bdf89bc3bc103ac470793efe9bf12dc68bc5d749b",
+        "src/components/views/DeviceHardwarePanel.tsx": "cbd64eebc487790777f4a6a674c1cf88938da617e364f6dcf6de1daffdc40806",
+        "src/lib/agentInventory.ts": "70c60c9d3629bb3a96d87a69ad93f764c51995a35feb80777b7d32395bad1ae8",
+        "next.config.js": "f93010276173a7bec2ac7507e40731c6f2562f4d43a5a0a42a921f5718fdf301",
+        "src/app/[view]/page.tsx": "61c72b45df2ea116cf0cfe987f737c660336af8bd2a57dfede3399845bb7363b",
+        "src/components/views/DeviceCompliancePanel.tsx": "d687b5c11a989607155fe321ab9107eeb50426c6744a6740948ea2cbf213c8dd",
+        "src/components/views/DeviceComplianceView.tsx": "de0ce44d7a793d338c8991530f15cc090cf9322d086cffff92b10561d5af0d7b",
+        "src/lib/deviceCompliance.ts": "7776043c957820b5ca6f86300af91221ca68c43ea88019469abb2fff2be01a11",
+        "src/components/views/DeviceSyncPanel.tsx": "06063e5760257b3d9ee4503f05d21be45a8ad250d81445da457ec507575c61be",
+        "src/lib/deviceSync.ts": "6be0ce4779fb4158d3bd0f6a2d2117258fde30f025eb9fcba9d960edff4b4c96"
+      }
+    }
+  },
+  "deployment": {
+    "status": "deployed",
+    "baselineRevision": 78,
+    "revision": 83,
+    "readyDeployments": 11,
+    "changedServices": [
+      "device-service",
+      "api-gateway",
+      "web-app"
+    ],
+    "unrelatedDeploymentSpecsUnchanged": true,
+    "reviewedResourceCount": 49,
+    "stagedRevisions": [
+      79,
+      80,
+      83
+    ],
+    "transientConnectivityInterruptionRecovered": true,
+    "failedWebAttemptRevision": 81,
+    "verifiedAutomaticRollbackRevision": 82
+  },
+  "productionTestUsersDevicesOrPersonalGrantsCreated": false,
+  "limitations": [
+    "Actual Windows/Linux target-device and autostart acceptance, signed installers, attestation, remote settings and MDM remain open",
+    "Created authorization is a bounded read-only request; human token is not stored or renewed",
+    "Audit is retained locally; no external event delivery is claimed",
+    "Full BR-001\u2013012, WF-001\u2013005 and implementation worklist remain open"
+  ],
+  "backup": {
+    "database": "devices",
+    "format": "pg_dump custom format",
+    "bytes": 152703,
+    "sha256": "9627e205a711e7bee565f8acadcbfeb0dca9f2f6c5b6a7790fc274e5cec536cb",
+    "tocEntries": 180
+  },
+  "publishedImages": {
+    "device-service": {
+      "image": "harbor.heusser.local/opendirectory/device-service:1.0.48",
+      "digest": "sha256:3f1c5164d30633d3a9d51da3d62e2c2f480a0ece168d32d37e1ae9eb0baa0070"
+    },
+    "api-gateway": {
+      "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.48",
+      "digest": "sha256:cbd8f7da1fcd31ff688141d7a172c249b89874513edd4f3518e3b7f39ebdfae0"
+    },
+    "web-app": {
+      "image": "harbor.heusser.local/opendirectory/web-app:1.0.48",
+      "digest": "sha256:8575a6c67fcf6faf6961718c834514617d3c6f16f90d3926b53391082f342db4"
+    }
+  },
+  "runtimeArtifacts": {
+    "device-service": {
+      "pod": "opendirectory-device-service-58f47cc75c-plrhp",
+      "image": {
+        "image": "harbor.heusser.local/opendirectory/device-service:1.0.48",
+        "digest": "sha256:3f1c5164d30633d3a9d51da3d62e2c2f480a0ece168d32d37e1ae9eb0baa0070"
+      },
+      "arch": "x64",
+      "uid": 100,
+      "hashes": {
+        "src/DeviceSync.js": "b507231b65446c160aa86bcd53feba766a8432f622b22cd74305123e0528daab",
+        "src/DeviceAgents.js": "822cf77a0cd7bde056c906d6ff71018695c8342bee7d943e0dd8f747643f4914",
+        "src/inventoryServer.js": "03300da5ebc78d0522623d47d2fe0c14d02c75dfe7fc044674bc7d52d1c2ccc5",
+        "migrations/011_device_sync.sql": "a1442498c15534f16b46a21da1130d9568f42b0a110fd510b5083c4a623e2e6d",
+        "/packages/device-compliance-contract.js": "81f92d8076d10ef2a136da4e6268bcf35158d877ef96168929c61aac0ac38f79"
+      }
+    },
+    "api-gateway": {
+      "pod": "opendirectory-api-gateway-745bf85d7b-njbg6",
+      "image": {
+        "image": "harbor.heusser.local/opendirectory/api-gateway:1.0.48",
+        "digest": "sha256:cbd8f7da1fcd31ff688141d7a172c249b89874513edd4f3518e3b7f39ebdfae0"
+      },
+      "arch": "x64",
+      "uid": 1001,
+      "hashes": {
+        "src/middleware/deviceAgentProxy.js": "8239920928f1cbe753b386393ecb4ce00c84b7e07c2629fc90f612fd4053db4c",
+        "/packages/device-compliance-contract.js": "81f92d8076d10ef2a136da4e6268bcf35158d877ef96168929c61aac0ac38f79"
+      }
+    },
+    "web-app": {
+      "pod": "opendirectory-web-app-85fb968676-w7c57",
+      "image": {
+        "image": "harbor.heusser.local/opendirectory/web-app:1.0.48",
+        "digest": "sha256:8575a6c67fcf6faf6961718c834514617d3c6f16f90d3926b53391082f342db4"
+      },
+      "arch": "x64",
+      "uid": 1001,
+      "buildId": "OvG_wAoUCPNjHrSb8WJTG",
+      "hashes": {
+        "src/components/views/DeviceInventoryView.tsx": "058ca084da0f8a99203130df94abec128ffbaed9b0b4552b8b31cf60c8d7b472",
+        "src/components/views/DeviceAgentPanel.tsx": "8193913d47640a54aba783dee7ddfade432d8981f5d2ad0ee24bf8c61e552263",
+        "src/lib/deviceAgents.ts": "61a93f332855ee7c9d8d0ecb3248d8f483e0522c00702aeade0845936ca671dd",
+        "src/lib/deviceInventory.ts": "712d76f255e4c2c32025c49bdf89bc3bc103ac470793efe9bf12dc68bc5d749b",
+        "src/components/views/DeviceHardwarePanel.tsx": "cbd64eebc487790777f4a6a674c1cf88938da617e364f6dcf6de1daffdc40806",
+        "src/lib/agentInventory.ts": "70c60c9d3629bb3a96d87a69ad93f764c51995a35feb80777b7d32395bad1ae8",
+        "next.config.js": "f93010276173a7bec2ac7507e40731c6f2562f4d43a5a0a42a921f5718fdf301",
+        "src/app/[view]/page.tsx": "61c72b45df2ea116cf0cfe987f737c660336af8bd2a57dfede3399845bb7363b",
+        "src/components/views/DeviceCompliancePanel.tsx": "d687b5c11a989607155fe321ab9107eeb50426c6744a6740948ea2cbf213c8dd",
+        "src/components/views/DeviceComplianceView.tsx": "de0ce44d7a793d338c8991530f15cc090cf9322d086cffff92b10561d5af0d7b",
+        "src/lib/deviceCompliance.ts": "7776043c957820b5ca6f86300af91221ca68c43ea88019469abb2fff2be01a11",
+        "src/components/views/DeviceSyncPanel.tsx": "06063e5760257b3d9ee4503f05d21be45a8ad250d81445da457ec507575c61be",
+        "src/lib/deviceSync.ts": "6be0ce4779fb4158d3bd0f6a2d2117258fde30f025eb9fcba9d960edff4b4c96"
+      }
+    }
+  },
+  "publicChecks": {
+    "devicesPage": 200,
+    "compliancePage": 200,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/history": 401,
+    "/api/identity/device-compliance": 401,
+    "/api/devices/compliance": 401,
+    "/api/devices/compliance/capabilities": 401,
+    "/api/devices/compliance/policies": 401,
+    "/api/devices/compliance/policies/linux/history": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/compliance": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/compliance/history": 401,
+    "/api/devices": 401,
+    "/api/devices/fleet": 401,
+    "/api/devices/fleet/export": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/inventory": 401,
+    "/api/device-agent/register": 401,
+    "/api/device-agent/heartbeat": 401,
+    "/api/device-agent/register?tenantId=foreign": 400,
+    "lifecycleUnauthenticated": 401,
+    "policyWriteUnauthenticated": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync POST": 401,
+    "/api/devices/11111111-1111-4111-8111-111111111111/agent/sync/11111111-1111-4111-8111-111111111111/cancel POST": 401,
+    "/api/device-agent/sync/claim POST": 401,
+    "cssSha256": "af006d9c602b440a019b155457cdab9a3b4f1a5c6fae209bdf1c6db9abaf3e55",
+    "tlsVerified": true,
+    "productionHumanLoginPerformed": false
+  },
+  "schema": {
+    "newTableCounts": {
+      "requests": 0,
+      "events": 0
+    },
+    "publicExecutablePrivateFunctions": 0,
+    "receivingCheckPassed": true
+  },
+  "existingDeviceAndComplianceDataUnchanged": true,
+  "existingDeviceAndComplianceData": {
+    "devices": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_assignments": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_requests": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_return_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_inventory_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_connections": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_agent_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policies": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policy_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_policy_outbox": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    },
+    "device_compliance_events": {
+      "count": 0,
+      "md5": "d751713988987e9331980363e24189ce"
+    }
+  }
+}

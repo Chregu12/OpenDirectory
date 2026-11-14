@@ -11,6 +11,7 @@ const facts = z.object({ schemaVersion: z.literal(1),
   cpu: z.object({ model: z.string().refine(value => value.trim() === value && Array.from(value).length <= 200 && !/[\u0000-\u001f\u007f-\u009f]/.test(value)), logicalProcessors: z.number().int().min(1).max(65536) }).strict().nullable(),
   memory: capacity.nullable(), systemDisk: capacity.nullable(), uptimeSeconds: counter.nullable(),
 }).strict();
+export const agentInventoryFactsSchema = facts;
 const envelope = z.object({ schemaVersion: z.literal(1), inventoryProtocol: z.literal(1), actorUserId: uuid, tenantId: uuid, deviceId: uuid, checkedAt: timestamp,
   connectionStatus: z.enum(agentStatuses), status: z.enum(['missing', 'current', 'stale', 'historical']),
   inventory: z.object({ schemaVersion: z.literal(1), receivedAt: timestamp, enrolledAt: timestamp, revision: positive, platform: z.enum(['macos', 'windows', 'linux']), agentVersion: z.string().min(1).max(40), facts }).strict().nullable(),
