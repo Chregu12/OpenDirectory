@@ -4439,3 +4439,27 @@ test('own custom directory roles and OU scopes use actual OAuth, canonical sourc
 
  });
 });
+
+test('custom company device PIM uses original OAuth and real inventory compliance and gateway authority without global Engineering',async()=>{
+ const initialManager=await issue('operator'),manager=provenMfa(payload(initialManager.access_token))?initialManager:await configureFactor('operator',initialManager);
+ const initialDelegate=await issue('alice'),delegate=provenMfa(payload(initialDelegate.access_token))?initialDelegate:await configureFactor('alice',initialDelegate);
+ const managerToken=manager.access_token,token=delegate.access_token;assert.ok(!payload(token).roles.includes('admin'));assert.ok(!payload(token).roles.includes('device-enrollment-operator'));
+ await withProductionGateway(async base=>{
+  const duties=['devices.inventory.read','devices.inventory.create','devices.inventory.assign','devices.compliance.read','devices.compliance.manage'];
+  const created=await request(base,'/api/identity/company-roles',{method:'POST',token:managerToken,body:{name:'Actual custom device PIM duty',description:'Own device stock and compliance without platform roles',permissions:duties,maxDurationSeconds:36000,reason:'Separate company device management from global administration',confirm:true}});assert.equal(created.status,201,JSON.stringify(created.body));const role=created.body.role;
+  const eligibleResult=await request(base,'/api/identity/company-roles/'+role.id+'/eligibilities',{method:'POST',token:managerToken,headers:{'If-Match':`"company-role-${role.id}-${role.revision}"`},body:{targetType:'user',targetId:canonicalSubjects.get('alice'),scopeType:'tenant',ouId:null,validForSeconds:86400,reason:'Permit original employee to activate the exact own device duty',confirm:true}});assert.equal(eligibleResult.status,201,JSON.stringify(eligibleResult.body));const eligible=eligibleResult.body.eligibility;
+  assert.equal((await request(base,'/api/devices/capabilities',{token})).status,403);
+  const activated=await request(base,'/api/identity/company-pim/eligibilities/'+eligible.id+'/activate',{method:'POST',token,headers:{'If-Match':`"company-eligibility-${eligible.id}-${eligible.revision}"`},body:{durationSeconds:36000,reason:'Activate original custom device duties for this maintenance period',confirm:true}});assert.equal(activated.status,201,JSON.stringify(activated.body));
+  const metadata=await request(base,'/api/identity/access',{token});assert.equal(metadata.status,200,JSON.stringify(metadata.body));assert.ok(duties.every(permission=>metadata.body.permissions.includes(permission)));assert.ok(!metadata.body.permissions.includes('users.read'));
+  const cap=await request(base,'/api/devices/capabilities',{token});assert.equal(cap.status,200,JSON.stringify(cap.body));assert.deepEqual(cap.body.permissions,duties.slice(0,3));
+  const values={assetId:'CUSTOM-PIM-DEVICE',serialNumber:randomUUID(),manufacturer:'Actual HTTP fixture',model:'Scoped device duties',deviceClass:'laptop',platform:'linux'};
+  const saved=await request(base,'/api/devices',{method:'POST',token,body:values});assert.equal(saved.status,201,JSON.stringify(saved.body));const device=saved.body;
+  const retained=(await inventoryFixture.db.query('SELECT proof FROM device_inventory_events WHERE device_id=$1',[device.id])).rows[0].proof;assert.equal(retained.source.delegation.grants[1].source.activationId,activated.body.activation.id);
+  assert.equal((await request(base,'/api/users',{token})).status,403);assert.equal((await request(base,'/api/devices/returns/capabilities',{token})).status,200);
+  const policyPath='/api/devices/compliance/policies/linux',policyBody={settings:{enabled:true,maxReportAgeSeconds:3600,minimumOsVersion:'0',requireDiskEncryption:false,requireFirewall:false,minimumDiskFreePercent:null},reason:'Use the original independently delegated company compliance duty',confirm:true};
+  const policy=await request(base,policyPath,{method:'PUT',token,headers:{'If-Match':`"device-compliance-${cap.body.tenantId}-linux-0"`},body:policyBody});assert.equal(policy.status,200,JSON.stringify(policy.body));
+  const ended=await request(base,'/api/identity/company-pim/activations/'+activated.body.activation.id+'/end',{method:'POST',token,headers:{'If-Match':`"company-activation-${activated.body.activation.id}-${activated.body.activation.revision}"`},body:{reason:'End the original custom device management work explicitly',confirm:true}});assert.equal(ended.status,200,JSON.stringify(ended.body));
+  assert.equal((await request(base,'/api/devices/'+device.id,{token})).status,403);assert.equal((await request(base,'/api/devices/compliance/capabilities',{token})).status,403);
+  assert.ok(!(await request(base,'/api/identity/access',{token})).body.permissions.includes('devices.inventory.read'));
+ });
+});

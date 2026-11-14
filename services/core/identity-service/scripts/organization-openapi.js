@@ -266,7 +266,7 @@ function organizationOpenApi() {
   document.paths['/api/identity/access'].get.responses[200].content['application/json'].schema.properties.companyPimApprovalProtocol={const:1};
   const compliance=require('../../device-service/scripts/device-compliance-openapi').deviceComplianceOpenApi();Object.assign(document.paths,compliance.paths);Object.assign(document.components.schemas,compliance.components.schemas);
   const sync=require('../../device-service/scripts/device-sync-openapi').deviceSyncOpenApi();Object.assign(document.paths,sync.paths);Object.assign(document.components.schemas,sync.components.schemas);
-  document.info.version = '1.38.0';
+  document.info.version = '1.39.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

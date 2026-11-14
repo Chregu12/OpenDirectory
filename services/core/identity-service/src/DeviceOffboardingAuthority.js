@@ -12,6 +12,7 @@ class DeviceOffboardingAuthority {
     const { workflowId, userId } = deviceOffboardingValues(body);
     if (userId === user?.identity_authorization?.userId) fail(403, 'Self offboarding device returns are forbidden');
     const original = await new DeviceInventoryAuthority(this.database, this.options).read(user, authorization, { userId });
+    if(!original.permissions.includes('devices.inventory.read')||!original.permissions.includes('devices.inventory.assign'))fail(403,'Device return management required');
     if (original.target?.enabled !== false) fail(409, 'Original disabled offboarding target required');
     const validate = async client => {
       const bound = { isAvailable: () => true, transaction: operation => operation(client) };
@@ -19,7 +20,7 @@ class DeviceOffboardingAuthority {
       if (!sameContext(original.context, source.context) || !sameTenantContext(original.tenant, source.tenant)
         || original.issuer !== source.issuer || original.subject !== source.subject || original.actorUserId !== source.actorUserId
         || original.tokenId !== source.tokenId || original.expiresAt !== source.expiresAt || original.validUntil !== source.validUntil
-        || JSON.stringify(original.permissions) !== JSON.stringify(source.permissions)) fail(401, 'Original offboarding inventory authority changed');
+        || JSON.stringify(original.permissions) !== JSON.stringify(source.permissions)||JSON.stringify(original.delegation)!==JSON.stringify(source.delegation)) fail(401, 'Original offboarding inventory authority changed');
       if (source.target?.id !== userId || source.target.enabled !== false) fail(409, 'Original disabled offboarding target required');
       const row = (await client.query(`SELECT parent.*,account.eligibility_revision AS current_eligibility_revision
         FROM identity_company_offboarding_receipts parent JOIN users account ON account.id=parent.user_id

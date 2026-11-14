@@ -300,3 +300,11 @@ test('error mapping preserves explicit reload and no provider-success fallback',
   [400, 401, 403, 404, 409, 412, 428, 503].forEach(code => expect(deviceReturnsError({ response: { status: code } })).toMatch(/neu laden/));
   expect(deviceReturnsError(null)).toMatch(/keine automatische Wiederholung/);
 });
+test('read-only capability never captures a return decision and assignment loss before POST stops the write',async()=>{
+ data[generalBase+'/capabilities']={...cap(),permissions:['devices.inventory.read']};const reader=await detail();expect(()=>reader.current.capture(reader.snapshot,{action:'returned',reason,confirm:true})).toThrow();
+ data[generalBase+'/capabilities']=cap();const manager=await detail();const intent=manager.current.capture(manager.snapshot,{action:'returned',reason,confirm:true});data[generalBase+'/capabilities']={...cap(),permissions:['devices.inventory.read']};await expect(manager.current.decide(intent)).rejects.toThrow();expect(mockPost).not.toHaveBeenCalled();
+});
+test('offboarding accepts separately delegated read/assignment but rejects a read-only request capability',async()=>{
+ data[base+'/capabilities']={...offCap(),permissions:['devices.inventory.read','devices.inventory.assign']};await expect(company().capabilities()).resolves.toMatchObject({permissions:['devices.inventory.read','devices.inventory.assign']});
+ data[base+'/capabilities']={...offCap(),permissions:['devices.inventory.read']};await expect(company().capabilities()).rejects.toThrow();expect(mockPost).not.toHaveBeenCalled();
+});

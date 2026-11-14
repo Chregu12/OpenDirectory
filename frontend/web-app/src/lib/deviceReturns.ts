@@ -11,12 +11,12 @@ const label = text.refine(value => value === value.trim() && value.length > 0 &&
 const pageNumber = z.number().int().positive().max(1000000);
 const count = z.number().int().nonnegative().safe();
 const inventoryPermissions = ['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign'] as const;
-const permissions = z.array(z.enum(inventoryPermissions)).length(3).refine(values => new Set(values).size === 3);
+const permissions = z.array(z.enum(inventoryPermissions)).min(1).max(3).refine(values => values.includes('devices.inventory.read') && JSON.stringify(values) === JSON.stringify(inventoryPermissions.filter(value => values.includes(value))));
 const envelope = { schemaVersion: z.literal(1), actorUserId: uuid, tenantId: uuid };
 const targetSchema = z.object({ enabled: z.literal(false), eligibilityRevision: revision }).strict();
 const offboardingEnvelope = { ...envelope, workflowId: uuid, userId: uuid, target: targetSchema };
 const capSchema = z.object({ ...envelope, deviceReturnsProtocol: z.literal(1), permissions, managementMode: z.literal('inventory-only') }).strict();
-const offboardingCapSchema = z.object({ ...offboardingEnvelope, deviceOffboardingReturnsProtocol: z.literal(1), permissions, managementMode: z.literal('inventory-only') }).strict();
+const offboardingCapSchema = z.object({ ...offboardingEnvelope, deviceOffboardingReturnsProtocol: z.literal(1), permissions, managementMode: z.literal('inventory-only') }).strict().refine(value => value.permissions.includes('devices.inventory.assign'));
 export const deviceReturnStatuses = ['requested', 'returned', 'cancelled', 'assignment_changed'] as const;
 const status = z.enum(deviceReturnStatuses);
 const requestSchema = z.object({
@@ -201,21 +201,21 @@ export class DeviceReturnsClient extends ReturnsClient {
     }, signal);
   }
   capture(snapshot: DeviceReturnRequest, input: z.input<typeof decisionSchema>): DeviceReturnIntent {
-    if (this.writing || !this.access || !this.historyReady || snapshot !== this.detail || snapshot.status !== 'requested') throw unconfirmed();
+    if (this.writing || !this.access?.permissions.includes('devices.inventory.assign') || !this.historyReady || snapshot !== this.detail || snapshot.status !== 'requested') throw unconfirmed();
     const value = freeze({ request: snapshot, etag: deviceReturnEtag(snapshot), body: decisionSchema.parse(input) });
     this.intents.set(value, { attempted: false, generation: this.generation }); return value;
   }
   canRecover(intent: DeviceReturnIntent) {
-    return !!this.access && !!this.historyReady && this.detail?.id === intent.request.id
+    return !!this.access?.permissions.includes('devices.inventory.assign') && !!this.historyReady && this.detail?.id === intent.request.id
       && (this.detail.status === 'requested' || this.detail.status === intent.body.action)
       && this.intents.get(intent)?.attempted === true;
   }
   async decide(intent: DeviceReturnIntent, recovery = false, signal?: AbortSignal): Promise<DeviceReturnDecisionResult> {
-    if (!this.access || !this.historyReady || !this.detail || recovery && !this.canRecover(intent) || !recovery && this.detail !== intent.request) throw unconfirmed();
+    if (!this.access?.permissions.includes('devices.inventory.assign') || !this.historyReady || !this.detail || recovery && !this.canRecover(intent) || !recovery && this.detail !== intent.request) throw unconfirmed();
     sameRequest(intent.request, this.detail); this.intent(intent, recovery);
     return this.write(async (requestSignal, check) => {
       const authority = await api.get('/api/devices/returns/capabilities', { signal: requestSignal }); check();
-      if (authority.status !== 200) throw unconfirmed(); this.bind(capSchema.parse(authority.data));
+      if (authority.status !== 200) throw unconfirmed(); const current = capSchema.parse(authority.data); this.bind(current); if (!current.permissions.includes('devices.inventory.assign')) throw unconfirmed();
       const response = await api.post('/api/devices/returns/' + intent.request.id + '/decision', intent.body, { headers: { 'If-Match': intent.etag }, signal: requestSignal }); check();
       if (response.status !== 200) throw unconfirmed();
       const value = decisionResultSchema.parse(response.data); this.bind(value); sameRequest(intent.request, value.request);

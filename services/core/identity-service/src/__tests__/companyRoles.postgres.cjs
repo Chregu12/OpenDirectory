@@ -279,3 +279,90 @@ test('own PIM review cannot cross tenants and new approval helpers are not publi
  await assert.rejects(approvals().options(eligible.id,foreign.user,bearer),{status:404});await assert.rejects(decision(pending,'approve',foreign.user),{status:404});assert.equal((await approvals().list({},foreign.user,bearer,true)).total,0);await assert.rejects(approvals().policy(role.id,foreign.user,bearer),{status:404});await assert.rejects(approvals().list({tenantId:owner.receipt.tenantId},foreign.user,bearer,true),{status:400});
  const name='approval_limited_'+randomUUID().replaceAll('-','');await pool.query('CREATE ROLE '+name+' NOLOGIN');const client=await pool.connect();try{await pool.query('GRANT USAGE ON SCHEMA '+schema+' TO '+name);await client.query('BEGIN');await client.query('SET LOCAL ROLE '+name);await assert.rejects(client.query('SELECT identity_company_pim_approval_policy($1::uuid)',[role.id]),{code:'42501'});}finally{await client.query('ROLLBACK');client.release();await pool.query('DROP OWNED BY '+name);await pool.query('DROP ROLE '+name);}
 });
+
+async function withDevices(operation){
+ const {DeviceInventoryAuthority}=require('../DeviceInventoryAuthority');
+ const source=new DeviceInventoryAuthority(db,options);
+ const fixture=await require('../../../../../scripts/lib/device-inventory-fixture.cjs').deviceInventoryFixture(process.env.IDENTITY_TEST_DATABASE_URL,'http://127.0.0.1:1');
+ const authority={read:(authorization,user,target)=>source.read(user,authorization,target?{userId:target}:null)};
+ const inventory=new (require('../../../device-service/src/DeviceInventory').DeviceInventory)(fixture.db,{authority});
+ try{return await operation({inventory,deviceDb:fixture.db,source});}finally{await fixture.close();}
+}
+const deviceValues=()=>({assetId:'NATIVE-'+randomUUID(),serialNumber:randomUUID(),manufacturer:'Actual native fixture',model:'Delegated inventory',deviceClass:'laptop',platform:'linux'});
+test('custom device read and assignment duties reach real device storage without profile, create or compliance authority',async()=>{
+ const delegate=await person('device-reader'),target=await person('device-recipient');
+ const readRole=await createRole({name:'Actual device reader',permissions:['devices.inventory.read']});const readGrant=(await assign(readRole,delegate.id)).grant;
+ await withDevices(async({inventory,deviceDb,source})=>{
+  const unit=await inventory.create(deviceValues(),owner.user,bearer);assert.equal((await inventory.list({},delegate.user,bearer)).devices[0].id,unit.id);
+  assert.deepEqual((await inventory.capabilities(delegate.user,bearer)).permissions,['devices.inventory.read']);
+  await assert.rejects(inventory.create(deviceValues(),delegate.user,bearer),{status:403});await assert.rejects(inventory.assign(unit.id,{userId:target.id},require('../../../../../packages/device-inventory-contract').deviceEtag(unit),delegate.user,bearer),{status:403});
+  await assert.rejects(reader.users({},delegate.user,bearer),{status:403});await assert.rejects(source.read(delegate.user,bearer,null,true),{status:403});
+  const role=await createRole({name:'Actual device assignment operator',permissions:['devices.inventory.read','devices.inventory.assign']});const granted=(await assign(role,delegate.id)).grant;
+  const changed=await inventory.assign(unit.id,{userId:target.id},require('../../../../../packages/device-inventory-contract').deviceEtag(unit),delegate.user,bearer);assert.equal(changed.assignedUserId,target.id);
+  const retained=(await deviceDb.query("SELECT proof FROM device_inventory_events WHERE device_id=$1 AND action='assign'",[unit.id])).rows[0].proof;
+  assert.equal(retained.source.delegation.grants.find(item=>item.permission==='devices.inventory.assign').source.id,granted.id);
+  assert.ok(retained.source.validUntil<=delegate.user.auth_time+300);assert.deepEqual(delegate.user.roles,[]);
+  await roles.revoke(granted.id,{reason,confirm:true},C.etag('grant',granted),owner.user,bearer);
+  await assert.rejects(inventory.assign(unit.id,{userId:null},require('../../../../../packages/device-inventory-contract').deviceEtag(changed),delegate.user,bearer),{status:403});
+  assert.equal((await inventory.get(unit.id,delegate.user,bearer)).assignedUserId,target.id);
+  await roles.revoke(readGrant.id,{reason,confirm:true},C.etag('grant',readGrant),owner.user,bearer);await assert.rejects(inventory.get(unit.id,delegate.user,bearer),{status:403});
+ });
+});
+test('actual custom device PIM activation binds retained device changes and immediately ends without changing token roles',async()=>{
+ const delegate=await person('device-pim');const role=await createRole({name:'Activated native device stock management',permissions:['devices.inventory.read','devices.inventory.create']});const eligible=(await makeEligible(role,delegate.id)).eligibility;
+ await withDevices(async({inventory,deviceDb,source})=>{
+  await assert.rejects(inventory.list({},delegate.user,bearer),{status:403});const current=(await activate(eligible,delegate.user)).activation;
+  const unit=await inventory.create(deviceValues(),delegate.user,bearer);const event=(await deviceDb.query('SELECT proof FROM device_inventory_events WHERE device_id=$1',[unit.id])).rows[0].proof;
+  assert.equal(event.source.delegation.grants.find(item=>item.permission==='devices.inventory.create').source.activationId,current.id);
+  const agents=new (require('../../../device-service/src/DeviceAgents').DeviceAgents)(deviceDb,{inventory});
+  const issued=await agents.manage(unit.id,'issue',{reason,confirm:true},`"agent-${unit.id}-0"`,delegate.user,bearer,randomUUID());assert.match(issued.enrollmentToken,/^odae_/);
+  assert.equal((await deviceDb.query("SELECT source FROM device_agent_events WHERE action='issue'")).rows[0].source.delegation.grants[1].source.activationId,current.id);
+  await agents.manage(unit.id,'revoke',{reason,confirm:true},`"agent-${unit.id}-${issued.connection.revision}"`,delegate.user,bearer,randomUUID());
+  const values=Object.fromEntries(require('../../../../../packages/device-inventory-contract').DEVICE_FIELDS.map(field=>[field,unit[field]]));
+  const changed=await inventory.update(unit.id,{...values,model:'Actually updated through custom PIM',reason,confirm:true},require('../../../../../packages/device-inventory-contract').deviceEtag(unit),delegate.user,bearer);assert.equal(changed.revision,'2');
+  await assert.rejects(source.read({...delegate.user,auth_time:delegate.user.auth_time-301},bearer),{status:428});
+  const interrupted={...deviceDb,transaction:(operation,settings={})=>deviceDb.transaction(operation,{...settings,beforeCommit:async client=>{await pim().end(current.id,{reason,confirm:true},C.etag('activation',current),delegate.user,bearer);if(settings.beforeCommit)await settings.beforeCommit(client);}})};
+  const revokedDuringWrite=new (require('../../../device-service/src/DeviceInventory').DeviceInventory)(interrupted,{authority:inventory.authority});
+  await assert.rejects(revokedDuringWrite.update(unit.id,{...values,model:'Must roll back after PIM ends',reason,confirm:true},require('../../../../../packages/device-inventory-contract').deviceEtag(changed),delegate.user,bearer),{status:403});
+  assert.equal((await inventory.get(unit.id,owner.user,bearer)).model,changed.model);assert.equal((await deviceDb.query('SELECT count(*) AS count FROM device_inventory_events WHERE device_id=$1',[unit.id])).rows[0].count,'2');
+  await assert.rejects(inventory.get(unit.id,delegate.user,bearer),{status:403});
+  assert.deepEqual(delegate.user.roles,[]);assert.equal((await pim().history({},delegate.user,bearer)).total,2);
+ });
+});
+test('device duties reject OU scope instead of widening a user OU grant and preserve the original permission whitelist on replay',async()=>{
+ const delegate=await person(),unit=await creator.ou({name:'User scope cannot become a device scope'},owner.user,bearer);
+ const role=await createRole({permissions:['devices.inventory.read']});await assert.rejects(assign(role,delegate.id,{scopeType:'ou',ouId:unit.id}));await assert.rejects(makeEligible(role,delegate.id,{scopeType:'ou',ouId:unit.id}));
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/060_device_company_roles.sql'),'utf8'));await assign(role,delegate.id);
+ assert.deepEqual((await new (require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(delegate.user,bearer)).permissions,['devices.inventory.read']);
+ await assert.rejects(createRole({permissions:['devices.wipe']}),{status:400});
+});
+test('custom compliance duties independently reach actual policies with retained provenance and no implicit inventory access',async()=>{
+ const delegate=await person('compliance-delegate');const role=await createRole({name:'Actual own company compliance management',permissions:['devices.compliance.read','devices.compliance.manage']});const granted=(await assign(role,delegate.id)).grant;
+ await withDevices(async({deviceDb,source,inventory})=>{
+  const compliance=new (require('../../../device-service/src/DeviceCompliance').DeviceCompliance)(deviceDb,{authority:{read:(authorization,user)=>source.read(user,authorization,null,true)}});
+  assert.deepEqual((await compliance.capabilities(delegate.user,bearer)).permissions,['devices.compliance.read','devices.compliance.manage']);
+  await assert.rejects(inventory.list({},delegate.user,bearer),{status:403});
+  const values={settings:{enabled:true,maxReportAgeSeconds:3600,minimumOsVersion:'0',requireDiskEncryption:false,requireFirewall:false,minimumDiskFreePercent:null},reason,confirm:true};
+  const saved=await compliance.save('linux',values,`"device-compliance-${owner.receipt.tenantId}-linux-0"`,delegate.user,bearer,randomUUID());assert.equal(saved.policy.revision,'1');
+  const event=(await deviceDb.query('SELECT source FROM device_compliance_policy_events')).rows[0];assert.equal(event.source.delegation.grants.find(item=>item.permission==='devices.compliance.manage').source.id,granted.id);
+  await roles.revoke(granted.id,{reason,confirm:true},C.etag('grant',granted),owner.user,bearer);await assert.rejects(compliance.capabilities(delegate.user,bearer),{status:403});
+ });
+});
+test('delegated device assignment roles execute real offboarding return requests and handback without stock management',async()=>{
+ const delegate=await person('return-delegate'),target=await person('return-target');const role=await createRole({name:'Device handback without stock authority',permissions:['devices.inventory.read','devices.inventory.assign']});const grant=(await assign(role,delegate.id)).grant;
+ await withDevices(async({inventory,deviceDb})=>{
+  const {deviceEtag,deviceReturnEtag}=require('../../../../../packages/device-inventory-contract');
+  let unit=await inventory.create(deviceValues(),owner.user,bearer);unit=await inventory.assign(unit.id,{userId:target.id},deviceEtag(unit),owner.user,bearer);
+  const profile=await reader.user(target.id,{},owner.user,bearer),workflowId=randomUUID();const parent=await new (require('../CompanyOffboarding').CompanyOffboarding)(db,options).receive(target.id,{workflowId,expectedRevision:profile.revision,confirm:true},owner.user,bearer);
+  const negative=new (require('../DeviceOffboardingAuthority').DeviceOffboardingAuthority)(db,options);
+  const returns=new (require('../../../device-service/src/DeviceReturns').DeviceReturns)(deviceDb,{inventory,authority:new (require('../../../device-service/src/DeviceReturnAuthority').DeviceReturnAuthority)({endpoint:'https://native.identity.test/api/identity/device-offboarding',fetchImpl:async(url,request)=>{assert.equal(url.pathname,'/api/identity/device-offboarding');assert.equal(request.headers.Authorization,bearer);return Response.json(await negative.read(delegate.user,bearer,JSON.parse(request.body)));}})});
+  const body={workflowId,eligibilityRevision:parent.afterEligibilityRevision,reason,confirm:true,items:[{deviceId:unit.id,deviceRevision:unit.revision,assignmentId:unit.assignmentId,requestId:randomUUID()}]};
+  const requested=await returns.request(target.id,body,delegate.user,bearer,randomUUID());assert.equal(requested.results[0].status,'requested');
+  const task=await returns.get(body.items[0].requestId,delegate.user,bearer);assert.equal(task.status,'requested');
+  const returned=await returns.decide(task.id,{action:'returned',reason,confirm:true},deviceReturnEtag(task),delegate.user,bearer,randomUUID());assert.equal(returned.request.status,'returned');assert.equal((await inventory.get(unit.id,delegate.user,bearer)).assignedUserId,null);
+  const retained=(await deviceDb.query('SELECT proof FROM device_return_events WHERE id=$1',[returned.operationId])).rows[0].proof;assert.equal(retained.source.delegation.grants.find(item=>item.permission==='devices.inventory.assign').source.id,grant.id);
+  const readRole=await createRole({name:'Handback history reader',permissions:['devices.inventory.read']});await assign(readRole,delegate.id);await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);
+  assert.equal((await returns.list({},delegate.user,bearer)).requests[0].status,'returned');
+  await assert.rejects(returns.decide(task.id,{action:'returned',reason,confirm:true},deviceReturnEtag(task),delegate.user,bearer,randomUUID()),{status:403});
+ });
+});

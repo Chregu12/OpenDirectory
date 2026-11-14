@@ -120,6 +120,7 @@ app.use('/api', asyncRoute(async (req, _res, next) => {
     req.companyDirectoryPermissions = db.isAvailable() ? await db.transaction(client => require('./CompanyOwner').companyDirectoryPermissions(client, req.user), { readOnly: true }) : [];
   }
   if (req.method === 'GET' && path === '/identity/access' || /^\/identity\/company-roles(?:\/|$)/.test(path)) req.companyRolePermissions = await new (require('./CompanyRoles').CompanyRoles)(db).permissions(req.user);
+  if(req.method==='GET'&&path==='/identity/access'&&db.isAvailable()&&require('../../../../packages/role-authentication-contract').acceptsRoleAuthentication({required:true,maxAgeSeconds:300},req.user))req.companyDevicePermissions=await db.transaction(client=>require('./CompanyRoleAuthority').permissions(client,req.user,require('./CompanyRoleContract').DEVICE_PERMISSIONS),{readOnly:true});
   next();
 }));
 for (const method of ['get', 'post']) app[method]('/api/identity/company-blueprint-assignments', asyncRoute(async (req, res) => {

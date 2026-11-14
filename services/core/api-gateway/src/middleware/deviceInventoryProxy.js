@@ -1,7 +1,7 @@
 'use strict';
 
 const {validUuid,validContext}=require('../../../../../packages/identity-authorization-contract');
-const {INVENTORY_PERMISSIONS}=require('../../../../../packages/device-inventory-contract');
+const {inventoryPermissions}=require('../../../../../packages/device-inventory-contract');
 const COMPLIANCE=require('../../../../../packages/device-compliance-contract');
 function deviceInventoryReceiver(target,{fetchImpl=(...args)=>global.fetch(...args)}={}){
   const origin=new URL(target);
@@ -27,7 +27,7 @@ function deviceInventoryReceiver(target,{fetchImpl=(...args)=>global.fetch(...ar
         if(Object.keys(data).length!==5 || data.schemaVersion!==1 || data.complianceProtocol!==1 || data.actorUserId!==req.user.identity_authorization.userId || !validUuid(data.tenantId) || !COMPLIANCE.permissions(data.permissions))throw new Error('Mismatched compliance receiver');
       }else if(returns){
         if(Object.keys(data).length!==6 || data.schemaVersion!==1 || data.deviceReturnsProtocol!==1 || data.actorUserId!==req.user.identity_authorization.userId
-          || !validUuid(data.tenantId) || data.managementMode!=='inventory-only' || JSON.stringify(data.permissions)!==JSON.stringify(INVENTORY_PERMISSIONS))throw new Error('Mismatched device returns receiver');
+          || !validUuid(data.tenantId) || data.managementMode!=='inventory-only' || !inventoryPermissions(data.permissions)||!data.permissions.includes('devices.inventory.read'))throw new Error('Mismatched device returns receiver');
       }else if(data.schemaVersion!==1 || ![1,2].includes(data.inventoryProtocol) || data.userId!==req.user.identity_authorization.userId || !validUuid(data.tenantId) || data.managementMode!=='inventory-only'
         || !Array.isArray(data.supportedActions) || data.supportedActions.length || !Array.isArray(data.permissions) || !data.permissions.includes('devices.inventory.read'))throw new Error('Mismatched inventory receiver');
       next();

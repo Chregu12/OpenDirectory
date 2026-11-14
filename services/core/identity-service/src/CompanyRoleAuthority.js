@@ -5,7 +5,8 @@ const { getIdentityPermissions } = require('./middleware/identityAccess');
 const { companyOwner } = require('./CompanyOwner');
 const { authorityTenant } = require('./AuthorityTenant');
 const { readRoleState } = require('./RoleState');
-const { PERMISSIONS, fail } = require('./CompanyRoleContract');
+const { fail } = require('./CompanyRoleContract');
+const { COMPANY_DIRECTORY_PERMISSIONS } = require('./CompanyOwner');
 const FRESH = { required: true, maxAgeSeconds: 300 };
 async function configured(client) { return (await client.query("SELECT to_regclass('identity_company_roles') IS NOT NULL AS configured")).rows[0]?.configured === true; }
 async function receiving(client) {
@@ -44,12 +45,21 @@ function accepted(user,source) {
 function deadline(user,captured) {
   return captured?Math.min(...captured.grants.map(grant=>Math.min(Number(grant.source.validUntil),grant.source.activationId?Infinity:user.auth_time+300))):user.exp;
 }
-async function permissions(client,user) {
+async function permissions(client,user,available=COMPANY_DIRECTORY_PERMISSIONS) {
   if(user?.actor_type!=='user'||!validContext(user.identity_authorization)||!acceptsRoleAuthentication({required:true,maxAgeSeconds:86400},user)||!await configured(client))return [];
   await receiving(client);const tenant=await authorityTenant(client,{...user.identity_authorization,issuer:user.iss,subject:user.sub});
-  const rows=(await client.query('SELECT permission,identity_company_role_sources($1::uuid,$2::uuid,permission,NULL,NULL) AS sources FROM unnest($3::text[]) permission',[user.identity_authorization.userId,tenant,PERMISSIONS])).rows;
+  const rows=(await client.query('SELECT permission,identity_company_role_sources($1::uuid,$2::uuid,permission,NULL,NULL) AS sources FROM unnest($3::text[]) permission',[user.identity_authorization.userId,tenant,available])).rows;
   if(rows.some(row=>!Array.isArray(row.sources)||row.sources.length>1000))fail(503,'company_role_source_limit');
   return rows.filter(row=>row.sources.some(source=>accepted(user,source))).map(row=>row.permission);
+}
+async function tenantGrants(client,user,available) {
+  if(!await configured(client))return [];
+  const held=await permissions(client,user,available),captured=held.length?await capture(client,user,held):{grants:[]};
+  return held.map(permission=>{
+    const sources=captured.grants.filter(grant=>grant.permission===permission&&grant.source.scopeType==='tenant'&&grant.source.ouId===null);
+    sources.sort((a,b)=>deadline(user,{grants:[b]})-deadline(user,{grants:[a]})||a.source.id.localeCompare(b.source.id)||(a.source.activationId||'').localeCompare(b.source.activationId||''));
+    if(!sources.length)fail(403,'company_role_tenant_scope_required');return sources[0];
+  });
 }
 async function capture(client, user, required, resource = null) {
   await receiving(client); const tenant = await authorityTenant(client, { ...user.identity_authorization, issuer: user.iss, subject: user.sub });
@@ -70,4 +80,4 @@ async function governance(client, user, kind, id, parentId = null) {
   if (!(await client.query('SELECT identity_company_role_protected($1,$2::uuid,$3::uuid) AS protected', [kind, id, parentId])).rows[0]?.protected) return undefined;
   return managerProof(client, user);
 }
-module.exports = { FRESH, configured, receiving, lock, actorProof, managerProof, accepted, deadline, permissions, capture, governance };
+module.exports = { FRESH, configured, receiving, lock, actorProof, managerProof, accepted, deadline, permissions, capture, tenantGrants, governance };

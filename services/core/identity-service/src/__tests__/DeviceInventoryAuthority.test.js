@@ -1,12 +1,15 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
 jest.mock('../AuthorizationState',()=>({AuthorizationState:jest.fn()}));jest.mock('../CompanyOwner',()=>({companyOwner:jest.fn()}));
+jest.mock('../CompanyRoleAuthority',()=>({tenantGrants:jest.fn(async()=>[])}));
+const {tenantGrants}=require('../CompanyRoleAuthority');
 const {AuthorizationState}=require('../AuthorizationState');const {companyOwner}=require('../CompanyOwner');const {DeviceInventoryAuthority}=require('../DeviceInventoryAuthority');
 const {INVENTORY_PERMISSIONS}=require('../../../../../packages/device-inventory-contract');
 const userId=randomUUID();const tenant={id:randomUUID(),version:'1',generation:'1'};const context={userId,revision:'1',linkRevision:'1',rolesRevision:'a'.repeat(64)};
 let user;let state;let query;let revalidate;let database;let authority;
 beforeEach(()=>{
   jest.clearAllMocks();
+  tenantGrants.mockResolvedValue([]);
   const now=Math.floor(Date.now()/1000);user={iss:'https://inventory.test',sub:'original-owner',jti:randomUUID(),actor_type:'user',exp:now+600,auth_time:now,amr:['pwd','otp'],identity_authorization:context,mfa_authorization:{schemaVersion:1,userId,revision:'1',authTime:now,methods:['pwd','otp']},roles:['admin'],permissions:['devices.inventory.assign']};
   state={active:true,context,tenant,roles:[],authentication:{required:true,maxAgeSeconds:300}};AuthorizationState.mockImplementation(()=>({state:jest.fn(async()=>state)}));companyOwner.mockResolvedValue({tenant_id:tenant.id});
   query=jest.fn(async()=>({rows:[]}));database={isAvailable:()=>true,transaction:async callback=>callback({query})};revalidate=jest.fn(async()=>tenant);authority=new DeviceInventoryAuthority(database,{issuer:user.iss,revalidate});
@@ -36,3 +39,9 @@ test.each(['compliance-reader','device-enrollment-operator'])('actual %s reads c
 test.each(['admin','policy-administrator'])('actual %s can manage company compliance',async role=>{state.roles=[role];companyOwner.mockResolvedValue(null);expect((await authority.read(user,'Bearer original',null,true)).permissions).toEqual(['devices.compliance.read','devices.compliance.manage']);});
 test('actual owner retains management while Engineering is active',async()=>{state.roles=['device-enrollment-operator'];expect((await authority.read(user,'Bearer original',null,true)).permissions).toHaveLength(2);});
 test('claimed compliance role cannot replace source role and compliance cannot select a recipient',async()=>{state.roles=[];user.roles=['policy-administrator'];companyOwner.mockResolvedValue(null);await expect(authority.read(user,'Bearer original',null,true)).rejects.toMatchObject({status:403});await expect(authority.read(user,'Bearer original',{userId},true)).rejects.toMatchObject({status:400});});
+
+function grant(permission,extra={}){return {permission,source:{id:randomUUID(),roleId:randomUUID(),roleRevision:'1',scopeType:'tenant',ouId:null,targetType:'user',targetId:userId,membershipId:null,validUntil:String(user.auth_time+120),...extra}};}
+test('delegated own duties retain the exact source and cannot outlive the selected grant',async()=>{companyOwner.mockResolvedValue(null);const grants=[grant('devices.inventory.read')];tenantGrants.mockResolvedValue(grants);const result=await authority.read(user,'Bearer original');expect(result.permissions).toEqual(['devices.inventory.read']);expect(result.delegation).toEqual({grants});expect(result.validUntil).toBe(user.auth_time+120);expect(tenantGrants).toHaveBeenCalledTimes(2);});
+test('delegation changing after the initial read is rejected before releasing the source',async()=>{companyOwner.mockResolvedValue(null);tenantGrants.mockResolvedValueOnce([grant('devices.inventory.read')]).mockResolvedValueOnce([]);await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:401});});
+test('OU sources and another actor cannot become tenant-wide device authority',async()=>{companyOwner.mockResolvedValue(null);for(const changed of [{scopeType:'ou',ouId:randomUUID()},{targetId:randomUUID()}]){tenantGrants.mockResolvedValue([grant('devices.inventory.read',changed)]);await expect(authority.read(user,'Bearer original')).rejects.toMatchObject({status:503});}});
+test('an independent custom compliance manager augments canonical read without granting inventory access',async()=>{companyOwner.mockResolvedValue(null);state.roles=['device-enrollment-operator'];const grants=['devices.compliance.read','devices.compliance.manage'].map(permission=>grant(permission));tenantGrants.mockResolvedValue(grants);expect((await authority.read(user,'Bearer original',null,true)).permissions).toEqual(['devices.compliance.read','devices.compliance.manage']);});

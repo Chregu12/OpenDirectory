@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 export const actor='11111111-1111-4111-8111-111111111111', tenant='22222222-2222-4222-8222-222222222222', deviceId='33333333-3333-4333-8333-333333333333';
 const person={id:actor,username:'testperson',email:'person@example.test',displayName:'Test Person',enabled:true,revision:'1',createdAt:'2026-01-01T10:00:00.000Z'};
-const device={id:deviceId,tenantId:tenant,assetId:'TEST-001',serialNumber:'SER-001',manufacturer:'Test',model:'Laptop',deviceClass:'laptop',platform:'linux',osVersion:'',ownership:'corporate',purchaseDate:'',warrantyEnd:'',description:'',revision:'1',lifecycle:'available',managementMode:'inventory-only',enrollmentStatus:'not-enrolled',managementProvider:null,complianceStatus:'unknown',lastSeen:null,assignedUserId:null,assignmentId:null,createdAt:'2026-01-01T10:00:00.000Z',updatedAt:'2026-01-01T10:00:00.000Z'};
+export const device={id:deviceId,tenantId:tenant,assetId:'TEST-001',serialNumber:'SER-001',manufacturer:'Test',model:'Laptop',deviceClass:'laptop',platform:'linux',osVersion:'',ownership:'corporate',purchaseDate:'',warrantyEnd:'',description:'',revision:'1',lifecycle:'available',managementMode:'inventory-only',enrollmentStatus:'not-enrolled',managementProvider:null,complianceStatus:'unknown',lastSeen:null,assignedUserId:null,assignmentId:null,createdAt:'2026-01-01T10:00:00.000Z',updatedAt:'2026-01-01T10:00:00.000Z'};
 export async function seedAuth(page:Page){await page.addInitScript(()=>localStorage.setItem('od_onboarded','true'));}
 export async function mockApi(page:Page){
  let licenses:any[]=[];let assignments:any[]=[];

@@ -2,7 +2,10 @@
 
 const { validUuid, validRevision } = require('../../../../packages/identity-authorization-contract');
 const { COMPANY_DIRECTORY_PERMISSIONS } = require('./CompanyOwner');
-const PERMISSIONS = COMPANY_DIRECTORY_PERMISSIONS;
+const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory-contract');
+const { PERMISSIONS: COMPLIANCE_PERMISSIONS } = require('../../../../packages/device-compliance-contract');
+const DEVICE_PERMISSIONS = Object.freeze([...INVENTORY_PERMISSIONS, ...COMPLIANCE_PERMISSIONS]);
+const PERMISSIONS = Object.freeze([...COMPANY_DIRECTORY_PERMISSIONS, ...DEVICE_PERMISSIONS]);
 const OU_PERMISSIONS = Object.freeze(['users.read', 'users.update', 'users.status.manage']);
 function fail(status, code) { throw Object.assign(new Error(code), { status, code }); }
 function exact(value, keys) {
@@ -22,6 +25,8 @@ function definition(input, creating = false) {
     || new Set(input.permissions).size !== input.permissions.length || input.permissions.some(permission => !PERMISSIONS.includes(permission))
     || !Number.isInteger(input.maxDurationSeconds) || input.maxDurationSeconds < 60 || input.maxDurationSeconds > 36000
     || !creating && typeof input.enabled !== 'boolean') fail(400, 'invalid_company_role_definition');
+  if(input.permissions.some(permission=>['devices.inventory.create','devices.inventory.assign'].includes(permission))&&!input.permissions.includes('devices.inventory.read')
+    ||input.permissions.includes('devices.compliance.manage')&&!input.permissions.includes('devices.compliance.read'))fail(400,'device_role_read_permission_required');
   return { name: text(input.name, 2, 120), description: text(input.description, 0, 1000, true), permissions: [...input.permissions].sort(),
     maxDurationSeconds: input.maxDurationSeconds, enabled: creating ? true : input.enabled, reason: explanation(input), confirm: true };
 }
@@ -57,4 +62,4 @@ function page(input = {}) {
   if (typeof selected !== 'string' || !/^[1-9][0-9]*$/u.test(selected) || Number(selected) > 1000000 || input.limit !== undefined && input.limit !== '25') fail(400, 'invalid_company_role_page');
   return { page: Number(selected), limit: 25, search: input.search === undefined ? '' : text(input.search, 0, 255) };
 }
-module.exports = { PERMISSIONS, OU_PERMISSIONS, identifier, definition, assignment, eligibility, activation, decision, group, etag, expected, page, fail };
+module.exports = { PERMISSIONS, DEVICE_PERMISSIONS, OU_PERMISSIONS, identifier, definition, assignment, eligibility, activation, decision, group, etag, expected, page, fail };

@@ -29,3 +29,9 @@ test('Engineering sees its own inventory tasks without unrelated administration'
  for(const id of ['devices','device-returns'])expect(ids).toContain(id);
  for(const id of ['settings','users','permissions','applications','company-blueprints','infrastructure'])expect(ids).not.toContain(id);
 });
+test('custom device and compliance duties expose only their independently authorized navigation',()=>{
+ const inventory=visibleViews({...context,access:{...base,permissions:['devices.inventory.read']}}).map(view=>view.id);
+ expect(inventory).toEqual(expect.arrayContaining(['devices','device-returns']));for(const id of ['compliance','users','settings','permissions'])expect(inventory).not.toContain(id);
+ const compliance=visibleViews({...context,access:{...base,permissions:['devices.compliance.read']}}).map(view=>view.id);
+ expect(compliance).toContain('compliance');expect(compliance).not.toContain('devices');
+});

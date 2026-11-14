@@ -2,8 +2,9 @@
 
 const { validContext, sameContext, validUuid } = require('../../../../packages/identity-authorization-contract');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
-const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory-contract');
+const { INVENTORY_PERMISSIONS, inventoryPermissions } = require('../../../../packages/device-inventory-contract');
 const COMPLIANCE = require('../../../../packages/device-compliance-contract');
+const { validDelegation } = require('../../../../packages/device-delegation-contract');
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 class InventoryAuthority {
   constructor({ compliance = false, endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + (compliance ? '/api/identity/device-compliance' : '/api/identity/device-inventory'), fetchImpl = (...args) => global.fetch(...args) } = {}) {
@@ -21,9 +22,10 @@ class InventoryAuthority {
       const chunks = []; let length = 0;
       for await (const chunk of response.body) { length += chunk.length; if (length > 8192) throw new Error('Oversized inventory source'); chunks.push(Buffer.from(chunk)); }
       const source = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      if (Object.keys(source).length !== 11 || source.schemaVersion !== 1 || source.issuer !== user.iss || source.subject !== user.sub || source.tokenId !== user.jti || source.expiresAt !== user.exp
+      const delegated=Object.hasOwn(source,'delegation');
+      if (Object.keys(source).length !== (delegated?12:11) || delegated&&!validDelegation(source,user) || source.schemaVersion !== 1 || source.issuer !== user.iss || source.subject !== user.sub || source.tokenId !== user.jti || source.expiresAt !== user.exp
         || !sameContext(source.context, user.identity_authorization) || source.actorUserId !== source.context.userId || !validTenantContext(source.tenant)
-        || (this.compliance ? !COMPLIANCE.permissions(source.permissions) || userId !== null : JSON.stringify(source.permissions) !== JSON.stringify(INVENTORY_PERMISSIONS)) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
+        || (this.compliance ? !COMPLIANCE.permissions(source.permissions) || userId !== null : !inventoryPermissions(source.permissions)||!delegated&&JSON.stringify(source.permissions)!==JSON.stringify(INVENTORY_PERMISSIONS)) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
         || (userId === null ? source.target !== null : source.target?.id !== userId || Object.keys(source.target).length !== 3 || typeof source.target.enabled !== 'boolean' || !/^[1-9][0-9]*$/.test(source.target.revision))) throw new Error('Mismatched inventory source');
       return source;
     } catch (error) { if (error.status) throw error; fail(503, 'Inventory identity authority unavailable'); }

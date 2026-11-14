@@ -158,3 +158,7 @@ test('pagination requests later actual server page and preserves explicit read-o
   fireEvent.click(within(screen.getByRole('navigation', { name: 'Rückgabeauftragsseiten' })).getByRole('button', { name: 'Weiter' }));
   await screen.findByText('Seite 2 · 26 Einträge'); expect(mockGet).toHaveBeenCalledWith(base, { params: { page: 2, limit: 25 }, signal: expect.any(AbortSignal) }); expect(mockPost).not.toHaveBeenCalled();
 });
+test('a device reader sees actual handback history without decision inputs',async()=>{
+ const read=mockGet.getMockImplementation();mockGet.mockImplementation((url:string,...args:unknown[])=>url===base+'/capabilities'?Promise.resolve({status:200,data:{...cap(),permissions:['devices.inventory.read']}}):read(url,...args));
+ await openDetail();expect(screen.queryByLabelText('Begründung für Rückgabeentscheidung')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Physische Rückgabe bestätigen'})).not.toBeInTheDocument();expect(mockPost).not.toHaveBeenCalled();
+});

@@ -29,7 +29,7 @@ Tatsächliches kanonisches `admin`, die aktivierte Rolle `device-enrollment-oper
 - `devices.inventory.create`
 - `devices.inventory.assign`
 
-Auch `admin` arbeitet nur im eigenen tatsächlichen Home-Tenant. Die vorhandene begrenzte Engineering-Rolle wird aus der tatsächlichen kanonischen Rollenquelle geprüft. Ein behaupteter Token-Rollenname allein erteilt keine Rechte. Behauptete Owner-/Permission-Claims, API Keys, Workloads oder gemeinsame Enrollment-Tokens ersetzen die Live-Quelle nicht. Generische `gateway.proxies.devices.access`-Claims sind kein Inventarrecht. Vollständige delegierte Geräte-Rollen/Scopes sind noch offen.
+Auch `admin` arbeitet nur im eigenen tatsächlichen Home-Tenant. Die vorhandene begrenzte Engineering-Rolle wird aus der tatsächlichen kanonischen Rollenquelle geprüft. Ein behaupteter Token-Rollenname allein erteilt keine Rechte. Behauptete Owner-/Permission-Claims, API Keys, Workloads oder gemeinsame Enrollment-Tokens ersetzen die Live-Quelle nicht. Generische `gateway.proxies.devices.access`-Claims sind kein Inventarrecht. [Getrennte eigene Gerätepflichten über Firmenrollen und PIM](device-company-roles.md) sind ab 1.0.50 für „Eigene Firma“ verfügbar; Geräte-OU-/Gerätegruppenscopes bleiben offen.
 
 Der Device-Receiver liest dieselbe originale Quelle vor der Operation, nach Locks und am letzten Application-Checkpoint. Empfänger werden mit der echten eigenen kanonischen ID und aktuellen Autorisierungsrevision aufgelöst, ohne Passwort oder Profilfreigabe. Die private Quellantwort ist an Issuer, Subject, Token-ID, Ablauf, Context, Tenant und ursprünglichen MFA-Deadline gebunden; kein neuer Service-Token wird erzeugt. Benutzerprofile für den Picker kommen ausschliesslich aus der separat berechtigten vorhandenen Personen-API.
 

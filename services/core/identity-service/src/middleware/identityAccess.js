@@ -165,6 +165,7 @@ function requireIdentityAccess(req, res, next) {
   if (!route) return res.status(404).json({ error: 'Not found' });
   req.identityPermissions = [...new Set([...getIdentityPermissions(req.user), ...(req.organizationPermissions || []).filter(permission => ['organization.read', 'organization.manage', 'organization.delegations.manage'].includes(permission)),
     ...(req.companyRolePermissions || []).filter(permission=>['company.roles.read','company.roles.manage'].includes(permission)),
+    ...(req.companyDevicePermissions || []).filter(permission=>require('../CompanyRoleContract').DEVICE_PERMISSIONS.includes(permission)),
     ...(req.companyRegistrationPermissions || []).filter(permission => permission === 'company.registrations.review'),
     ...(req.companyDirectoryPermissions || []).filter(permission => COMPANY_DIRECTORY_PERMISSIONS.includes(permission))])];
   const required = [...route[2]];

@@ -48,7 +48,7 @@ test('OpenAPI keeps request, physical confirmation and original-account provenan
   expect(schemas.DeviceReturnRequest.required).toHaveLength(22); expect(schemas.DeviceOffboardingAuthoritySource.required).toHaveLength(13);
   expect(schemas.DeviceReturnEvent.properties.version.const).toBe(1);
   expect(schemas.DeviceOffboardingAuthoritySource.properties.target.required).toEqual(['id', 'enabled', 'eligibilityRevision']);
-  expect(schemas.DeviceReturnCapabilities.properties.permissions.const).toEqual(['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign']);
+  expect(schemas.DeviceReturnCapabilities.properties.permissions.items.enum).toEqual(['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign']);
   expect(document.paths['/api/devices/returns/{id}/decision'].post.parameters.map(parameter => parameter.name)).toEqual(['id', 'If-Match']);
   expect(document.paths['/api/devices/returns/{id}/decision'].post.requestBody.content['application/json'].schema.required).toEqual(['action', 'reason', 'confirm']);
   expect(document.paths['/api/devices/users/{userId}/offboarding-returns'].post.requestBody.content['application/json'].schema.properties.items.maxItems).toBe(25);

@@ -17,7 +17,7 @@ export default function DeviceCompliancePanel({ deviceId, expectedActor, context
  useEffect(() => {
   const controller = new AbortController(); setData(null); setError(''); setHistory(null);
   void (async () => { const ctx = context || await complianceAccess(controller.signal); if (expectedActor && ctx.actorUserId !== expectedActor) throw new Error('Unconfirmed actor'); const value = await readComplianceReport(ctx, deviceId, controller.signal); if (!controller.signal.aborted) { setAccess(ctx); setData(value); } })().catch(error => {
-   if (controller.signal.aborted) return; setAccess(null); setError(complianceError(error)); if ([401, 403, 428].includes(error?.response?.status)) failed.current?.(error);
+   if (controller.signal.aborted) return; setAccess(null); setError(complianceError(error)); if ([401, 428].includes(error?.response?.status)) failed.current?.(error);
   });
   const session = () => { controller.abort(); setAccess(null); setData(null); setHistory(null); setError(complianceError({ response: { status: 401 } })); };
   window.addEventListener('od:session-error', session); return () => { controller.abort(); window.removeEventListener('od:session-error', session); };
@@ -25,7 +25,7 @@ export default function DeviceCompliancePanel({ deviceId, expectedActor, context
  useEffect(() => { const timer = window.setInterval(() => { if (document.visibilityState === 'visible') setReload(value => value + 1); }, 30000); return () => window.clearInterval(timer); }, [deviceId]);
  useEffect(() => {
   if (!open || !access) return; const controller = new AbortController(); setHistory(null);
-  void readComplianceHistory(access, deviceId, page, false, controller.signal).then(value => { if (!controller.signal.aborted) setHistory(value); }).catch(error => { if (!controller.signal.aborted) { setError(complianceError(error)); setData(null); failed.current?.(error); } });
+  void readComplianceHistory(access, deviceId, page, false, controller.signal).then(value => { if (!controller.signal.aborted) setHistory(value); }).catch(error => { if (!controller.signal.aborted) { setError(complianceError(error)); setData(null); if (error?.response?.status !== 403) failed.current?.(error); } });
   return () => controller.abort();
  }, [open, access, deviceId, page, reload]);
  return <section aria-label="Geräte-Compliance" className="border-t border-[var(--border)] pt-4 space-y-3">

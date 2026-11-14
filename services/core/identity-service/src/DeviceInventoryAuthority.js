@@ -8,6 +8,8 @@ const { AuthorizationState } = require('./AuthorizationState');
 const { companyOwner } = require('./CompanyOwner');
 const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory-contract');
 const COMPLIANCE = require('../../../../packages/device-compliance-contract');
+const CompanyRoles = require('./CompanyRoleAuthority');
+const { validDelegation } = require('../../../../packages/device-delegation-contract');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 class DeviceInventoryAuthority {
@@ -27,19 +29,27 @@ class DeviceInventoryAuthority {
       const administrative = source.roles.includes('admin') || source.roles.includes('device-enrollment-operator') || compliance && (source.roles.includes('policy-administrator') || source.roles.includes('compliance-reader'));
       const manager = source.roles.includes('admin') || compliance && source.roles.includes('policy-administrator');
       const owner = compliance ? (manager ? null : await companyOwner(client, user)) : administrative ? null : await companyOwner(client, user);
-      if (!administrative && !owner) fail(403, 'Actual own-company inventory authority required');
+      const available=compliance?COMPLIANCE.PERMISSIONS:INVENTORY_PERMISSIONS;
+      const inherent=administrative||owner?(compliance?COMPLIANCE.PERMISSIONS.slice(0,manager||owner?2:1):[...INVENTORY_PERMISSIONS]):[];
+      const grants=inherent.length===available.length?[]:await CompanyRoles.tenantGrants(client,user,available);
+      const permissions=available.filter(permission=>inherent.includes(permission)||grants.some(grant=>grant.permission===permission));
+      if(!permissions.length||compliance&&!COMPLIANCE.permissions(permissions))fail(403,'Actual own-company inventory authority required');
       let target = null;
       if (body !== null) {
         const account = (await client.query("SELECT id,authorization_revision,enabled FROM users WHERE id=$1 AND identity_tenant_id('user',id)=$2", [body.userId.toLowerCase(), tenant.id])).rows[0];
         if (!account) fail(404, 'Own inventory recipient not found');
         target = { id: account.id, revision: String(account.authorization_revision), enabled: account.enabled };
       }
-      return { schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp,
-        context: source.context, tenant, actorUserId: source.context.userId, permissions: compliance ? COMPLIANCE.PERMISSIONS.slice(0, manager || owner ? 2 : 1) : [...INVENTORY_PERMISSIONS],
-        validUntil: Math.min(user.exp, user.auth_time + Math.min(300, source.authentication.required ? source.authentication.maxAgeSeconds : 300)), target };
+      const result={ schemaVersion: 1, issuer: user.iss, subject: user.sub, tokenId: user.jti, expiresAt: user.exp,
+        context: source.context, tenant, actorUserId: source.context.userId, permissions,
+        validUntil: Math.min(user.exp, user.auth_time + Math.min(300, source.authentication.required ? source.authentication.maxAgeSeconds : 300),...grants.map(grant=>Number(grant.source.validUntil))), target,
+        ...(grants.length?{delegation:{grants}}:{}) };
+      if(grants.length&&!validDelegation(result,user))fail(503,'Original device delegation unavailable');
+      return result;
     }, { readOnly: true });
     if (!sameTenantContext(tenant, await this.revalidate(authorization, user)) || !acceptsRoleAuthentication({ required: true, maxAgeSeconds: 300 }, user)
       || result.validUntil * 1000 <= Date.now()) fail(401, 'Original inventory authority changed');
+    if(result.delegation){const current=await this.database.transaction(client=>CompanyRoles.tenantGrants(client,user,compliance?COMPLIANCE.PERMISSIONS:INVENTORY_PERMISSIONS),{readOnly:true});if(JSON.stringify(current)!==JSON.stringify(result.delegation.grants))fail(401,'Original device delegation changed');}
     return result;
   }
 }

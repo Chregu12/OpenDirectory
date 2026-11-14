@@ -2,7 +2,8 @@
 
 const { validContext, sameContext, validRevision } = require('../../../../packages/identity-authorization-contract');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
-const { INVENTORY_PERMISSIONS, deviceOffboardingValues } = require('../../../../packages/device-inventory-contract');
+const { INVENTORY_PERMISSIONS, inventoryPermissions, deviceOffboardingValues } = require('../../../../packages/device-inventory-contract');
+const { validDelegation } = require('../../../../packages/device-delegation-contract');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function uuid(value) { return typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value); }
@@ -29,10 +30,11 @@ class DeviceReturnAuthority {
       const chunks = []; let length = 0;
       for await (const chunk of response.body) { length += chunk.length; if (length > 12288) throw new Error('Oversized device offboarding source'); chunks.push(Buffer.from(chunk)); }
       const source = JSON.parse(Buffer.concat(chunks).toString('utf8')); const parent = source?.parent;
-      if (!exact(source, ['schemaVersion', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target', 'deviceOffboardingReturnsProtocol', 'parent'])
+      const delegated=Object.hasOwn(source,'delegation');
+      if (!exact(source, ['schemaVersion', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target', 'deviceOffboardingReturnsProtocol', 'parent',...(delegated?['delegation']:[])])||delegated&&!validDelegation(source,user)
         || source.schemaVersion !== 1 || source.deviceOffboardingReturnsProtocol !== 1 || source.issuer !== user.iss || source.subject !== user.sub || source.tokenId !== user.jti || source.expiresAt !== user.exp
         || !sameContext(source.context, user.identity_authorization) || source.actorUserId !== source.context.userId || !validTenantContext(source.tenant) || !uuid(source.tenant.id)
-        || JSON.stringify(source.permissions) !== JSON.stringify(INVENTORY_PERMISSIONS) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
+        || !(delegated?inventoryPermissions(source.permissions)&&source.permissions.includes('devices.inventory.assign'):JSON.stringify(source.permissions)===JSON.stringify(INVENTORY_PERMISSIONS)) || !Number.isSafeInteger(source.validUntil) || source.validUntil > Math.min(user.exp, user.auth_time + 300) || source.validUntil * 1000 <= Date.now()
         || !exact(source.target, ['id', 'enabled', 'eligibilityRevision']) || source.target.id !== userId || source.target.enabled !== false || !validRevision(source.target.eligibilityRevision)
         || !exact(parent, ['workflowId', 'tenantId', 'userId', 'action', 'operationId', 'afterRevision', 'afterEligibilityRevision', 'createdAt', 'deliveryStatus'])
         || parent.workflowId !== workflowId || parent.tenantId !== source.tenant.id || parent.userId !== userId || !['disabled', 'already_disabled'].includes(parent.action)

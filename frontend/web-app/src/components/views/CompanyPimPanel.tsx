@@ -40,7 +40,7 @@ export default function CompanyPimPanel({management=false}:{management?:boolean}
  if(!supported)return null;
  const total=state?.total??history?.total??0;
  return <section className="od-pim mt-6" aria-label="Eigene Firmenrollen aktivieren">
-  <div className="od-pim-heading"><div><h2>Firmenrollen</h2><p>Aktiviere deine zugewiesenen Verzeichnisaufgaben für die benötigte Dauer.</p></div>{can('company.roles.read')&&<a className="od-text-action" href="/company-roles">Zuweisungen verwalten</a>}</div>
+  <div className="od-pim-heading"><div><h2>Firmenrollen</h2><p>Aktiviere deine zugewiesenen Aufgaben für die benötigte Dauer.</p></div>{can('company.roles.read')&&<a className="od-text-action" href="/company-roles">Zuweisungen verwalten</a>}</div>
   {notice&&<p role="status" className="od-pim-message">{notice}</p>}
   {error&&<div role="alert" className="od-pim-message od-pim-error"><p>{error}</p><a className="od-text-action" href={'/api/auth/oidc/login?returnTo='+encodeURIComponent(management?'/pim':'/dashboard')}>Erneut anmelden</a></div>}
   <nav className="od-pim-tabs" aria-label="Firmenrollenansichten">{(['eligible','active','history',...(approvalSupported?['requests' as const,...(can('pim.requests.review')||can('company.roles.manage')?['approvals' as const]:[])]:[])] as const).map(value=><button className="fluent-btn-ghost" key={value} aria-current={tab===value?'page':undefined} disabled={busy} onClick={()=>{setTab(value);setPage(1);setAction(null);setNotice('');}}>{{eligible:'Berechtigt',active:'Aktiv',history:'Mein Protokoll',requests:'Meine Anträge',approvals:'Genehmigungen'}[value]}</button>)}</nav>

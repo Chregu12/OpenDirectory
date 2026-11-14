@@ -6,6 +6,10 @@ const DEVICE_FIELDS = Object.freeze([
 ]);
 const DEVICE_CLASSES = Object.freeze(['smartphone', 'tablet', 'laptop', 'desktop', 'shared', 'kiosk', 'other']);
 const INVENTORY_PERMISSIONS = Object.freeze(['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign']);
+function inventoryPermissions(values) {
+  return Array.isArray(values) && values.length > 0
+    && JSON.stringify(values) === JSON.stringify(INVENTORY_PERMISSIONS.filter(permission => values.includes(permission)));
+}
 const INVENTORY_LIFECYCLES = Object.freeze(['available', 'assigned', 'maintenance', 'retired']);
 const PLATFORMS = ['macos', 'ios', 'ipados', 'windows', 'linux', 'android', 'other'];
 const TEXT_FIELDS = { assetId: 120, serialNumber: 120, manufacturer: 120, model: 120, osVersion: 120, description: 2000 };
@@ -153,6 +157,6 @@ function validateDeviceReturnEtag(value) {
   return { id: match[1], revision: match[2], deviceRevision: match[3] };
 }
 
-module.exports = { DEVICE_FIELDS, DEVICE_CLASSES, INVENTORY_PERMISSIONS, INVENTORY_LIFECYCLES, validateDeviceValues, validateDeviceAssignment, validateDeviceUpdate, validateDeviceLifecycle, deviceEtag, validateDeviceEtag,
+module.exports = { DEVICE_FIELDS, DEVICE_CLASSES, INVENTORY_PERMISSIONS, inventoryPermissions, INVENTORY_LIFECYCLES, validateDeviceValues, validateDeviceAssignment, validateDeviceUpdate, validateDeviceLifecycle, deviceEtag, validateDeviceEtag,
   RETURN_STATUSES, returnListQuery, offboardingReturnQuery, offboardingReturnCapabilityQuery, deviceOffboardingValues, offboardingReturnValues,
   returnDecisionValues, deviceReturnEtag, validateDeviceReturnEtag };

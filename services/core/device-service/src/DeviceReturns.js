@@ -149,6 +149,7 @@ class DeviceReturns {
   async decide(id, body, expected, user, authorization, correlationId) {
     identifier(id); const values = returnDecisionValues(body); const captured = validateDeviceReturnEtag(expected); if (captured.id !== id) fail(412, 'Return request changed');
     const source = await this.initial(user, authorization); const checkpoints = [];
+    if(!source.permissions.includes('devices.inventory.assign'))fail(403,'Device assignment management required');
     return this.database.transaction(async client => {
       await this.receiving(client); const current = await this.readTask(client, source.tenant.id, id, true); const task = taskDto(current);
       await this.checkpoint(source, user, authorization);

@@ -26,6 +26,7 @@ export default function DeviceReturnsView() {
   const [detail, setDetail] = useState<DeviceReturnRequest | null>(null); const [history, setHistory] = useState<DeviceReturnHistory | null>(null);
   const [reason, setReason] = useState(''); const [readback, setReadback] = useState(false);
   const [confirmation, setConfirmation] = useState<{ intent: DeviceReturnIntent; recovery: boolean } | null>(null);
+  const [canManage, setCanManage] = useState(false);
   const [confirmed, setConfirmed] = useState(false); const [attempt, setAttempt] = useState<DeviceReturnIntent | null>(null);
   const [outcome, setOutcome] = useState<DeviceReturnDecisionResult | null>(null);
 
@@ -35,7 +36,7 @@ export default function DeviceReturnsView() {
     try { const value = await operation(); if (generation.current === expected) apply(value); }
     catch (failure) {
       if (generation.current === expected) {
-        client.current?.invalidate(); setList(null); setDetail(null); setHistory(null); setConfirmation(null); setConfirmed(false);
+        client.current?.invalidate(); setCanManage(false); setList(null); setDetail(null); setHistory(null); setConfirmation(null); setConfirmed(false);
         setReadback(true); setError(deviceReturnsError(failure));
       }
     } finally { if (generation.current === expected) { running.current = false; setBusy(false); } }
@@ -43,7 +44,7 @@ export default function DeviceReturnsView() {
   const load = (page = list?.page || 1, nextFilter = filter, requestId = selectedId, historyPage = 1) => {
     if (running.current) return;
     const expected = generation.current;
-    setList(null); setDetail(null); setHistory(null); setConfirmation(null); setConfirmed(false);
+    setCanManage(false); setList(null); setDetail(null); setHistory(null); setConfirmation(null); setConfirmed(false);
     void run(async () => {
       const access = await directoryUsers.access();
       if (generation.current !== expected || access.demoMode || !access.userId) throw new Error('Identität nicht bestätigt.');
@@ -59,7 +60,7 @@ export default function DeviceReturnsView() {
       const nextHistory = requestId ? await current.history(requestId, historyPage) : null;
       return { capability, nextList, nextDetail, nextHistory };
     }, value => {
-      setList(value.nextList); setDetail(value.nextDetail); setHistory(value.nextHistory); setSelectedId(requestId); setFilter(nextFilter); setReadback(false);
+      setCanManage(value.capability.permissions.includes('devices.inventory.assign')); setList(value.nextList); setDetail(value.nextDetail); setHistory(value.nextHistory); setSelectedId(requestId); setFilter(nextFilter); setReadback(false);
     });
   };
   useEffect(() => {
@@ -126,7 +127,7 @@ export default function DeviceReturnsView() {
         'Berechtigungsversion bei Anforderung': detail.eligibilityRevision, 'Angefordert von': detail.actorUserId, 'Angefordert am': detail.requestedAt,
         'Abgeschlossen am': detail.closedAt || 'Nicht abgeschlossen', 'Abgeschlossen von': detail.closedByUserId || 'Nicht abgeschlossen',
         'Anforderungsereignis': detail.operationId, 'Entscheidungsereignis': detail.closingOperationId || 'Keines', 'Inventarereignis': detail.inventoryOperationId || 'Keines' }} />
-      {detail.status === 'requested' && !readback && <div className="space-y-3">
+      {detail.status === 'requested' && !readback && canManage && <div className="space-y-3">
         <label className="block">Begründung für Rückgabeentscheidung<textarea className="block w-full rounded border p-2 bg-transparent" value={reason} maxLength={1000} disabled={busy || !!confirmation} onChange={event => setReason(event.target.value)} /></label>
         <div className="flex flex-wrap gap-4"><button className="fluent-btn-secondary" disabled={busy || !!confirmation} onClick={() => begin('returned')}>Physische Rückgabe bestätigen</button><button className="fluent-btn-secondary" disabled={busy || !!confirmation} onClick={() => begin('cancelled')}>Rückgabeauftrag stornieren</button></div>
       </div>}

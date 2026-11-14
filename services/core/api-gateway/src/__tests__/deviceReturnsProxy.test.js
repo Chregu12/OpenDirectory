@@ -17,7 +17,7 @@ test.each(['/api/devices/returns', '/api/devices/returns/capabilities', '/api/de
   expect(next).toHaveBeenCalledTimes(1); expect(fetchImpl).toHaveBeenCalledWith(new URL('https://device.test/api/devices/returns/capabilities'), expect.objectContaining({ method: 'GET', headers: { Authorization: 'Bearer original', Accept: 'application/json' }, redirect: 'error', cache: 'no-store' }));
 });
 test.each([{ deviceReturnsProtocol: undefined, inventoryProtocol: 1 }, { actorUserId: randomUUID() }, { tenantId: 'foreign' },
-  { permissions: ['devices.inventory.read'] }, { permissions: [...INVENTORY_PERMISSIONS, 'admin'] }, { managementMode: 'managed' }, { supportedActions: ['wipe'] }])('an old or ambiguous returns receiver cannot receive an actual operation %j', async change => {
+  { permissions: ['devices.inventory.assign'] }, { permissions: [...INVENTORY_PERMISSIONS, 'admin'] }, { managementMode: 'managed' }, { supportedActions: ['wipe'] }])('an old or ambiguous returns receiver cannot receive an actual operation %j', async change => {
   Object.assign(data, change); await deviceInventoryReceiver('https://device.test', { fetchImpl })(request, response, next);
   expect(next).not.toHaveBeenCalled(); expect(response.status).toHaveBeenCalledWith(503);
 });
@@ -25,3 +25,5 @@ test('the gateway image includes the actual existing shared device contract', ()
   const fs = require('node:fs'); const path = require('node:path');
   expect(fs.readFileSync(path.join(__dirname, '../../Dockerfile'), 'utf8')).toContain('COPY packages/device-inventory-contract/ /packages/device-inventory-contract/');
 });
+
+test('read-only returns receiver remains usable for an independently protected history read',async()=>{data.permissions=['devices.inventory.read'];await deviceInventoryReceiver('https://device.test',{fetchImpl})(request,response,next);expect(next).toHaveBeenCalledTimes(1);});
