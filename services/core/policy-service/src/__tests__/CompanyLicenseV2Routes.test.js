@@ -4,16 +4,19 @@ const { randomUUID } = require('node:crypto');
 const express = require('express');
 const request = require('supertest');
 const { companyLicenseV2Routes } = require('../licenses/companyV2Routes');
+const { listenLoopback, closeServer } = require('../../../../../scripts/lib/loopback-test-server.cjs');
 let app; let store; let offboarding; let user;
 const base = '/api/licenses/company/v2';
 const bearer = 'Bearer original.company.source-aware';
 const methods = names => Object.fromEntries(names.map(name => [name, jest.fn(async () => ({}))]));
-beforeEach(() => {
+beforeEach(async () => {
   user = { actor_type: 'user', identity_authorization: { userId: randomUUID() } };
   store = methods(['capabilities', 'assignments', 'assignmentPreview', 'assign', 'revoke', 'returnPreview', 'returnLicenses']);
   offboarding = methods(['capabilities', 'list', 'get', 'history', 'create', 'continue', 'preview']);
   app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = user; next(); }); app.use(base, companyLicenseV2Routes(store, offboarding));
+  app = await listenLoopback(app);
 });
+afterEach(() => closeServer(app));
 test.each([
   ['/capabilities', 'capabilities'], ['/pools/POOL/assignments', 'assignments'], ['/users/USER/license-returns', 'returnPreview'],
 ])('GET %s preserves the original source-aware request without V1 substitution', async (path, method) => {
