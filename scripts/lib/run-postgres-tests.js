@@ -29,12 +29,15 @@ async function runPostgresTests({ files, environmentVariable, label }) {
       const port = portProbe.address().port;
       await new Promise(resolve => portProbe.close(resolve));
       execute(path.join(binaries, 'initdb'), ['-D', path.join(cluster, 'data'), '-U', 'postgres', '-A', 'trust', '--no-locale', '-E', 'UTF8']);
+      // Fixtures use TCP; temporary Unix socket paths can exceed macOS limits.
       execute(path.join(binaries, 'pg_ctl'), ['-D', path.join(cluster, 'data'), '-l', path.join(cluster, 'postgres.log'),
-        '-o', `-h 127.0.0.1 -p ${port} -k ${cluster} -c max_connections=40 -c max_locks_per_transaction=256`, '-w', 'start']);
+        '-o', `-h 127.0.0.1 -p ${port} -k '' -c max_connections=40 -c max_locks_per_transaction=256`, '-w', 'start']);
       started = true;
       databaseUrl = `postgres://postgres@127.0.0.1:${port}/postgres`;
     }
-    const child = spawn(process.execPath, ['--test', ...files], {
+    const child = spawn(process.execPath, ['--test',
+      '--test-reporter=tap', '--test-reporter-destination=stdout',
+      '--test-reporter=' + path.join(__dirname, 'nonempty-test-reporter.cjs'), '--test-reporter-destination=stderr', ...files], {
       stdio: 'inherit', env: { ...process.env, [environmentVariable]: databaseUrl },
     });
     const interrupt = () => child.kill('SIGINT');
@@ -44,7 +47,7 @@ async function runPostgresTests({ files, environmentVariable, label }) {
     try {
       const result = await new Promise((resolve, reject) => {
         child.once('error', reject);
-        child.once('exit', (status, signal) => resolve({ status, signal }));
+        child.once('close', (status, signal) => resolve({ status, signal }));
       });
       process.exitCode = result.status || (result.signal ? 1 : 0);
     } finally {

@@ -126,6 +126,16 @@ blueprint and later device/PIM duty journeys use separate fixtures so deliberate
 unrelated checks. The clock-warp license-window case also owns a separate process.
 Application-group and custom device-PIM checks own separate canonical subjects.
 
+Every shared PostgreSQL runner invocation also requires an actual passing test.
+Its native event reporter excludes skipped/TODO cases, empty suites and synthetic
+file passes, so an empty or misspelled filter fails even when Node itself exits
+successfully. Printed TAP-like application output cannot satisfy this check.
+The reporter runs alongside normal TAP output and needs no additional package.
+`scripts/lib/__tests__/run-postgres-tests.test.mjs` exercises real child processes
+and is included in the existing root CLI test gate. Locally owned PostgreSQL
+clusters listen on loopback TCP only; unused Unix sockets are disabled so long
+macOS temporary paths do not prevent startup.
+
 PIM browser checks open the current “Weitere Rollen und Richtlinien” panel and
 complete the actual OAuth reauthentication after activation. The activation
 check reads its committed request and live role assignment because immediate
