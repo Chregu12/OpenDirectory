@@ -419,6 +419,51 @@ helm upgrade opendirectory ./deploy/helm/opendirectory \
 
 Helm performs a rolling update by default — each Deployment's pods are replaced one at a time. Services with `replicaCount: 1` will have a brief downtime window; increase replicas before upgrading if this is unacceptable.
 
+### OpenDirectory Lite: PIM approver-group migration
+
+The existing `opendirectory.heusser.local` installation uses
+`deploy/helm/opendirectory-lite/`, not the full-platform chart shown above.
+Its image overrides are under `apps.<service>.imageTag`. Preserve the current
+release's complete values and review the rendered resources before upgrading;
+the checked-in k3s example alone does not contain all live configuration.
+
+[Release 1.0.53 preparation](../testing/pim-release-1.0.53.json) records the
+tested image digests, migration rehearsal and frozen Helm manifest. Complete
+source CI and fresh private database and App Store upload backups are required
+before applying it. The earlier rehearsal archive is not a fresh rollout backup
+or a coordinated platform recovery point.
+
+Migration `061_company_pim_approver_groups.sql` adds the reviewer-group columns
+and expands the sealed approval receiver from six routines to eight. **An image
+rollback to Identity 1.0.50 does not reverse this migration.** On an isolated copy
+of the production database, that old image returned HTTP 200 from `/health` while
+`identity_company_pim_approval_receiving()` rejected the retained eight-routine
+manifest. Retained user data stayed unchanged, but PIM was unavailable. Do not
+use automatic image rollback as recovery for this migration.
+
+Restarting the exact tested 1.0.53 Identity image after that old-image replay
+restored the current SQL definitions and receiver checks without changing the
+retained user data. Prefer this tested forward repair if an old image has been
+started accidentally. A database restore instead requires a separate maintenance
+and reconciliation plan for writes since the backup; Helm does not provide it.
+
+After rollout, verify the actual image digests and all ready Deployments, then
+execute the following read-only checks against Identity as the application
+database owner. A successful health endpoint alone is insufficient:
+
+```sql
+BEGIN READ ONLY;
+SELECT identity_company_role_receiving();
+SELECT identity_company_group_rule_live_receiving();
+SELECT identity_company_activation_receiving();
+SELECT identity_company_pim_approval_receiving();
+COMMIT;
+```
+
+Also verify the anonymous API denials, actual login page and OAuth Identity
+receiver URL. These operator checks do not substitute for an authenticated
+human login or a complete platform recovery rehearsal.
+
 ---
 
 ## Uninstalling
