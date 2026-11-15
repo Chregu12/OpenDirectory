@@ -1,4 +1,5 @@
 'use strict';
+const Scope = require('./DeviceScope');
 
 const { randomBytes, randomUUID, createHash } = require('node:crypto');
 const { validUuid } = require('../../../../packages/identity-authorization-contract');
@@ -44,8 +45,9 @@ class DeviceAgents {
   async inventoryReport(id, query, user, authorization) {
     identifier(id); if (Object.keys(query).length) fail(400, 'No inventory report selectors');
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    let scope;
     const result = await this.database.transaction(async client => {
-      await this.receiving(client); await this.inventory.current(client, source.tenant.id, id);
+      await this.receiving(client); await Scope.requireDevice(client,source,'devices.inventory.read',id); await this.inventory.current(client, source.tenant.id, id);
       const checkedAt = iso((await client.query('SELECT clock_timestamp() AS moment')).rows[0].moment);
       const row = (await client.query(`SELECT connection.*,${statusSql('$3::timestamptz')} AS connection_status,
        coalesce((inventory_report->>'enrolledAt')::timestamptz=enrolled_at,false) AS inventory_same_enrollment FROM device_agent_connections connection WHERE device_id=$1 AND tenant_id=$2`, [id, source.tenant.id, checkedAt])).rows[0];
@@ -57,9 +59,10 @@ class DeviceAgents {
         const same = row.inventory_same_enrollment && row.platform === stored.platform && ['connected', 'offline'].includes(row.connection_status);
         status = !same ? 'historical' : row.connection_status === 'connected' && Date.parse(checkedAt) - Date.parse(stored.receivedAt) <= 300000 ? 'current' : 'stale';
       }
+      scope=await Scope.pin(client,source,'devices.inventory.read',[id]);
       return { schemaVersion: 1, inventoryProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, deviceId: id, checkedAt, connectionStatus: row?.connection_status || 'not-enrolled', status, inventory };
     }, { readOnly: true });
-    await this.inventory.checkpoint(source, user, authorization); return result;
+    await this.inventory.checkpoint(source, user, authorization); await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async fleet(query, user, authorization, exportCsv = false) {
     const { connectionStatus, ...selectors } = query;
@@ -67,22 +70,26 @@ class DeviceAgents {
     if (exportCsv && (selectors.page !== undefined || selectors.limit !== undefined)) fail(400, 'Export uses the complete filtered fleet');
     const page = pageQuery(selectors, true);
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    let scope;
     const result = await this.database.transaction(async client => {
       await this.inventory.receiving(client); await this.receiving(client);
       const checkedAt = iso((await client.query('SELECT clock_timestamp() AS checked_at')).rows[0].checked_at);
       const params = [source.tenant.id, page.search, page.platform, page.lifecycle, page.ownership, page.deviceClass, checkedAt];
+      const where=selectionWhere+await Scope.predicate(client,source,'devices.inventory.read','devices.id',params);
       const base = `WITH fleet AS (SELECT unit.id,unit.asset_id,unit.inventory_created_at,unit.inventory_updated_at,
        device_inventory_row(unit) AS inventory,(SELECT to_jsonb(link) FROM device_inventory_assignments link WHERE link.device_id=unit.id AND link.tenant_id=unit.tenant_id AND link.released_at IS NULL) AS assignment,
-       to_jsonb(connection) AS agent,${statusSql('$7::timestamptz')} AS connection_status FROM (SELECT * FROM devices WHERE ${selectionWhere}) unit
+       to_jsonb(connection) AS agent,${statusSql('$7::timestamptz')} AS connection_status FROM (SELECT * FROM devices WHERE ${where}) unit
        LEFT JOIN device_agent_connections connection ON connection.device_id=unit.id AND connection.tenant_id=unit.tenant_id) `;
       const counts = Object.fromEntries(statuses.map(status => [status, 0]));
       for (const row of (await client.query(base + 'SELECT connection_status,count(*) AS count FROM fleet GROUP BY connection_status', params)).rows) counts[row.connection_status] = Number(row.count);
       const column = { createdAt: 'inventory_created_at', updatedAt: 'inventory_updated_at', assetId: 'lower(asset_id)' }[page.sort];
-      const rows = (await client.query(base + `SELECT * FROM fleet WHERE ($8::text IS NULL OR connection_status=$8) ORDER BY ${column} ${page.order},id LIMIT $9 OFFSET $10`, [...params, connectionStatus || null, exportCsv ? 5001 : page.limit, exportCsv ? 0 : (page.page - 1) * page.limit])).rows;
+      const statusParameter='$'+(params.length+1),limitParameter='$'+(params.length+2),offsetParameter='$'+(params.length+3);
+      const rows = (await client.query(base + `SELECT * FROM fleet WHERE (${statusParameter}::text IS NULL OR connection_status=${statusParameter}) ORDER BY ${column} ${page.order},id LIMIT ${limitParameter} OFFSET ${offsetParameter}`, [...params, connectionStatus || null, exportCsv ? 5001 : page.limit, exportCsv ? 0 : (page.page - 1) * page.limit])).rows;
       const devices = rows.map(row => inventoryDevice(row.inventory, row.assignment));
       const connections = rows.map(row => ({ deviceId: row.id, ...connectionSummary(row.agent, row.connection_status) }));
+      if(exportCsv && rows.length>5000)fail(413,'Narrow the export filters; at most 5000 devices can be exported');
+      scope=await Scope.pin(client,source,'devices.inventory.read',rows.map(row=>row.id));
       if (exportCsv) {
-        if (rows.length > 5000) fail(413, 'Narrow the export filters; at most 5000 devices can be exported');
         const fields = [...DEVICE_FIELDS, 'lifecycle', 'assignedUserId', 'connectionStatus', 'lastSeen', 'hostname', 'agentVersion'];
         const cell = value => '"' + String(value ?? '').replace(/^([\s]*)([=+\-@])/u, "'$1$2").replace(/"/g, '""') + '"';
         const data = devices.map((device, i) => ({ ...device, connectionStatus: connections[i].status, lastSeen: connections[i].lastSeen, hostname: connections[i].report?.hostname, agentVersion: connections[i].report?.agentVersion }));
@@ -92,7 +99,7 @@ class DeviceAgents {
       return { schemaVersion: 1, actorUserId: source.actorUserId, devices, total: connectionStatus ? counts[connectionStatus] : total, page: page.page, limit: page.limit,
         fleet: { protocol: 1, tenantId: source.tenant.id, checkedAt, counts: { total, ...counts }, connections } };
     }, { readOnly: true });
-    await this.inventory.checkpoint(source, user, authorization); return result;
+    await this.inventory.checkpoint(source, user, authorization); await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async state(client, deviceId, tenantId, actorUserId, page = 1) {
     await this.inventory.current(client, tenantId, deviceId);
@@ -106,8 +113,9 @@ class DeviceAgents {
     identifier(id);
     if (Object.keys(query).some(key => key !== 'page') || query.page !== undefined && (typeof query.page !== 'string' || !/^[1-9][0-9]*$/.test(query.page) || Number(query.page) > 1000000)) fail(400, 'Invalid agent page');
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
-    const result = await this.database.transaction(async client => { await this.receiving(client); return this.state(client, id, source.tenant.id, source.actorUserId, Number(query.page || 1)); }, { readOnly: true });
-    await this.inventory.checkpoint(source, user, authorization); return result;
+    let scope;
+    const result = await this.database.transaction(async client => { await this.receiving(client); await Scope.requireDevice(client,source,'devices.inventory.read',id);const result=await this.state(client, id, source.tenant.id, source.actorUserId, Number(query.page || 1));scope=await Scope.pin(client,source,'devices.inventory.read',[id]);return result; }, { readOnly: true });
+    await this.inventory.checkpoint(source, user, authorization); await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async manage(id, action, input, expected, user, authorization, correlationId) {
     identifier(id); exact(input, ['reason', 'confirm']);
@@ -116,11 +124,12 @@ class DeviceAgents {
     if (!expected) fail(428, 'Agent revision required');
     const match = typeof expected === 'string' && expected.match(/^"agent-([a-f0-9-]{36})-(0|[1-9][0-9]{0,18})"$/);
     if (!match || match[1] !== id || BigInt(match[2]) > 9223372036854775807n) fail(400, 'Exact agent revision required');
-    const source = await this.inventory.authorized(user, authorization, 'devices.inventory.create');
+    let source = await this.inventory.authorized(user, authorization, 'devices.inventory.create');
     const token = action === 'issue' ? 'odae_' + this.secret() : null;
     return this.database.transaction(async client => {
       await this.receiving(client);
       const current = await this.inventory.current(client, source.tenant.id, id, true);
+      source = await Scope.bind(client, this.inventory, source, 'devices.inventory.create', user, authorization, id, String(current.row.inventory_revision));
       if (action === 'issue' && (!['windows', 'macos', 'linux'].includes(current.row.platform) || !['available', 'assigned'].includes(current.row.inventory_lifecycle))) fail(409, 'Restore a supported desktop device before enrollment');
       const state = await this.state(client, id, source.tenant.id, source.actorUserId);
       if (etag(id, state.revision) !== expected) fail(412, 'Agent state changed; reload before retrying');

@@ -25,6 +25,7 @@ export async function mockApi(page:Page){
   if(p===`/api/devices/${deviceId}/agent`&&m==='GET')return json({schemaVersion:1,agentProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,revision:'0',status:'not-enrolled',enrolledAt:null,lastSeen:null,credentialExpiresAt:null,enrollmentExpiresAt:null,report:null,history:{total:0,page:1,limit:25,events:[]}});
   if(p===`/api/devices/${deviceId}/agent/inventory`&&m==='GET')return json({schemaVersion:1,inventoryProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,checkedAt:new Date().toISOString(),connectionStatus:'not-enrolled',status:'missing',inventory:null});
   if(p===`/api/devices/${deviceId}/agent/sync`)return json({schemaVersion:1,syncProtocol:1,actorUserId:actor,tenantId:tenant,deviceId,checkedAt:new Date().toISOString(),connectionEtag:null,page:1,limit:10,total:0,requests:[]});
+  if(p.includes('/organizational-unit'))return json({error:'unsupported'},501);
   if(p===`/api/devices/${deviceId}/history`)return json({schemaVersion:1,actorUserId:actor,deviceId,events:[],total:0,page:1,limit:25});
   if(p==='/api/licenses/access')return json({subject:actor,identityState:'active',permissions:['licenses.catalog.read','licenses.catalog.manage','licenses.assignments.read','licenses.assignments.manage'],demoMode:false});
   if(p==='/api/licenses'&&m==='GET')return json({licenses,total:licenses.length});
