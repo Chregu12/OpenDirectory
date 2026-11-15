@@ -3592,7 +3592,20 @@ test('production gateway does not treat a real credential-bound pending company 
         const denied = await request(base, workflowRoute, { method: 'POST', token: rejectedToken, body: workflowInput }); assert.ok([401, 428].includes(denied.status), JSON.stringify(denied.body));
       }
       assert.deepEqual(await workflowState(), beforeWorkflow);
-      const workflowCreated = await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 }); assert.equal(workflowCreated.status, 201, JSON.stringify(workflowCreated.body));
+      process.stdout.write('Offboarding source preflight: '+JSON.stringify({mfaAgeSeconds:Math.floor(Date.now()/1000)-payload(token).auth_time})+'\n');
+      const licensePrototype=require('../../../policy-service/src/licenses/CompanyLicenses').CompanyLicenses.prototype,originalUnchanged=licensePrototype.unchanged;
+      licensePrototype.unchanged=async function(source,user,authorization){
+        try{return await originalUnchanged.call(this,source,user,authorization);}catch(error){
+          if(error.message==='Original company license authority changed'){
+            const diagnostic={mfaAgeSeconds:Math.floor(Date.now()/1000)-user.auth_time,sourceRemainingSeconds:source.validUntil-Math.floor(Date.now()/1000)};
+            try{const current=await this.authority.read(authorization,user,source.target?.id||null),same=require('node:util').isDeepStrictEqual;diagnostic.changedFields=Object.keys(source).filter(key=>!same(source[key],current[key]));diagnostic.changedTargetFields=Object.keys(source.target||{}).filter(key=>!same(source.target[key],current.target?.[key]));diagnostic.currentRemainingSeconds=current.validUntil-Math.floor(Date.now()/1000);}catch(probe){diagnostic.probeStatus=probe.status||503;}
+            process.stdout.write('Original license source failure diagnostic: '+JSON.stringify(diagnostic)+'\n');
+          }
+          throw error;
+        }
+      };
+      let workflowCreated;try{workflowCreated=await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 });}finally{licensePrototype.unchanged=originalUnchanged;}
+      assert.equal(workflowCreated.status, 201, JSON.stringify(workflowCreated.body));
       const completedJob = workflowCreated.body; const workflow = completedJob.workflow;
       assert.deepEqual(Object.keys(completedJob).sort(), ['actorUserId', 'currentTarget', 'schemaVersion', 'tenantId', 'workflow']);
       assert.deepEqual([completedJob.schemaVersion, completedJob.actorUserId, completedJob.tenantId, workflow.id, workflow.userId, workflow.createdBy, workflow.reason, workflow.phase, workflow.totalLicenses, workflow.completedLicenses, workflow.failure],
