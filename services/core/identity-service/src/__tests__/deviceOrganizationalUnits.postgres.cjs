@@ -49,7 +49,7 @@ beforeEach(async () => {
   options = { issuer, revalidate: async (_authorization, user) => (await new AuthorizationState(identityDb).state(issuer, user.sub)).tenant };
   creator = new DirectoryCreator(identityDb, options); authority = new DeviceOuAuthority(identityDb, options); inventoryAuthority = new DeviceInventoryAuthority(identityDb, options);
   inventory = new DeviceInventory(deviceDb, { authority: { read: (authorization, user, userId = null) => inventoryAuthority.read(user, authorization, userId ? { userId } : null) } });
-  units = new DeviceOrganizationalUnits(deviceDb, { inventory, authority: { read: (authorization, user, ouId) => authority.resolve({ ouId }, user, authorization), units: (authorization, user, _tenant, query) => authority.units(query, user, authorization) } });
+  units = new DeviceOrganizationalUnits(deviceDb, { inventory, authority: { read: (authorization, user, ouId) => authority.resolve({ ouId }, user, authorization), units: (authorization, user, _tenant, query) => authority.units(query, user, authorization), status: (authorization, user, selection) => authority.status({ selection }, user, authorization) } });
   roles = new CompanyRoles(identityDb, { revalidate: async () => {} });
   ou = await creator.ou({ name: 'Engineering devices' }, owner.user, bearer);
   unit = await inventory.create({ assetId: randomUUID(), serialNumber: randomUUID(), manufacturer: 'Native', model: 'Own device OU fixture', deviceClass: 'laptop', platform: 'linux' }, owner.user, bearer);
@@ -58,6 +58,7 @@ afterEach(async () => { late = null; await identityPool?.end(); await devicePool
 after(() => admin.end());
 const read = (user = owner.user) => units.get(unit.id, {}, user, bearer);
 const tag = value => C.etag(unit.id, value.deviceRevision, value.revision);
+const currentStatus = async (user = owner.user, previous) => units.status(unit.id, {}, tag(previous || await read(user)), user, bearer);
 async function intent(ouId) { if (ouId === null) return null; return (await identityPool.query("SELECT unit.id,unit.revision::text,ownership.generation::text FROM ous unit JOIN identity_tenant_ownership ownership ON ownership.resource_kind='ou' AND ownership.resource_id=unit.id WHERE unit.id=$1", [ouId])).rows[0]; }
 const save = async (ouId = ou.id, previous, user = owner.user) => units.write(unit.id, { ou: await intent(ouId), reason, confirm: true }, tag(previous || await read(user)), user, bearer);
 const state = async () => { const result = {}; for (const table of ['device_ou_assignments', 'device_ou_events', 'device_ou_outbox']) result[table] = (await devicePool.query('SELECT to_jsonb(row) AS value FROM ' + table + ' row ORDER BY to_jsonb(row)::text')).rows; return result; };
@@ -170,4 +171,72 @@ test('additive migration replay preserves original assignment, audit, outbox and
   assert.deepEqual(await state(), before); await devicePool.query('SELECT device_ou_receiving()');
   assert.equal((await devicePool.query("SELECT count(*)::int AS count FROM device_ou_manifest")).rows[0].count, 5);
   assert.equal((await devicePool.query("SELECT has_function_privilege('public','device_ou_change(jsonb)','EXECUTE') AS allowed")).rows[0].allowed, false);
+});
+
+test('current OU status keeps saved evidence while reporting actual rename and reparenting without device writes', async () => {
+  await save(); const before = await state(), original = await read(), device = await inventory.get(unit.id, owner.user, bearer);
+  const initial = await currentStatus(); assert.equal(initial.state, 'current'); assert.equal(initial.currentOu.name, ou.name); assert.equal(initial.revision, '1');
+  const mutator = new OuMutator(identityDb, options), renamed = await mutator.update(ou.id, { name: 'Current engineering name' }, ouEtag(ou), owner.user, bearer);
+  const changed = await currentStatus(); assert.equal(changed.state, 'changed'); assert.equal(changed.currentOu.name, 'Current engineering name'); assert.equal(changed.currentOu.revision, '2');
+  const parent = await creator.ou({ name: 'Current device parent' }, owner.user, bearer);
+  await mutator.update(ou.id, { parentId: parent.id }, ouEtag(renamed), owner.user, bearer);
+  const moved = await currentStatus(); assert.equal(moved.state, 'changed'); assert.equal(moved.currentOu.parentId, parent.id);
+  assert.deepEqual(await state(), before); assert.deepEqual(await read(), original); assert.deepEqual(await inventory.get(unit.id, owner.user, bearer), device);
+  assert.ok(moved.validUntil <= owner.user.auth_time + 300); assert.ok(!JSON.stringify(moved).includes('tokenId')); assert.ok(!Object.hasOwn(moved, 'directoryGrant'));
+});
+test('a retained assignment distinguishes a retired OU without exposing foreign or replaced-generation OU metadata', async () => {
+  await save(); await new OuMutator(identityDb, options).remove(ou.id, ouEtag(ou), owner.user, bearer);
+  const removed = await currentStatus(); assert.equal(removed.state, 'not-current'); assert.equal(removed.currentOu, null); assert.equal((await read()).ou.name, ou.name);
+  const own = await creator.ou({ name: 'Another current own unit' }, owner.user, bearer), selected = await intent(own.id);
+  const wrongGeneration = await authority.status({ selection: { id: own.id, generation: String(BigInt(selected.generation) + 1n) } }, owner.user, bearer); assert.equal(wrongGeneration.currentOu, null);
+  const other = await activeCompany(identityDb, schemas[0], issuer), foreign = await creator.ou({ name: 'Foreign private OU name' }, other.user, bearer);
+  const hidden = await authority.status({ selection: { id: foreign.id, generation: (await intent(foreign.id)).generation } }, owner.user, bearer);
+  assert.equal(hidden.currentOu, null); assert.ok(!JSON.stringify(hidden).includes('Foreign private OU name'));
+});
+test('unassigned status needs only inventory reading; current OU metadata requires its separate live read grant', async () => {
+  const reader = await person(); await grant(['devices.inventory.read'], reader.id);
+  assert.equal((await currentStatus(reader.user)).state, 'unassigned'); await save();
+  await assert.rejects(currentStatus(reader.user), { status: 403, message: 'device_ou_status_directory_read_required' });
+  assert.equal((await read(reader.user)).ou.id, ou.id);
+  const directory = await grant(['ous.read'], reader.id); const result = await currentStatus(reader.user); assert.equal(result.state, 'current');
+  await assert.rejects(save(ou.id, undefined, reader.user), { status: 403 });
+  await roles.revoke(directory.grant.id, { reason, confirm: true }, Roles.etag('grant', directory.grant), owner.user, bearer);
+  await assert.rejects(currentStatus(reader.user), { status: 403, message: 'device_ou_status_directory_read_required' }); assert.equal((await read(reader.user)).ou.id, ou.id);
+});
+test('status rejects stale versions, selectors, missing confirmation context and attempted private overrides', async () => {
+  const empty = await read(); await save(); await assert.rejects(currentStatus(owner.user, empty), { status: 412 });
+  await assert.rejects(units.status(unit.id, {}, undefined, owner.user, bearer), { status: 428 });
+  await assert.rejects(units.status(unit.id, { ouId: ou.id }, tag(await read()), owner.user, bearer), { status: 400 });
+  for (const body of [{ selection: null, tenantId: randomUUID() }, { selection: { id: ou.id, generation: '0' } }, { selection: { id: ou.id, generation: '1', name: 'Injected' } }]) await assert.rejects(authority.status(body, owner.user, bearer), { status: 400 });
+  const noInventory = await person(); await grant(['ous.read'], noInventory.id); await assert.rejects(currentStatus(noInventory.user, await read()), { status: 403 });
+});
+test('a late actual reassignment after the second Identity status response cannot be returned as the original association', async () => {
+  await save(); const second = await creator.ou({ name: 'Actual later device unit' }, owner.user, bearer); let calls = 0;
+  const guarded = new DeviceOrganizationalUnits(deviceDb, { inventory, authority: { status: async (authorization, user, selection) => {
+    const result = await authority.status({ selection }, user, authorization); if (++calls === 2) await save(second.id); return result;
+  } } });
+  await assert.rejects(guarded.status(unit.id, {}, tag(await read()), owner.user, bearer), { status: 412 });
+  assert.equal(calls, 2); assert.equal((await read()).ou.id, second.id); assert.equal((await units.history(unit.id, {}, owner.user, bearer)).total, 2);
+});
+test('a canonical OU change between the two status resolutions rejects the old response without modifying stored history', async () => {
+  await save(); const before = await state(); let calls = 0;
+  const guarded = new DeviceOrganizationalUnits(deviceDb, { inventory, authority: { status: async (authorization, user, selection) => {
+    if (++calls === 2) await new OuMutator(identityDb, options).update(ou.id, { name: 'Changed during the actual status read' }, ouEtag(ou), owner.user, bearer);
+    return authority.status({ selection }, user, authorization);
+  } } });
+  await assert.rejects(guarded.status(unit.id, {}, tag(await read()), owner.user, bearer), { status: 412 }); assert.deepEqual(await state(), before);
+});
+test('replacement of an original OU read grant cannot rescue a pending current-status response', async () => {
+  await save(); const reader = await person(); await grant(['devices.inventory.read'], reader.id); const directory = await grant(['ous.read'], reader.id); let calls = 0;
+  const guarded = new DeviceOrganizationalUnits(deviceDb, { inventory, authority: { status: async (authorization, user, selection) => {
+    if (++calls === 2) { await roles.revoke(directory.grant.id, { reason, confirm: true }, Roles.etag('grant', directory.grant), owner.user, bearer); await grant(['ous.read'], reader.id); }
+    return authority.status({ selection }, user, authorization);
+  } } });
+  await assert.rejects(guarded.status(unit.id, {}, tag(await read(reader.user)), reader.user, bearer), { status: 412 });
+});
+test('status still requires original fresh MFA and complete retained receiving guards', async () => {
+  await save(); const original = await read(), originalTime = owner.user.auth_time, authTime = Math.floor(Date.now() / 1000) - 301; owner.user.auth_time = authTime; owner.user.mfa_authorization.authTime = authTime;
+  await assert.rejects(currentStatus(owner.user, original), { status: 428 });
+  owner.user.auth_time = originalTime; owner.user.mfa_authorization.authTime = originalTime;
+  await devicePool.query('ALTER TABLE device_ou_outbox DISABLE TRIGGER device_ou_guard'); await assert.rejects(currentStatus(owner.user, { deviceRevision: unit.revision, revision: '1' }), { status: 503 });
 });

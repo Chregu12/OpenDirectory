@@ -52,3 +52,26 @@ test('malformed bodies and excess or unconfirmed authority responses fail closed
 test.each([401, 403, 404, 428, 503])('actual source denial %i preserves failure without fallback', async status => {
   fetchImpl.mockResolvedValueOnce(Response.json({}, { status })); await expect(authority.read('Bearer original', user, ou.id)).rejects.toMatchObject({ status });
 });
+function statusProof() { return { schemaVersion: 1, deviceOuStatusProtocol: 1, inventory: proof.inventory, selection: { id: ou.id, generation: ou.generation }, currentOu: ou, directoryGrant: null, validUntil: proof.validUntil }; }
+test('current status uses its own private purpose and original OU generation without write authority', async () => {
+  const value = statusProof(); fetchImpl.mockResolvedValueOnce(Response.json(value));
+  await expect(authority.status('Bearer original', user, value.selection)).resolves.toEqual(value);
+  expect(String(fetchImpl.mock.calls[0][0])).toBe('https://identity.test/api/identity/device-organizational-units/status');
+  expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ selection: value.selection }), headers: { Authorization: 'Bearer original' }, redirect: 'error' });
+});
+test.each(['purpose', 'actor', 'tenant', 'generation', 'selection', 'expiry', 'directory', 'extra'])('unconfirmed status %s cannot populate current OU metadata', async variant => {
+  const value = statusProof();
+  if (variant === 'purpose') { delete value.deviceOuStatusProtocol; value.deviceOuProtocol = 1; }
+  if (variant === 'actor') value.inventory.actorUserId = randomUUID();
+  if (variant === 'tenant') value.inventory.tenant = { id: randomUUID(), generation: '0', version: '1' };
+  if (variant === 'generation') value.currentOu = { ...ou, generation: '99' };
+  if (variant === 'selection') value.selection = { ...value.selection, id: randomUUID() };
+  if (variant === 'expiry') value.validUntil++;
+  if (variant === 'directory') value.directoryGrant = {};
+  if (variant === 'extra') value.source = {};
+  fetchImpl.mockResolvedValueOnce(Response.json(value)); await expect(authority.status('Bearer original', user, { id: ou.id, generation: ou.generation })).rejects.toMatchObject({ status: 503 });
+});
+test('status cannot be mistaken for a write proof, and an unassigned status needs no directory grant', async () => {
+  const value = statusProof(); fetchImpl.mockResolvedValueOnce(Response.json(value)); await expect(authority.read('Bearer original', user, ou.id)).rejects.toMatchObject({ status: 503 });
+  value.selection = null; value.currentOu = null; fetchImpl.mockResolvedValueOnce(Response.json(value)); await expect(authority.status('Bearer original', user, null)).resolves.toEqual(value);
+});

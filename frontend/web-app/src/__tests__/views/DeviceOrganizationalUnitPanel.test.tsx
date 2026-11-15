@@ -15,6 +15,7 @@ beforeEach(() => {
     if (url === base) return { status: 200, headers: { etag: `"device-ou-${id}-1-${record.revision}"` }, data: record };
     if (url === '/api/devices/organizational-units') { if (catalogDenied) throw { response: { status: 403 } }; return { status: 200, data: { schemaVersion: 1, deviceOuProtocol: 1, actorUserId: actor, tenantId: tenant, units: [ou], page: 1, limit: 25, total: 1 } }; }
     if (url === base + '/history') return { status: 200, data: { schemaVersion: 1, deviceOuProtocol: 1, actorUserId: actor, tenantId: tenant, deviceId: id, page: 1, limit: 25, total: 0, events: [] } };
+    if (url === base + '/status') throw { response: { status: 501 } };
     throw new Error('Unexpected device OU read');
   });
   (api.put as jest.Mock).mockImplementation(async (_url, body) => {

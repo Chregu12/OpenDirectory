@@ -15,14 +15,26 @@ function validUnit(value) {
   return exact(value, ['id', 'generation', 'revision', 'name', 'parentId']) && validUuid(value.id) && validRevision(value.generation) && validRevision(value.revision)
     && text(value.name, 1, 255) && (value.parentId === null || validUuid(value.parentId) && value.parentId !== value.id);
 }
+function validReference(value) {
+  return exact(value, ['id', 'generation']) && validUuid(value.id) && value.id === value.id.toLowerCase() && validRevision(value.generation);
+}
+function directoryProof(value, user) {
+  return value.directoryGrant === null || validDelegation({ ...value.inventory, validUntil: value.validUntil, permissions: ['ous.read'],
+    delegation: { grants: [{ permission: 'ous.read', source: value.directoryGrant }] } }, user);
+}
 function validProof(value, user) {
   if (!exact(value, ['schemaVersion', 'deviceOuProtocol', 'inventory', 'ou', 'directoryGrant', 'validUntil']) || value.schemaVersion !== 1 || value.deviceOuProtocol !== 1
     || !Number.isSafeInteger(value.validUntil) || value.validUntil * 1000 <= Date.now() || value.validUntil > value.inventory?.validUntil
     || !value.inventory?.permissions?.includes('devices.inventory.create') || value.ou !== null && !validUnit(value.ou)
     || value.ou === null && value.directoryGrant !== null) return false;
-  if (value.directoryGrant === null) return true;
-  return validDelegation({ ...value.inventory, validUntil: value.validUntil, permissions: ['ous.read'],
-    delegation: { grants: [{ permission: 'ous.read', source: value.directoryGrant }] } }, user);
+  return directoryProof(value, user);
+}
+function validStatusProof(value, user) {
+  return Boolean(exact(value, ['schemaVersion', 'deviceOuStatusProtocol', 'inventory', 'selection', 'currentOu', 'directoryGrant', 'validUntil']) && value.schemaVersion === 1 && value.deviceOuStatusProtocol === 1
+    && Number.isSafeInteger(value.validUntil) && value.validUntil * 1000 > Date.now() && value.validUntil <= value.inventory?.validUntil && value.inventory?.permissions?.includes('devices.inventory.read')
+    && (value.selection === null ? value.currentOu === null && value.directoryGrant === null : validReference(value.selection)
+      && (value.currentOu === null || validUnit(value.currentOu) && value.currentOu.id === value.selection.id && value.currentOu.generation === value.selection.generation))
+    && directoryProof(value, user));
 }
 function etag(deviceId, deviceRevision, revision) {
   identifier(deviceId); if (!validRevision(deviceRevision) || revision !== '0' && !validRevision(revision)) fail(503, 'Device OU versions unavailable');
@@ -39,4 +51,4 @@ function page(query = {}, searchable = false) {
     || query.search !== undefined && !text(query.search, 0, 255)) fail(400, 'Exact device OU selectors required');
   return { page: Number(query.page || 1), limit: 25, search: query.search?.trim() || '' };
 }
-module.exports = { exact, identifier, input, validUnit, validProof, etag, expected, page, fail };
+module.exports = { exact, identifier, input, validUnit, validReference, validProof, validStatusProof, etag, expected, page, fail };

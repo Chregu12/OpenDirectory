@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Device } from '@/lib/deviceInventory';
 import { readDeviceOu, readDeviceOuChoices, writeDeviceOu, readDeviceOuHistory, deviceOuError, type DeviceOuAssignment, type DeviceOuChoices, type DeviceOuHistory, type DeviceOrganizationalUnit } from '@/lib/deviceOrganizationalUnits';
 import { DirectoryConfirmation } from './UserDetailPanel';
+import DeviceOuCurrentStatus from './DeviceOuCurrentStatus';
 const date = (value: string) => new Date(value).toLocaleString('de-CH');
 
 export default function DeviceOrganizationalUnitPanel({ device, actor, canManage, disabled, onBusy, onSecurityError }: {
@@ -53,9 +54,10 @@ export default function DeviceOrganizationalUnitPanel({ device, actor, canManage
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!data && !error && <p role="status">OU-Zuordnung wird geladen …</p>}
     {data && <>
-      <p>{data.ou ? data.ou.name : 'Keine Organisationseinheit zugeordnet.'}</p>
+      <p className="break-words">{data.ou ? data.ou.name : 'Keine Organisationseinheit zugeordnet.'}</p>
       {data.updatedAt && <p className="text-xs opacity-70 break-words">Zuordnung vom {date(data.updatedAt)} · {data.updatedBy}. Name und Version der OU sind der Stand dieser Änderung.</p>}
       <p className="text-sm opacity-70">Die Benutzerzuweisung bleibt unabhängig. Eine OU-Zuordnung erteilt keine zusätzlichen Geräte- oder PIM-Rechte.</p>
+      {data.ou && <DeviceOuCurrentStatus key={data.revision} device={device} actor={actor} assignment={data} disabled={busy || disabled} onSecurityError={onSecurityError} />}
       <div className="flex flex-wrap gap-3">
         {canManage && <button className="fluent-btn-secondary" disabled={busy || disabled} onClick={() => { setEditing(value => !value); setSelection(null); setPage(1); setSearch(''); setDraft(''); setError(''); }}>Zuordnung ändern</button>}
         {canManage && data.ou && <button className="fluent-btn-secondary" disabled={busy || disabled} onClick={() => { setReason(''); setConfirmation({ ou: null }); }}>OU-Zuordnung aufheben</button>}

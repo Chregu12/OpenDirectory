@@ -53,6 +53,29 @@ class DeviceOrganizationalUnits {
       return { schemaVersion: 1, deviceOuProtocol: 1, actorUserId: source.inventory.actorUserId, tenantId: source.inventory.tenant.id, deviceId: id, ...await this.current(client, source.inventory.tenant.id, id), operationId, deliveryStatus: 'pending' };
     }, { beforeCommit: checkpoint });
   }
+  async status(id, query, expected, user, authorization) {
+    C.identifier(id); C.expected(expected, id); if (Object.keys(query).length) C.fail(400, 'No current OU selectors');
+    const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    const snapshot = async () => this.database.transaction(async client => { await this.receiving(client); return this.current(client, source.tenant.id, id); }, { readOnly: true });
+    const original = await snapshot();
+    if (C.etag(id, original.deviceRevision, original.revision) !== expected) C.fail(412, 'Original device OU assignment changed');
+    const selection = original.ou ? { id: original.ou.id, generation: original.ou.generation } : null;
+    const resolve = async () => {
+      try { return await this.authority.status(authorization, user, selection); }
+      catch (error) { if (error.status !== 403) throw error; await this.inventory.checkpoint(source, user, authorization); C.fail(403, 'device_ou_status_directory_read_required'); }
+    };
+    const proof = await resolve();
+    if (JSON.stringify(proof.inventory) !== JSON.stringify(source)) C.fail(401, 'Original inventory status source changed');
+    if (JSON.stringify(original) !== JSON.stringify(await snapshot())) C.fail(412, 'Original device OU assignment changed');
+    if (JSON.stringify(proof) !== JSON.stringify(await resolve())) C.fail(412, 'Current OU or original source changed');
+    await this.inventory.checkpoint(source, user, authorization);
+    if (JSON.stringify(original) !== JSON.stringify(await snapshot())) C.fail(412, 'Original device OU assignment changed');
+    if (!C.validStatusProof(proof, user)) C.fail(401, 'Original current OU proof expired');
+    const state = selection === null ? 'unassigned' : proof.currentOu === null ? 'not-current'
+      : ['id', 'generation', 'revision', 'name', 'parentId'].every(key => original.ou[key] === proof.currentOu[key]) ? 'current' : 'changed';
+    return { schemaVersion: 1, deviceOuStatusProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, deviceId: id,
+      deviceRevision: original.deviceRevision, revision: original.revision, selection, state, currentOu: proof.currentOu, checkedAt: new Date().toISOString(), validUntil: proof.validUntil };
+  }
   async history(id, query, user, authorization) {
     C.identifier(id); const selected = C.page(query);
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');

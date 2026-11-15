@@ -1,0 +1,169 @@
+{
+  "checkedAt": "2026-11-15T05:32:52.324106+00:00",
+  "sourceBaseCommit": "673cddf9dbaef0840142932c80d7400635018458",
+  "status": "local-read-status-implementation-and-actual-browser-verified-full-source-ci-pending",
+  "scope": "Read-only current own OU status for an exact retained device association. This is not device OU/group role or PIM authorization.",
+  "runtime": {
+    "node": "20.20.2",
+    "postgres": "16.15 native disposable schemas",
+    "browser": "Installed Chrome 157.0.8103.78",
+    "platform": "macOS arm64"
+  },
+  "checks": {
+    "deviceUnit": {
+      "pass": 673,
+      "fail": 0,
+      "suites": 25,
+      "fixtureInjectionAssertionsPassed": true,
+      "unintendedMessageBusConnectLogs": 0
+    },
+    "identityUnit": {
+      "pass": 1283,
+      "fail": 0,
+      "suites": 68
+    },
+    "policyUnit": {
+      "pass": 1471,
+      "fail": 0,
+      "suites": 45
+    },
+    "frontendTargetedUnit": {
+      "pass": 63,
+      "fail": 0,
+      "suites": 4
+    },
+    "typescript": {
+      "pass": true
+    },
+    "nativePostgreSQL": {
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "skipped": 0,
+      "newCurrentStatusCases": 8
+    },
+    "mockedBrowser": {
+      "pass": 6,
+      "fail": 0,
+      "widths": [
+        390,
+        1440
+      ],
+      "existingInventoryCases": 4,
+      "ouCases": 2,
+      "currentRenameAndLongNameWrapChecked": true
+    },
+    "actualBrowser": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59,
+      "durationMilliseconds": 289885.19925,
+      "productionNextBuild": true,
+      "actualIdentityDeviceOAuthPolicyPostgreSQLAndRedis": true,
+      "liveGraphDisabled": true,
+      "provider": "Explicit disposable legacy provider fixture for this company-registration flow.",
+      "verified": [
+        "Three retained device OU changes",
+        "Actual current-status GET with original device/assignment If-Match",
+        "Actual own OU rename and restoration through the original human Owner bearer",
+        "Changed current metadata remains distinct from the saved association",
+        "Current-status lookup creates no device OU event",
+        "Overall device and user assignments remain unchanged",
+        "Private inventory/directory source fields are absent from the public status reply"
+      ]
+    }
+  },
+  "nativeStatusCoverage": [
+    "Rename and reparenting with unchanged device evidence",
+    "Retirement, foreign reference and replaced-generation refusal",
+    "Independent inventory.read and ous.read without create rights",
+    "Missing/stale context, selectors and private overrides",
+    "Actual reassignment after the final Identity reply",
+    "OU change between source reads",
+    "Original OU read grant replaced while the request is held",
+    "Original fresh MFA and complete receiver guards"
+  ],
+  "legacyFixtureCorrection": {
+    "realModuleVirtualFlagsRemoved": 43,
+    "incorrectSharedPackagePathsCorrected": 2,
+    "remainingVirtualModules": [
+      "../database/manager"
+    ],
+    "existingBusinessAssertionsPreserved": true,
+    "actualServiceAndMessageBusMockIdentityChecked": true,
+    "observedBefore": [
+      "Isolated 38-case API suite passed, while the full suite missed its application stub and failed six existing expectations.",
+      "A partial mock conversion made the opposite route dependencies inconsistent.",
+      "After correcting both route suites, the complete 673-case Device suite passed and no MessageBus connection/retry logs remained."
+    ],
+    "reference": "https://jestjs.io/docs/29.7/jest-object"
+  },
+  "policyTransientObservation": {
+    "initialParallelFullRun": {
+      "pass": 1470,
+      "fail": 1,
+      "case": "CompanyBlueprints public GET versions returned 401 instead of the substituted store 200"
+    },
+    "isolatedFollowup": {
+      "pass": 71,
+      "fail": 0
+    },
+    "completeSequentialFollowup": {
+      "pass": 1471,
+      "fail": 0
+    },
+    "cause": "Not isolated; no Blueprint production code or test expectation was changed for this transient observation."
+  },
+  "visualInspection": {
+    "widths": [
+      390,
+      1440
+    ],
+    "result": "Saved snapshot, changed current name, explicit refresh and retained history readable; long unbroken name wraps without horizontal overflow."
+  },
+  "productionTouched": false,
+  "sourceSha256": {
+    "docs/api/openapi.yaml": "02ab3756d4bdaadd74325cc65844f8e68da668896266a5985452ab9d7b7e7a6a",
+    "frontend/web-app/e2e/device-organizational-units.spec.ts": "1317887fc7c4d168dc3f781bcec1385a00efec5a07ddf1ca9a07c8c429aefb6c",
+    "frontend/web-app/src/__tests__/views/DeviceOrganizationalUnitPanel.test.tsx": "077ef2ef13b8e6cfe8a0ff9b103797fd0ea18ac08643cd7aec8f521c2c5feb8e",
+    "frontend/web-app/src/__tests__/views/DeviceOuCurrentStatus.test.tsx": "3386e51d9104d7d5be6236405d021d56d72163eb08f3cfd8e131244c1de23620",
+    "frontend/web-app/src/components/views/DeviceOrganizationalUnitPanel.tsx": "44f0e94ba4d93bd87fd68dbc0bb52f20383bf881bfec3918f1a26aa113fd7796",
+    "frontend/web-app/src/components/views/DeviceOuCurrentStatus.tsx": "08e30331c096af4bcd3f7c1b6f7350f1a54db1ea6a1550245e971587b69179d1",
+    "frontend/web-app/src/lib/deviceOrganizationalUnits.ts": "20860d4013f9a6d4d7ca59ad30574195b311b6733abee90763eca75f3044cb3e",
+    "packages/device-ou-contract.js": "1eb10a657b94bbed0bfe032926e2dd1a838de5450a83b3f93f84346c1353f414",
+    "services/core/device-service/scripts/device-ou-openapi.js": "92f195470d754df76eacb2099a4a5d9a2a75abed8debf614f3ff87828071cc95",
+    "services/core/device-service/src/DeviceOrganizationalUnits.js": "6633bf363ed057aef332b2d47f288de79b507044ddfce3a931a8c5b703505e46",
+    "services/core/device-service/src/DeviceOuSource.js": "84b89b30a03586762570665df9687c80823f626db01192bc71126cd82471b9c2",
+    "services/core/device-service/src/__tests__/DeviceOuSource.test.js": "b3708387a38e672b619868fc2aa4a753ce0c393df4da6146712d46517cf9a019",
+    "services/core/device-service/src/__tests__/api.e2e.test.js": "3c2d3355c8e7443538318633ab2ab7a37e734472bc7e379d7e29a87903bddad4",
+    "services/core/device-service/src/__tests__/deviceInstallCharacterization.test.js": "3dc918dd2e6121de932644030ec117ddb77ef1fd612300942612ecf20bd5d3d9",
+    "services/core/device-service/src/inventoryServer.js": "2a0d8eeecda59644e63c5109a40f5fc25f8a8ee52586c4b83f321d9d44d2f38c",
+    "services/core/identity-service/scripts/organization-openapi.js": "ba0e5cb81295330142c6be6480a75ef7f6ccaaa0ad551ef5792a446ddf9c86c7",
+    "services/core/identity-service/src/DeviceOuAuthority.js": "445af1ad081e82a1b087d906ad1241e8cbe6da7bbd37c63f06779ad6d79e3df4",
+    "services/core/identity-service/src/__tests__/OrganizationProfileContract.test.js": "31bfa9de854e624f8966309092719796172154f0549776b0ab14293fa658dad3",
+    "services/core/identity-service/src/__tests__/deviceOrganizationalUnits.postgres.cjs": "ece9485d557f2e98cf8ad0a90516cb47028c6350f27ca12c8d5f3c90cf0d7bfa",
+    "services/core/identity-service/src/__tests__/identityAccess.test.js": "59959e9acbc6a74afcd766267b3e91eabf0b86b7c32109fbed3c46ce0103df6d",
+    "services/core/identity-service/src/index.js": "1a5ceb4583b580b6821f28f2bfe8f1655f276a248297eef8f6df5f8e96d230b0",
+    "services/core/identity-service/src/middleware/identityAccess.js": "b246e1652c3b06e1c6d27e7bbd515ccfd3e0da1005bc56391481f3dd652be9c7",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "d4b40fefafeecbc557f480a8ee3be36b489b2a2887eca42a9afed3e4f98de465",
+    "services/core/policy-service/src/__tests__/CompanyBlueprintAssignmentOpenApi.test.js": "11188f9e028c969c093ef5c67ffcce6ebedfb695d28edee581980af6f4b3ee09"
+  },
+  "limits": [
+    "This branch has not yet passed complete Linux CI or been deployed.",
+    "Production remains the separately verified 1.0.53 / Helm revision 86.",
+    "The status reply is a captured read with an original deadline; it is not an authorization credential or instantaneous distributed revocation guarantee.",
+    "Device OU/group rights, per-device source proofs, hierarchy scopes and cross-service deletion dependencies remain open.",
+    "Actual human production login, live external providers, physical devices, full platform recovery, load and WCAG acceptance remain open."
+  ],
+  "parentCi": {
+    "runId": 43676661495,
+    "status": "completed",
+    "conclusion": "failure",
+    "jobsPassed": 8,
+    "jobsTotal": 9,
+    "failedStep": "Test durable cross-service token, PIM and delegated orchestration revocation",
+    "case": "production gateway does not treat a real credential-bound pending company registration as an access grant",
+    "observation": "Original company license authority changed at workflow creation; browser step was not reached. Same case also failed on unchanged main d97f70a; investigation remains open."
+  }
+}

@@ -126,6 +126,9 @@ test('user group memberships require both user and group read duties before the 
 test.each([
   ['GET', '/identity/device-organizational-units', 'user', 200],
   ['POST', '/identity/device-organizational-units', 'user', 200],
+  ['POST', '/identity/device-organizational-units/status', 'user', 200],
+  ['GET', '/identity/device-organizational-units/status', 'user', 404],
+  ['POST', '/identity/device-organizational-units/status', 'application', 403],
   ['GET', '/identity/device-organizational-units', 'application', 403],
   ['POST', '/identity/device-organizational-units', 'application', 403],
   ['PUT', '/identity/device-organizational-units', 'user', 404],

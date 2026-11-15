@@ -20,6 +20,11 @@ const event = z.object({ id: uuid, actorUserId: uuid, correlationId: uuid, reaso
   && BigInt(value.after.revision) === BigInt(value.before?.revision || '0') + BigInt(1));
 const history = z.object({ ...identity, deviceId: uuid, page: z.number().int().min(1).max(1000000), limit: z.literal(25), total: z.number().int().nonnegative().safe(), events: z.array(event).max(25) }).strict();
 export type DeviceOuHistory = z.infer<typeof history>;
+const reference = z.object({ id: uuid, generation: revision }).strict();
+const status = z.object({ schemaVersion: z.literal(1), deviceOuStatusProtocol: z.literal(1), actorUserId: uuid, tenantId: uuid, deviceId: uuid, deviceRevision: revision,
+  revision: z.union([z.literal('0'), revision]), selection: reference.nullable(), state: z.enum(['unassigned', 'current', 'changed', 'not-current']), currentOu: unit.nullable(), checkedAt: time,
+  validUntil: z.number().int().positive().safe() }).strict();
+export type DeviceOuCurrentStatus = z.infer<typeof status>;
 const path = (device: Device) => '/api/devices/' + uuid.parse(device.id) + '/organizational-unit';
 function bound<T extends { actorUserId: string; tenantId: string }>(value: T, device: Device, actor: string, signal: AbortSignal) {
   if (signal.aborted || value.actorUserId !== actor || value.tenantId !== device.tenantId) throw new Error('Original device OU context unavailable'); return value;
@@ -57,6 +62,22 @@ export async function writeDeviceOu(device: Device, actor: string, previous: Dev
 export async function readDeviceOuHistory(device: Device, actor: string, page: number, signal: AbortSignal) {
   const response = await api.get(path(device) + '/history', { params: { page }, signal }), data = bound(history.parse(response.data), device, actor, signal);
   if (response.status !== 200 || data.deviceId !== device.id || data.page !== page || data.events.length !== count(data.total, page) || new Set(data.events.map(value => value.id)).size !== data.events.length) throw new Error('Retained device OU history unconfirmed');
+  return data;
+}
+export async function readDeviceOuStatus(device: Device, actor: string, previous: DeviceOuAssignment, signal: AbortSignal) {
+  bound(previous, device, actor, signal);
+  if (previous.deviceId !== device.id || previous.deviceRevision !== device.revision) throw new Error('Original device OU context required');
+  let response;
+  try { response = await api.get(path(device) + '/status', { headers: { 'If-Match': etag(previous) }, signal }); }
+  catch (error) { if ((error as any)?.response?.status === 501) return null; throw error; }
+  const data = bound(status.parse(response.data), device, actor, signal);
+  const sameReference = previous.ou === null ? data.selection === null : data.selection?.id === previous.ou.id && data.selection?.generation === previous.ou.generation;
+  const currentReference = data.currentOu === null || data.currentOu.id === data.selection?.id && data.currentOu.generation === data.selection?.generation;
+  const expectedState = previous.ou === null ? 'unassigned' : data.currentOu === null ? 'not-current'
+    : ['id', 'generation', 'revision', 'name', 'parentId'].every(key => previous.ou![key as keyof DeviceOrganizationalUnit] === data.currentOu![key as keyof DeviceOrganizationalUnit]) ? 'current' : 'changed';
+  if (response.status !== 200 || data.deviceId !== device.id || data.deviceRevision !== previous.deviceRevision || data.revision !== previous.revision || !sameReference || !currentReference
+    || previous.ou === null && data.currentOu !== null || data.state !== expectedState || data.validUntil * 1000 <= Date.now() || data.validUntil * 1000 > Date.now() + 305000
+    || Date.parse(data.checkedAt) > Date.now() + 5000 || Date.parse(data.checkedAt) >= data.validUntil * 1000) throw new Error('Current original OU status unconfirmed');
   return data;
 }
 export function deviceOuError(error: unknown) {
