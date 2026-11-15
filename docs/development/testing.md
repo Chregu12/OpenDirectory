@@ -42,6 +42,21 @@ npx jest --no-coverage --forceExit
 npm test
 ```
 
+### Isolated legacy device route fixtures
+
+`api.e2e.test.js` and `deviceInstallCharacterization.test.js` substitute the
+legacy route services. Existing files use ordinary resolved Jest mocks;
+`virtual: true` is reserved for the absent compatibility database manager.
+The shared MessageBus and event mocks must resolve to the actual repository
+`packages/service-contracts` directory. Both suites verify their injected
+MessageBus, and the API suite also verifies its application/enrollment/compliance
+substitutes before exercising route results. This prevents a passing isolated
+file from hiding inconsistent mock identities or unintended broker connections
+in the complete suite. See the [Jest 29.7 mock API](https://jestjs.io/docs/29.7/jest-object).
+
+These substituted legacy HTTP tests do not establish real Device/Identity/OAuth
+authorization; use the separate PostgreSQL and actual browser gates for that.
+
 ### Frontend
 
 ```bash
