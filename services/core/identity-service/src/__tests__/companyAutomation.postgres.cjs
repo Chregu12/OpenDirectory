@@ -25,6 +25,19 @@ async function grant(actions=['directory.users.export']){
  const result=await automation.approve(input,owner.user,bearer);return{...result.grant,input};
 }
 const enqueue=permission=>automation.enqueue({id:randomUUID(),grantId:permission.id,action:permission.actions[0],format:'json'},app,appBearer);
+async function abandonWorkerLease(permission, jobId, attemptCount) {
+ const actualExport = automation.export.bind(automation);
+ automation.export = async (...args) => {
+  const claimed = (await pool.query('SELECT status,attempt_count,lease_token,lease_until FROM identity_automation_jobs WHERE id=$1', [jobId])).rows[0];
+  assert.equal(claimed.status, 'running'); assert.equal(claimed.attempt_count, attemptCount); assert.ok(claimed.lease_token);
+  await new Promise(resolve => setTimeout(resolve, Math.max(1, claimed.lease_until.getTime() - Date.now() + 80)));
+  return actualExport(...args);
+ };
+ try { await assert.rejects(automation.run({ grantId: permission.id }, app, appBearer), { status: 409 }); }
+ finally { automation.export = actualExport; }
+ const retained = (await pool.query('SELECT status,attempt_count,lease_until<=clock_timestamp() AS expired FROM identity_automation_jobs WHERE id=$1', [jobId])).rows[0];
+ assert.equal(retained.status, 'running'); assert.equal(retained.attempt_count, attemptCount); assert.equal(retained.expired, true);
+}
 test('a company-owned app enrollment is bound to its real original tenant and cannot be approved by a foreign actual owner',async()=>{
  const tenant=(await new AuthorizationState(database).state(issuer,owner.user.sub)).tenant;app.company_tenant=tenant;
  const enrollment=await automation.enroll({id:randomUUID(),name:'Tenant-owned automation application'},app,appBearer);assert.deepEqual(enrollment.companyTenant,tenant);
@@ -155,9 +168,8 @@ test('missing receiving guards and expired original approval reject rather than 
  await pool.query('ALTER TABLE identity_automation_jobs DISABLE TRIGGER identity_automation_commit');await assert.rejects(automation.grants(owner.user,bearer),{code:'42501'});
 });
 test('an abandoned expired worker lease is recovered by a fresh app token and never by a stale completion',async()=>{
- const permission=await grant();const created=await enqueue(permission);const actualExport=automation.export.bind(automation);const expiring={...app,exp:Math.floor(Date.now()/1000)+1};
- automation.export=async(...args)=>{await new Promise(resolve=>setTimeout(resolve,Math.max(1,expiring.exp*1000-Date.now()+70)));return actualExport(...args);};
- await assert.rejects(automation.run({grantId:permission.id},expiring,appBearer));automation.export=actualExport;
+ const permission=await grant();const created=await enqueue(permission);
+ await abandonWorkerLease(permission, created.job.id, 1);
  const pending=(await automation.list({grantId:permission.id},app,appBearer)).jobs[0];assert.equal(pending.status,'running');
  const recovered=await automation.run({grantId:permission.id},{...app,jti:randomUUID()},appBearer);assert.equal(recovered.job.id,created.job.id);assert.equal(recovered.job.status,'succeeded');assert.equal(recovered.job.attemptCount,2);
 });
@@ -216,11 +228,10 @@ test('artifact read and subsequent worker admission reject a restored but corrup
  await assert.rejects(automation.list({grantId:permission.id},app,appBearer),{status:503});await assert.rejects(automation.run({grantId:permission.id},app,appBearer),{status:503});
 });
 test('an abandoned fifth lease becomes a visible failed result instead of an unclaimable running job',async()=>{
- const permission=await grant();await enqueue(permission);const original=database.transaction;const actualExport=automation.export.bind(automation);
+ const permission=await grant();const created=await enqueue(permission);const original=database.transaction;const actualExport=automation.export.bind(automation);
  database.transaction=(operation,options)=>original(client=>operation({query:(sql,values)=>client.query(sql,typeof sql==='string'&&sql.includes('available_at=clock_timestamp()+$4')?[...values.slice(0,3),0]:values)}),options);
  automation.export=async()=>{throw new Error('Transient read');};for(let index=0;index<4;index++)assert.equal((await automation.run({grantId:permission.id},app,appBearer)).job.status,'retry_wait');
- const expiring={...app,exp:Math.floor(Date.now()/1000)+1};automation.export=async(...args)=>{await new Promise(resolve=>setTimeout(resolve,Math.max(1,expiring.exp*1000-Date.now()+70)));return actualExport(...args);};
- await assert.rejects(automation.run({grantId:permission.id},expiring,appBearer));automation.export=actualExport;
+ automation.export=actualExport;await abandonWorkerLease(permission, created.job.id, 5);
  const result=await automation.run({grantId:permission.id},app,appBearer);assert.equal(result.job.status,'failed');assert.equal(result.job.attemptCount,5);assert.equal(result.job.errorCode,'lease_expired');
 });
 test('a standing license change subscription observes its exact app grant and queues capacity changes without any directory change',async()=>{
