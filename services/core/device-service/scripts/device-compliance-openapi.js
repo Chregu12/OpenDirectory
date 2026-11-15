@@ -39,10 +39,6 @@ function deviceComplianceOpenApi() {
  }
  const heartbeat=structuredClone(original.paths['/api/device-agent/heartbeat']);heartbeat.post.requestBody.content['application/json'].schema.properties.security=ref('AgentSecurityFacts');heartbeat.post.summary='Receive actual agent contact, optional hardware and optional security observations';heartbeat.post.description+=' Agent 1.3 sends security and inventory; older agent bodies retain their four-field response. A security request also returns the actual compliance summary; HTTP 200 alone does not mean compliant. Server 1.0.47 required for security.';
  heartbeat.post.responses[200].content['application/json'].schema.properties.compliance=exact({status:{enum:['compliant','non-compliant','unknown','not-configured']},policyRevision:counter,evaluatedAt:time});paths['/api/device-agent/heartbeat']=heartbeat;
- const scope = require('./device-scope-openapi');
- const authority = paths['/api/identity/device-compliance'].get;
- authority.parameters.push(structuredClone(scope.header)); authority.description += ' ' + scope.description;
- authority.responses[200].content['application/json'].schema = {oneOf:[ref('DeviceComplianceAuthority'),ref('DeviceComplianceScopedAuthoritySource')]};
  return {paths,components:{schemas}};
 }
 module.exports={deviceComplianceOpenApi};

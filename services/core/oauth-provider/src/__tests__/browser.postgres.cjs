@@ -1571,7 +1571,8 @@ async function reviewFirstFactor(page,username) {
   assert.equal(confirmed.status(),200,username+' first-factor confirmation: '+String(outcome.error||'unconfirmed').slice(0,100)); await page.getByText(/Ersteinrichtung bestätigt/).waitFor();
   assert.equal((await page.context().cookies()).some(cookie=>cookie.name==='od_session'),false); assert.equal(await page.getByText(setup.secret,{ exact:true }).count(),0); rememberFactor(username,setup.secret,counter);
 }
-test('real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery', { timeout: 360000 }, async () => {
+// Three independently authenticated Owner journeys retain their own 300-second MFA window, plus registration setup.
+test('real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery', { timeout: 960000 }, async () => {
   const isolated = await context({ onboarded: false }); const page = await isolated.newPage();
   try {
     await page.goto(origin + '/register'); await page.getByLabel('Benutzername', { exact: true }).fill('company-registration-owner'); await page.getByLabel('Aktuelles Passwort', { exact: true }).fill('disposable-password');
@@ -1710,48 +1711,6 @@ test('real company registration UI persists one disabled tenant and candidate th
     assert.equal((await inventoryFixture.db.query('SELECT count(*)::int AS count FROM device_inventory_assignments WHERE device_id=$1 AND released_at IS NOT NULL',[inventoryDevice.id])).rows[0].count,1);
     assert.equal((await identityDb.query('SELECT enabled FROM users WHERE id=$1',[employeeIds[0]])).rows[0].enabled,false);
     await page.screenshot({path:'/tmp/od-business10-company-device-released.png',fullPage:true});
-    const deviceOuPanel=inventoryDetails.getByRole('region',{name:'Geräte-Organisationseinheit',exact:true});
-    const deviceOuBefore=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM devices record WHERE id=$1',[inventoryDevice.id])).rows;
-    const deviceOuAssignmentsBefore=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_inventory_assignments record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows;
-    const deviceOuBase='/api/devices/'+inventoryDevice.id+'/organizational-unit', deviceOuReasons=[];
-    for(const [index,selectedId] of [unitIds[0],unitIds[1],null].entries()) {
-      if(selectedId) {
-        const deviceOuChoicesPending=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/devices/organizational-units');
-        await deviceOuPanel.getByRole('button',{name:'Zuordnung ändern',exact:true}).click();
-        const choicesResponse=await deviceOuChoicesPending;assert.equal(choicesResponse.status(),200,await choicesResponse.text());assert.ok((await choicesResponse.json()).units.some(value=>value.id===selectedId));
-        await deviceOuPanel.getByRole('combobox',{name:'Organisationseinheit auswählen',exact:true}).selectOption(selectedId);
-        await deviceOuPanel.getByRole('button',{name:'OU-Zuordnung prüfen',exact:true}).click();
-      } else await deviceOuPanel.getByRole('button',{name:'OU-Zuordnung aufheben',exact:true}).click();
-      const deviceOuDialog=page.getByRole('alertdialog'), explanation='Actual browser device OU decision '+index+' with original company owner';deviceOuReasons.push(explanation);
-      assert.equal(await deviceOuDialog.getByRole('button',{name:'Bestätigen',exact:true}).isDisabled(),true);
-      assert.equal((await inventoryFixture.db.query('SELECT count(*)::int AS count FROM device_ou_events WHERE device_id=$1',[inventoryDevice.id])).rows[0].count,index);
-      await deviceOuDialog.getByLabel('Begründung für OU-Zuordnung',{exact:true}).fill(explanation);
-      const deviceOuPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase&&response.request().method()==='PUT');
-      await deviceOuDialog.getByRole('button',{name:'Bestätigen',exact:true}).click();const response=await deviceOuPending;assert.equal(response.status(),200,await response.text());const saved=await response.json();
-      assert.equal(saved.revision,String(index+1));assert.equal(saved.ou?.id||null,selectedId);assert.equal(saved.updatedBy,receipt.administratorId);assert.equal(saved.deliveryStatus,'pending');
-      assert.equal(response.request().headers()['if-match'],`"device-ou-${inventoryDevice.id}-${saved.deviceRevision}-${index}"`);
-      assert.deepEqual(response.request().postDataJSON(),{ou:saved.ou?{id:saved.ou.id,generation:saved.ou.generation,revision:saved.ou.revision}:null,reason:explanation,confirm:true});
-      await deviceOuDialog.waitFor({state:'hidden'});await deviceOuPanel.getByText(selectedId?saved.ou.name:'Keine Organisationseinheit zugeordnet.',{exact:true}).waitFor();
-      const event=(await inventoryFixture.db.query('SELECT event.*,outbox.status AS delivery_status FROM device_ou_events event JOIN device_ou_outbox outbox USING(id) WHERE event.id=$1',[saved.operationId])).rows[0];
-      assert.equal(event.actor_user_id,receipt.administratorId);assert.equal(event.tenant_id,receipt.tenantId);assert.equal(event.reason,explanation);assert.equal(event.delivery_status,'pending');assert.equal(event.source.ou?.id||null,selectedId);
-      const originalClaims=JSON.parse(Buffer.from(response.request().headers().authorization.slice(7).split('.')[1],'base64url'));assert.equal(event.source.inventory.tokenId,originalClaims.jti);
-      assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM devices record WHERE id=$1',[inventoryDevice.id])).rows,deviceOuBefore);
-      assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_inventory_assignments record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows,deviceOuAssignmentsBefore);
-      if(index===0) {
-        const currentOuRegion=deviceOuPanel.getByRole('region',{name:'Aktueller OU-Stand',exact:true});await currentOuRegion.getByText('OU aktuell bestätigt.',{exact:true}).waitFor();
-        const beforeStatus=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_ou_events record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows;
-        const rename=await page.request.put(origin+'/api/ous/'+selectedId,{headers:{Authorization:'Bearer '+ownerSession.body.access_token,'If-Match':`"ou-${selectedId}-${saved.ou.revision}"`},data:{name:'Current browser engineering device unit'}});assert.equal(rename.status(),200,await rename.text());const renamed=await rename.json();
-        const currentOuPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase+'/status');await currentOuRegion.getByRole('button',{name:'OU-Stand prüfen',exact:true}).click();const currentOuResponse=await currentOuPending;assert.equal(currentOuResponse.status(),200,await currentOuResponse.text());const live=await currentOuResponse.json();
-        assert.equal(live.state,'changed');assert.equal(live.revision,saved.revision);assert.equal(live.currentOu.name,'Current browser engineering device unit');assert.equal(live.currentOu.id,selectedId);assert.equal(live.currentOu.generation,saved.ou.generation);
-        assert.equal(currentOuResponse.request().headers()['if-match'],`"device-ou-${inventoryDevice.id}-${saved.deviceRevision}-${saved.revision}"`);assert.ok(!Object.hasOwn(live,'inventory'));assert.ok(!Object.hasOwn(live,'directoryGrant'));
-        await currentOuRegion.getByText('Die OU wurde seit der Zuordnung geändert.',{exact:true}).waitFor();await deviceOuPanel.getByText(saved.ou.name,{exact:true}).waitFor();
-        assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_ou_events record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows,beforeStatus);
-        const restored=await page.request.put(origin+'/api/ous/'+selectedId,{headers:{Authorization:'Bearer '+ownerSession.body.access_token,'If-Match':`"ou-${selectedId}-${renamed.revision}"`},data:{name:saved.ou.name}});assert.equal(restored.status(),200,await restored.text());
-      }
-    }
-    const deviceOuHistoryPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase+'/history');await deviceOuPanel.getByRole('button',{name:'OU-Verlauf',exact:true}).click();const deviceOuHistoryResponse=await deviceOuHistoryPending;assert.equal(deviceOuHistoryResponse.status(),200);const deviceOuHistory=await deviceOuHistoryResponse.json();assert.equal(deviceOuHistory.total,3);assert.deepEqual(deviceOuHistory.events.map(event=>event.reason),[...deviceOuReasons].reverse());assert.ok(!JSON.stringify(deviceOuHistory).includes('tokenId'));
-    await deviceOuPanel.getByLabel('OU-Zuordnungsverlauf').getByText(deviceOuReasons[0],{exact:true}).waitFor();
-    await page.screenshot({path:path.join(os.tmpdir(),'od-business10-company-device-ou-history.png'),fullPage:true});
     await page.goto(origin + '/users');
     await page.getByRole('region', { name: 'Kanonische Benutzerliste', exact: true }).getByLabel('Suche', { exact: true }).fill('browser-company-employee-one');
     await page.getByRole('button', { name: 'Benutzer browser-company-employee-one', exact: true }).click();
@@ -2065,7 +2024,17 @@ test('real company registration UI persists one disabled tenant and candidate th
       const response = await page.request.fetch(origin + route, { method, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, ...(body ? { data: body } : {}) });
       return { status: response.status(), body: await response.json() };
     };
-    const accessOwnerToken = (await mediated(page)).body.access_token; const accessActors = new Map();
+    const initialOwnerClaims = JSON.parse(Buffer.from(ownerSession.body.access_token.split('.')[1], 'base64url'));
+    await login(page, 'company-registration-owner');
+    const accessOwnerSession = await mediated(page); assert.equal(accessOwnerSession.status, 200);
+    const accessOwnerToken = accessOwnerSession.body.access_token;
+    const accessOwnerClaims = JSON.parse(Buffer.from(accessOwnerToken.split('.')[1], 'base64url'));
+    assert.deepEqual([accessOwnerClaims.iss, accessOwnerClaims.sub, accessOwnerClaims.identity_authorization.userId, accessOwnerClaims.mfa_authorization.revision], [initialOwnerClaims.iss, initialOwnerClaims.sub, receipt.administratorId, initialOwnerClaims.mfa_authorization.revision]);
+    assert.notEqual(accessOwnerClaims.jti, initialOwnerClaims.jti); assert.ok(accessOwnerClaims.auth_time >= initialOwnerClaims.auth_time);
+    assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(accessOwnerClaims), true);
+    assert.ok(Math.floor(Date.now()/1000)-accessOwnerClaims.auth_time <= 300); assert.deepEqual(accessOwnerClaims.roles, []);
+    process.stdout.write('Independent offboarding Owner journey: same actor/factor, real password/TOTP login and new JTI; original MFA cutoff retained.\n');
+    const accessActors = new Map();
     for (const [name, roles] of [['company-access-operator', ['role-administrator', 'pim-administrator']], ['company-access-reviewer', ['admin', 'pim-approver']]]) {
       const account = await accessApi('/api/users', { method: 'POST', token: accessOwnerToken, body: { username: name, email: name + '@example.invalid' } }); assert.equal(account.status, 201, JSON.stringify(account.body));
       const enabled = await accessApi('/api/users/' + account.body.id, { method: 'PUT', token: accessOwnerToken, headers: { 'If-Match': require('../../../identity-service/src/DirectoryUsers').userEtag(account.body) }, body: { enabled: true } }); assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
@@ -2145,7 +2114,12 @@ test('real company registration UI persists one disabled tenant and candidate th
     assert.equal(companyWrites.length, 9); await page.screenshot({ path: '/tmp/od-business15-offboarding-confirmation.png', fullPage: true });
     const creatingOffboarding = page.waitForResponse(response => new URL(response.url()).pathname === workflowRoute && response.request().method() === 'POST');
     await offboardingDialog.getByRole('button', { name: 'Bestätigen', exact: true }).click();
-    const offboardingResponse = await creatingOffboarding; assert.equal(offboardingResponse.status(), 201, await offboardingResponse.text()); const offboarding = await offboardingResponse.json(); const offboardingJob = offboarding.workflow;
+    const offboardingResponse = await creatingOffboarding;
+    const offboardingAuthorization = offboardingResponse.request().headers().authorization; assert.match(offboardingAuthorization, /^Bearer [A-Za-z0-9._~-]+$/u);
+    const offboardingClaims = JSON.parse(Buffer.from(offboardingAuthorization.slice('Bearer '.length).split('.')[1], 'base64url'));
+    assert.equal(offboardingResponse.status(), 201, JSON.stringify({ response: await offboardingResponse.text(), authAgeSeconds: Math.floor(Date.now()/1000)-offboardingClaims.auth_time, sameOwner: offboardingClaims.identity_authorization?.userId === receipt.administratorId, provenMfa: require('../../../../../packages/mfa-authorization-contract').provenMfa(offboardingClaims) }));
+    assert.equal(offboardingClaims.auth_time, accessOwnerClaims.auth_time); assert.notEqual(offboardingClaims.jti, initialOwnerClaims.jti);
+    const offboarding = await offboardingResponse.json(); const offboardingJob = offboarding.workflow;
     assert.match(offboardingJob.id, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u);
     assert.deepEqual(offboardingResponse.request().postDataJSON(), { workflowId: offboardingJob.id, userId: employeeIds[0], userRevision: offboardingPreview.user.userRevision, eligibilityRevision: offboardingPreview.user.eligibilityRevision, reason: offboardingReason, confirm: true });
     assert.deepEqual([offboarding.actorUserId, offboarding.tenantId, offboardingJob.userId, offboardingJob.createdBy, offboardingJob.phase, offboardingJob.totalLicenses, offboardingJob.completedLicenses, offboardingJob.failure], [receipt.administratorId, receipt.tenantId, employeeIds[0], receipt.administratorId, 'completed_local', 2, 2, null]);
@@ -2159,8 +2133,6 @@ test('real company registration UI persists one disabled tenant and candidate th
     const offboardingIdentityReceipt = (await identityDb.query(`SELECT record.operation_id,record.action,outbox.status FROM identity_company_offboarding_receipts record JOIN identity_company_offboarding_outbox outbox USING(tenant_id,workflow_id) WHERE record.tenant_id=$1 AND record.workflow_id=$2 AND record.user_id=$3`, [receipt.tenantId, offboardingJob.id, employeeIds[0]])).rows;
     assert.deepEqual(offboardingIdentityReceipt, [{ operation_id: offboardingJob.checkpoint.operationId, action: 'disabled', status: 'pending' }]);
     assert.equal(Object.keys(offboardingJob.checkpoint).length, 13);
-    const offboardingAuthorization = offboardingResponse.request().headers().authorization; assert.match(offboardingAuthorization, /^Bearer [A-Za-z0-9._~-]+$/u);
-    const offboardingClaims = JSON.parse(Buffer.from(offboardingAuthorization.slice('Bearer '.length).split('.')[1], 'base64url'));
     assert.deepEqual(offboardingClaims.roles, []); assert.equal(offboardingClaims.identity_authorization.userId, receipt.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(offboardingClaims), true);
     const offboardingChildren = (await policyDb.query(`SELECT event.id,event.license_id,event.type,event.target_user_id,event.actor_user_id,event.correlation_id,event.before_state,event.proof,outbox.status,license_company_event_valid(event) AS valid
       FROM license_company_events event JOIN license_company_outbox outbox ON outbox.id=event.id WHERE event.tenant_id=$1 AND event.correlation_id=$2 ORDER BY event.license_id`, [receipt.tenantId, offboardingJob.id])).rows;

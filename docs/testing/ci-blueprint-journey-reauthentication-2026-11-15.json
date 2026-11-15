@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T09:57:59.527128+00:00",
+  "checkedAt": "2026-11-15T09:46:19.895400+00:00",
   "baseCommit": "63791c6cf790284689507be0c80f3fc1082bf4dd",
-  "status": "real-reauthentication-and-aggregate-test-budget-verified-three-times-on-linux-full-source-ci-pending",
+  "status": "real-reauthentication-locally-and-twice-on-linux-verified-outer-test-budget-corrected-linux-pending",
   "productionTouched": false,
   "productionSourceChanged": false,
   "failure": {
@@ -45,7 +45,7 @@
   },
   "limits": [
     "The selected native case is not the full two-case blueprint group or complete source CI.",
-    "The repeated corrected Linux blueprint group is verified; complete current source CI remains pending.",
+    "Repeated Linux validation with the corrected aggregate harness budget is pending.",
     "No personal production login or external provider acceptance was performed."
   ],
   "sourceSha256": {
@@ -87,54 +87,5 @@
       "totalMilliseconds": 485898.875298,
       "effect": "Harness teardown aborted an active offboarding request; subsequent connection-reset/authority-unavailable logs are teardown effects."
     }
-  },
-  "correctedLinuxValidation": {
-    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43700914638",
-    "diagnosticCommit": "b9577bf439d28e1cf01fe5d5ba36c91298899e46",
-    "identicalCaseFileAndLicenseOffboardingRuntimeAsMain": "e39fdde83947e17306a698559c5d959867a1580b",
-    "conclusion": "success",
-    "jobs": [
-      {
-        "id": 132771634826,
-        "tests": 191,
-        "pass": 2,
-        "fail": 0,
-        "cancelled": 0,
-        "skipped": 189,
-        "blueprintCaseMilliseconds": 50342.113086,
-        "assignmentCaseMilliseconds": 188752.626277,
-        "totalMilliseconds": 247461.222427
-      },
-      {
-        "id": 132771634616,
-        "tests": 191,
-        "pass": 2,
-        "fail": 0,
-        "cancelled": 0,
-        "skipped": 189,
-        "blueprintCaseMilliseconds": 59714.654517,
-        "assignmentCaseMilliseconds": 211595.938362,
-        "totalMilliseconds": 278694.317016
-      },
-      {
-        "id": 132771634797,
-        "tests": 191,
-        "pass": 2,
-        "fail": 0,
-        "cancelled": 0,
-        "skipped": 189,
-        "blueprintCaseMilliseconds": 107600.954124,
-        "assignmentCaseMilliseconds": 399400.736221,
-        "totalMilliseconds": 517163.516309
-      }
-    ],
-    "slowestCompletedCaseExceedsFormerAggregateBudget": true
-  },
-  "currentMainCi": {
-    "commit": "e39fdde83947e17306a698559c5d959867a1580b",
-    "run": 43700849668,
-    "successfulJobs": 9,
-    "pendingJobs": 1,
-    "checkedAt": "2026-11-15T09:57:59.527128+00:00"
   }
 }
