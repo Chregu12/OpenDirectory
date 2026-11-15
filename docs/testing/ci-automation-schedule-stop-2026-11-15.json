@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T11:01:11.772437+00:00",
+  "checkedAt": "2026-11-15T11:19:56.145944+00:00",
   "baseCommit": "e39fdde83947e17306a698559c5d959867a1580b",
-  "status": "schedule-version-conflict-guidance-and-durable-browser-assertions-locally-verified-linux-pending",
+  "status": "schedule-version-conflict-guidance-and-actual-browser-group-verified-three-times-on-linux-full-current-ci-pending",
   "productionTouched": false,
   "productionSourceChanged": "Frontend 412 error guidance only; backend authority, version checks and worker behavior unchanged.",
   "failure": {
@@ -66,7 +66,7 @@
     }
   },
   "limits": [
-    "The complete four-case automation browser group and full current source CI remain pending on Linux.",
+    "The complete automation browser group is verified three times on Linux. The full newest source CI remains pending; the later shared OTP fixture correction is a separate source change.",
     "No personal production login, external provider acceptance or deployment was performed.",
     "The full BR/WF objective and separate scoped Device draft remain open."
   ],
@@ -75,5 +75,70 @@
     "frontend/web-app/src/__tests__/views/CompanyAutomationView.test.tsx": "0dcedc5693a4538065df30ba543ec127964cc54fa454400466c60a3dc8f7be98",
     "services/core/identity-service/src/__tests__/companyAutomation.postgres.cjs": "8ef808f2d5e5565efc01125470727878b0983b73b5b682a60696f8a5ff4b45d8",
     "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "8dbf6ee141b85c628bdc55e2477b9ac2ffd092fbf8af3f58ed988b46da0bd638"
+  },
+  "linux": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43707331418",
+    "diagnosticCommit": "7c5602f56d7dceb4e511f728209876542876f2fd",
+    "exactMainTreeExceptDiagnosticWorkflow": "3ac49480b69b55a1228225fcf47c05afff3d8ef2",
+    "browser": "Playwright Chromium 149.0.7827.55",
+    "jobs": [
+      {
+        "id": 132791129846,
+        "nativeConflict": {
+          "tests": 22,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 21,
+          "milliseconds": 1942.03002
+        },
+        "automationBrowserGroup": {
+          "tests": 60,
+          "pass": 4,
+          "fail": 0,
+          "skipped": 56,
+          "cancelled": 0,
+          "groupRuleCaseMilliseconds": 91866.656067,
+          "totalMilliseconds": 208220.942479
+        }
+      },
+      {
+        "id": 132791130038,
+        "nativeConflict": {
+          "tests": 22,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 21,
+          "milliseconds": 2618.225095
+        },
+        "automationBrowserGroup": {
+          "tests": 60,
+          "pass": 4,
+          "fail": 0,
+          "skipped": 56,
+          "cancelled": 0,
+          "groupRuleCaseMilliseconds": 114453.870333,
+          "totalMilliseconds": 266471.761711
+        }
+      },
+      {
+        "id": 132791130082,
+        "nativeConflict": {
+          "tests": 22,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 21,
+          "milliseconds": 3865.731261
+        },
+        "automationBrowserGroup": {
+          "tests": 60,
+          "pass": 4,
+          "fail": 0,
+          "skipped": 56,
+          "cancelled": 0,
+          "groupRuleCaseMilliseconds": 117510.821449,
+          "totalMilliseconds": 276070.673153
+        }
+      }
+    ]
   }
 }
