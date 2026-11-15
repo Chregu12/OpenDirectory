@@ -1,0 +1,69 @@
+{
+  "checkedAt": "2026-11-15T11:26:05.286049+00:00",
+  "baseCommit": "3ac49480b69b55a1228225fcf47c05afff3d8ef2",
+  "status": "fresh-otp-fixture-window-deterministically-and-natively-verified-linux-pending",
+  "productionTouched": false,
+  "productionMfaCodeChanged": false,
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43700849668",
+    "job": 132771426266,
+    "case": "production gateway does not treat a real credential-bound pending company registration as an access grant",
+    "caseMilliseconds": 380133.388388,
+    "failedLoginLine": 3864,
+    "expected": 302,
+    "actual": 401,
+    "error": "invalid_otp",
+    "timestamp": "2026-11-15T10:46:00.061Z"
+  },
+  "cause": "After a longer gap, the fixture selected current-1. This oldest accepted TOTP counter expires at the next 30-second boundary and can be rejected while the login request is in transit.",
+  "correction": {
+    "fixtureSelects": "max(current,lastCounter+1)",
+    "usedCounterNeverReissued": true,
+    "waitsBeforeExceedingCurrentPlusOne": true,
+    "automaticLoginRetryAdded": false,
+    "productionTotpWindowAndReplayProtectionUnchanged": true,
+    "productionAuthorityAndMfaFreshnessUnchanged": true
+  },
+  "deterministicRegression": {
+    "before": {
+      "pass": 2,
+      "fail": 1,
+      "failure": "Real matchedCounter rejected the fixture OTP 100ms after the next boundary."
+    },
+    "after": "The current OTP remains accepted across that boundary. Reuse and beyond-next-counter issuance remain rejected; unenrolled fixtures do not invent codes.",
+    "usesActualProductionTotpAndMatchedCounter": true
+  },
+  "verification": {
+    "completeOauthUnits": {
+      "suites": 23,
+      "pass": 527,
+      "fail": 0,
+      "seconds": 9.927
+    },
+    "actualNativeRegistration": {
+      "tests": 191,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 190,
+      "cancelled": 0,
+      "caseMilliseconds": 419767.829333,
+      "totalMilliseconds": 427960.027416,
+      "node": "20.20.2",
+      "postgres": "16.15 actual disposable schemas",
+      "case": "^production gateway does not treat a real credential-bound pending company registration",
+      "actualLaterPasswordTotpLoginsAndAllOriginalWorkflowAssertionsRetained": true
+    },
+    "diffCheck": "pass"
+  },
+  "limits": [
+    "The actual native registration case is not the complete OAuth/browser suite.",
+    "Fresh-fixture Linux verification and full newest source CI remain pending.",
+    "No personal production login, provider acceptance or deployment was performed.",
+    "The full original BR/WF objective remains open."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/fixtures/mfa.cjs": "c5219912973ae6b1b1c8e7dd8acf7fbd1eeab27cdbafc16a4ba60dba71dc9a14",
+    "services/core/oauth-provider/src/__tests__/MfaFixture.test.js": "04efc1eb52a595fdf784cd8c769b831b1e0f6c5e18f362f9391496522f22dfd4",
+    "services/core/oauth-provider/src/MfaAuthority.js": "dd317d44dff7f6b374e6c1b0513b6da3b106d565bcff8250e908009c2aab463c"
+  }
+}
