@@ -67043,7 +67043,8 @@
           "roleId",
           "revision",
           "approvalRequired",
-          "windowSeconds"
+          "windowSeconds",
+          "reviewerGroupId"
         ],
         "properties": {
           "roleId": {
@@ -67070,6 +67071,14 @@
             "type": "integer",
             "minimum": 60,
             "maximum": 3600
+          },
+          "reviewerGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
           }
         }
       },
@@ -67084,7 +67093,8 @@
           "revision",
           "approvalRequired",
           "windowSeconds",
-          "canManage"
+          "canManage",
+          "reviewerGroupId"
         ],
         "properties": {
           "schemaVersion": {
@@ -67127,6 +67137,14 @@
           },
           "canManage": {
             "type": "boolean"
+          },
+          "reviewerGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
           }
         }
       },
@@ -67155,8 +67173,17 @@
           },
           "confirm": {
             "const": true
+          },
+          "reviewerGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
           }
-        }
+        },
+        "description": "reviewerGroupId may be omitted only when no group is currently configured. An existing group requires an explicit ID or null; omission never clears a selected group."
       },
       "CompanyPimApprovalPolicyResult": {
         "type": "object",
@@ -67581,7 +67608,8 @@
           "windowSeconds",
           "canRequest",
           "maximumDurationSeconds",
-          "existingRequest"
+          "existingRequest",
+          "reviewerGroupId"
         ],
         "properties": {
           "schemaVersion": {
@@ -67649,6 +67677,14 @@
                 "type": "null"
               }
             ]
+          },
+          "reviewerGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
           }
         }
       },

@@ -106,7 +106,7 @@ test('missing pending role outbox rolls back definition changes and preserves th
  await assert.rejects(roles.update(role.id,definition({enabled:false}),C.etag('role',role),owner.user,bearer),{status:503});const current=await roles.detail(role.id,{},owner.user,bearer);assert.equal(current.role.revision,'1');assert.equal(current.role.enabled,true);
 });
 test('replaying the additive migration preserves grants, use receipts and every required guard',async()=>{
- const delegate=await person();const role=await createRole();await assign(role,delegate.id);await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/057_company_roles.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/058_company_pim.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/059_company_pim_approvals.sql'),'utf8'));assert.ok((await reader.users({},delegate.user,bearer)).users.some(row=>row.id===delegate.id));await pool.query('SELECT identity_company_role_receiving()');
+ const delegate=await person();const role=await createRole();await assign(role,delegate.id);await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/057_company_roles.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/058_company_pim.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/059_company_pim_approvals.sql'),'utf8'));await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/061_company_pim_approver_groups.sql'),'utf8'));assert.ok((await reader.users({},delegate.user,bearer)).users.some(row=>row.id===delegate.id));await pool.query('SELECT identity_company_role_receiving()');
 });
 test('a limited SQL login cannot read another actor role source through security-definer helpers',async()=>{
  const limited='cr_limited_'+randomUUID().replaceAll('-','');await pool.query('CREATE ROLE '+limited+' NOLOGIN');const client=await pool.connect();
@@ -370,4 +370,62 @@ test('delegated device assignment roles execute real offboarding return requests
   assert.equal((await returns.list({},delegate.user,bearer)).requests[0].status,'returned');
   await assert.rejects(returns.decide(task.id,{action:'returned',reason,confirm:true},deviceReturnEtag(task),delegate.user,bearer,randomUUID()),{status:403});
  });
+});
+
+async function reviewerGroup(memberIds=[]){const created=(await roles.createGroup({name:'Explicit PIM approvers '+randomUUID(),description:'Protected role-specific independent review',reason,confirm:true},owner.user,bearer)).group;let group=await reader.group(created.id,{},owner.user,bearer);for(const userId of memberIds)group=await new GroupMutator(db,options).add(group.id,{userId},groupEtag(group),owner.user,bearer);return group;}
+test('protected PIM approver groups delegate only their actual role queue without canonical roles or an owner bypass',async()=>{
+ const recipient=await person(),reviewer=await person('group-reviewer');const group=await reviewerGroup([reviewer.id]),role=await createRole(),otherRole=await createRole({name:'Unrelated role'}),eligible=(await makeEligible(role,recipient.id)).eligibility,other=(await makeEligible(otherRole,recipient.id)).eligibility;
+ const policy=await approvalPolicy(role,{reviewerGroupId:group.id}),otherPolicy=await approvalPolicy(otherRole);assert.equal(policy.reviewerGroupId,group.id);
+ const pending=(await requested(eligible,recipient.user,policy)).request;await requested(other,recipient.user,otherPolicy);
+ assert.deepEqual(reviewer.user.roles,[]);assert.deepEqual(await approvals().permissions(reviewer.user),['company.pim.requests.review']);assert.deepEqual(await roles.permissions(reviewer.user),[]);
+ const queue=await approvals().list({},reviewer.user,bearer,true);assert.equal(queue.total,1);assert.equal(queue.items[0].id,pending.id);assert.equal(queue.canReview,true);
+ await assert.rejects(decision(pending,'approve'),{status:403});await assert.rejects(approvals().policy(role.id,reviewer.user,bearer),{status:403});
+ const approved=(await decision(pending,'approve',reviewer.user)).request;const event=(await pool.query('SELECT actor FROM identity_company_role_events WHERE id=(SELECT decision_event_id FROM identity_company_pim_requests WHERE id=$1)',[pending.id])).rows[0];
+ assert.equal(event.actor.reviewerSource.kind,'group');assert.equal(event.actor.reviewerSource.groupId,group.id);assert.equal(event.actor.reviewerSource.membershipId,(await pool.query('SELECT membership_id FROM group_members WHERE group_id=$1 AND user_id=$2',[group.id,reviewer.id])).rows[0].membership_id);
+ await approvals().activate(approved.id,{reason,confirm:true},C.etag('request',approved),recipient.user,bearer);assert.ok((await reader.users({},recipient.user,bearer)).total>0);
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/061_company_pim_approver_groups.sql'),'utf8'));assert.equal((await approvals().policy(role.id,owner.user,bearer)).reviewerGroupId,group.id);assert.ok((await reader.users({},recipient.user,bearer)).total>0);
+});
+test('protected PIM approver groups reject ordinary, empty, foreign and approval-disabled group policies',async()=>{
+ const member=await person(),role=await createRole(),normal=await creator.group({name:'Ordinary unprotected review group'},owner.user,bearer),empty=await reviewerGroup();
+ await assert.rejects(approvalPolicy(role,{reviewerGroupId:normal.id}),{status:409});await assert.rejects(approvalPolicy(role,{reviewerGroupId:empty.id}),{status:409});
+ const group=await reviewerGroup([member.id]);await assert.rejects(approvalPolicy(role,{approvalRequired:false,reviewerGroupId:group.id}),{status:400});
+ const foreign=await activeCompany(db,schema,issuer),foreignGroup=(await roles.createGroup({name:'Foreign protected reviewers',description:'Separate tenant authority',reason,confirm:true},foreign.user,bearer)).group;
+ await assert.rejects(approvalPolicy(role,{reviewerGroupId:foreignGroup.id}),{status:409});assert.equal((await approvals().policy(role.id,owner.user,bearer)).revision,'0');
+});
+test('protected PIM approver membership removal takes effect immediately and an in-flight incarnation change rolls back',async()=>{
+ const recipient=await person(),reviewer=await person();let group=await reviewerGroup([reviewer.id]);const role=await createRole(),eligible=(await makeEligible(role,recipient.id)).eligibility,policy=await approvalPolicy(role,{reviewerGroupId:group.id}),pending=(await requested(eligible,recipient.user,policy)).request;
+ beforeCommit=async client=>{beforeCommit=null;await client.query('ALTER TABLE group_members DISABLE TRIGGER USER');await client.query('UPDATE group_members SET membership_id=gen_random_uuid() WHERE group_id=$1 AND user_id=$2',[group.id,reviewer.id]);await client.query('ALTER TABLE group_members ENABLE TRIGGER USER');};
+ await assert.rejects(decision(pending,'approve',reviewer.user),{code:'42501'});assert.equal((await approvals().list({},recipient.user,bearer)).items[0].state,'pending');
+ group=await new GroupMutator(db,options).removeMember(group.id,reviewer.id,groupEtag(group),owner.user,bearer);assert.deepEqual(await approvals().permissions(reviewer.user),[]);await assert.rejects(approvals().list({},reviewer.user,bearer,true),{status:403});await assert.rejects(decision(pending,'approve',reviewer.user),{status:403});
+ await new GroupMutator(db,options).add(group.id,{userId:reviewer.id},groupEtag(group),owner.user,bearer);assert.equal((await decision(pending,'approve',reviewer.user)).request.status,'approved');
+});
+test('protected PIM approver groups retain fresh MFA and independent identity requirements',async()=>{
+ const recipient=await person(),reviewer=await person(),group=await reviewerGroup([recipient.id,reviewer.id]),role=await createRole(),eligible=(await makeEligible(role,recipient.id)).eligibility,policy=await approvalPolicy(role,{reviewerGroupId:group.id}),pending=(await requested(eligible,recipient.user,policy)).request;
+ await assert.rejects(decision(pending,'approve',recipient.user),{status:403});await assert.rejects(decision(pending,'deny',recipient.user),{status:403});const older=structuredClone(reviewer.user);older.auth_time-=301;older.mfa_authorization.authTime=older.auth_time;
+ assert.equal((await approvals().list({},older,bearer,true)).canReview,false);await assert.rejects(decision(pending,'approve',older),{status:428});
+});
+test('protected PIM approver policies require an explicit group decision and changing reviewers invalidates old approvals and activations',async()=>{
+ const recipient=await person(),reviewer=await person(),group=await reviewerGroup([reviewer.id]),role=await createRole(),eligible=(await makeEligible(role,recipient.id)).eligibility,policy=await approvalPolicy(role,{reviewerGroupId:group.id}),pending=(await requested(eligible,recipient.user,policy)).request,approved=(await decision(pending,'approve',reviewer.user)).request;
+ const active=await approvals().activate(approved.id,{reason,confirm:true},C.etag('request',approved),recipient.user,bearer);assert.equal(active.activation.status,'active');
+ await assert.rejects(approvalPolicy(role),{status:409});assert.equal((await approvals().policy(role.id,owner.user,bearer)).revision,policy.revision);
+ const next=await approvalPolicy(role,{reviewerGroupId:null});assert.equal(next.reviewerGroupId,null);assert.equal(next.revision,'2');await assert.rejects(reader.users({},recipient.user,bearer),{status:403});assert.deepEqual(await approvals().permissions(reviewer.user),[]);
+ await assert.rejects(approvals().updatePolicy(role.id,{approvalRequired:true,windowSeconds:300,reviewerGroupId:group.id,reason,confirm:true},ApprovalContract.policyEtag(policy),owner.user,bearer),{status:412});
+});
+test('protected PIM approver group helpers are private SQL authority',async()=>{
+ const role=await createRole(),name='pim_group_limited_'+randomUUID().replaceAll('-','');await pool.query('CREATE ROLE '+name+' NOLOGIN');const client=await pool.connect();
+ try{await pool.query('GRANT USAGE ON SCHEMA '+schema+' TO '+name);for(const query of ["SELECT identity_company_pim_approver_group_current(NULL::uuid,$1::uuid,NULL::bigint)","SELECT identity_company_pim_reviewer_source('{}'::jsonb,$1::uuid)"]){await client.query('BEGIN');await client.query('SET LOCAL ROLE '+name);await assert.rejects(client.query(query,[role.id]),{code:'42501'});await client.query('ROLLBACK');}}
+ finally{await client.query('ROLLBACK');client.release();await pool.query('DROP OWNED BY '+name);await pool.query('DROP ROLE '+name);}
+});
+test('protected PIM approver queue reads revalidate original group sources after external actor revalidation',async()=>{
+ const recipient=await person(),reviewer=await person(),group=await reviewerGroup([reviewer.id]),role=await createRole(),eligible=(await makeEligible(role,recipient.id)).eligibility,policy=await approvalPolicy(role,{reviewerGroupId:group.id});await requested(eligible,recipient.user,policy);let calls=0;
+ const racing=new CompanyPimApprovals(db,{revalidate:async()=>{if(++calls===2)await new GroupMutator(db,options).removeMember(group.id,reviewer.id,groupEtag(group),owner.user,bearer);}});
+ await assert.rejects(racing.list({},reviewer.user,bearer,true),{status:403});assert.equal(calls,2);
+});
+test('protected PIM approver queues retain scoped history of disabled roles without allowing another decision',async()=>{
+ const recipient=await person(),reviewer=await person(),group=await reviewerGroup([reviewer.id]),scoped=await createRole(),canonical=await createRole({name:'Canonical disabled role'});
+ const eligible=(await makeEligible(scoped,recipient.id)).eligibility,other=(await makeEligible(canonical,recipient.id)).eligibility,policy=await approvalPolicy(scoped,{reviewerGroupId:group.id}),otherPolicy=await approvalPolicy(canonical),pending=(await requested(eligible,recipient.user,policy)).request,otherRequest=(await requested(other,recipient.user,otherPolicy)).request;
+ for(const role of [scoped,canonical])await roles.update(role.id,definition({name:role.name,enabled:false}),C.etag('role',role),owner.user,bearer);
+ const groupQueue=await approvals().list({status:'all'},reviewer.user,bearer,true);assert.equal(groupQueue.total,1);assert.equal(groupQueue.items[0].id,pending.id);assert.equal(groupQueue.items[0].status,'stale');
+ const ownerQueue=await approvals().list({status:'all'},owner.user,bearer,true);assert.equal(ownerQueue.total,1);assert.equal(ownerQueue.items[0].id,otherRequest.id);assert.equal(ownerQueue.items[0].status,'stale');
+ await assert.rejects(decision(pending,'approve',reviewer.user),{status:409});await assert.rejects(decision(otherRequest,'approve'),{status:409});
 });

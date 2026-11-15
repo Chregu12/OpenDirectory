@@ -162,12 +162,13 @@ const demoMode = process.env.IDENTITY_DEMO_MODE === 'true' && process.env.NODE_E
 const snapshots = new GroupSnapshotStore(db);
 const sourceGrants=new(require('./GroupSourceGrants').GroupSourceGrants)(db);
 const { UserSnapshotStore } = require('./UserSnapshotStore');
-app.get('/api/identity/access', (req, res) => {
-  res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: req.identityPermissions, demoMode,
+app.get('/api/identity/access', asyncRoute(async (req, res) => {
+  const approvalPermissions=await new(require('./CompanyPimApprovals').CompanyPimApprovals)(db).permissions(req.user);
+  res.set('Cache-Control', 'no-store').json({ subject: req.user.sub, permissions: [...new Set([...req.identityPermissions,...approvalPermissions])], demoMode,
     userId: req.user.identity_authorization?.userId || null, directoryReadProtocol: 1, directoryCreationProtocol: 1, directoryUserMutationProtocol: 1,
     companyPimApprovalProtocol:1,companyPimProtocol:1,companyRolesProtocol:1,directoryUserGroupsProtocol:1,directoryGroupMutationProtocol:1,directoryOuMutationProtocol:1,directoryOuMembershipProtocol:1,licenseSnapshotProtocol:1,groupMembershipReviewProtocol:1,organizationProfileProtocol:1,organizationDelegationProtocol:1,companyRegistrationReviewProtocol:1,
     companyOwner: req.organizationPermissions?.includes('organization.delegations.manage') === true });
-});
+}));
 app.use('/api', (_req, res, next) => {
   if (!db.isAvailable() && !demoMode) return res.status(503).json({ error: 'Identity storage unavailable' });
   next();

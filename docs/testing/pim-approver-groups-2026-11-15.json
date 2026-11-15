@@ -1,0 +1,100 @@
+{
+  "checkedAt": "2026-11-15T01:15:44.600753+00:00",
+  "sourceBaseCommit": "ffe416d598e2bfcb4f1ae34156dd23e1cf5543b0",
+  "status": "local-native-and-actual-browser-verified-ci-and-rollout-pending",
+  "runtime": {
+    "node": "20.20.2",
+    "postgresql": "16.15 (Homebrew)",
+    "browser": "157.0.8103.78",
+    "host": "macOS arm64"
+  },
+  "identityPostgreSQL": {
+    "passed": 54,
+    "failed": 0,
+    "skipped": 0,
+    "fullFile": "services/core/identity-service/src/__tests__/companyRoles.postgres.cjs",
+    "includesRealDeviceReceivers": true,
+    "includesOriginalDeadlineAndPhysicalCommitExpiry": true,
+    "includesAdditiveMigrationReplay": true
+  },
+  "unit": {
+    "identityPassed": 7,
+    "frontendPassed": 13,
+    "failed": 0
+  },
+  "typeScript": "tsc --noEmit passed",
+  "uiBrowser": {
+    "passed": 10,
+    "failed": 0,
+    "widths": [
+      390,
+      1440
+    ],
+    "apiMode": "explicit browser fixtures",
+    "reviewerHasNoGlobalPimRole": true,
+    "screenshotVisualReview": true
+  },
+  "actualConfidentialBrowser": {
+    "passed": 1,
+    "failed": 0,
+    "otherCasesSkipped": 59,
+    "productionNextBuild": true,
+    "separateIssuerIdentityAuthAndPolicyPostgreSQLSchemas": true,
+    "actualRedisAndMfaAuthority": true,
+    "passwordProvider": "explicit disposable legacy password fixture; real employee password entry is covered separately by the existing onboarding story",
+    "flow": [
+      "actual own company and actual HTTP-created enabled directory users",
+      "original confidential owner session and real central OTP",
+      "protected group and original membership through real HTTP",
+      "own role, named reviewer policy and eligibility through production UI",
+      "real employee request without global roles",
+      "owner bypass rejected with HTTP 403",
+      "current group member gets only company.pim.requests.review",
+      "independent decision through original browser bearer",
+      "requester consumes the exact approval and reads own directory",
+      "original group, membership and actor retained in SQL audit"
+    ]
+  },
+  "completeBrowserDriver": {
+    "distinctCases": 60,
+    "freshServiceGroups": 9,
+    "fullFinalDriverRun": "pending GitHub CI"
+  },
+  "securityChecks": [
+    "ordinary, empty, foreign and approval-disabled reviewer groups rejected",
+    "no owner or canonical PIM role bypass of a selected group",
+    "role-specific queues, totals and original-source revalidation",
+    "immediate loss of future decisions after membership removal",
+    "in-flight membership-incarnation changes rejected at physical commit",
+    "fresh MFA, independent identity and exact ETags retained",
+    "omitted group cannot clear an existing selected group",
+    "policy changes invalidate old original approvals and activations",
+    "disabled-role history remains visible only to its authorized reviewers",
+    "new SQL helper privileges are private"
+  ],
+  "initialBrowserFixtureCorrections": [
+    "existing owned users cannot be adopted into another tenant; test users are now created through the actual own-tenant HTTP path",
+    "legacy fixture users use authenticated MFA enrollment instead of the credential-bound first-factor entry",
+    "directory list accessible labels use usernames rather than display names"
+  ],
+  "migration": "061_company_pim_approver_groups.sql",
+  "sourceSha256": {
+    "services/core/identity-service/migrations/061_company_pim_approver_groups.sql": "98b71fa413e5c7e1e50d41b2a51f576b85e219c8b5c6e54adbdd7b62fba4a74c",
+    "services/core/identity-service/src/CompanyPimApprovalContract.js": "b5dcf8969e6a641bcafe26baaf9cd2c9e1881efbf3eb5fd1e79ffd5c75abc79c",
+    "services/core/identity-service/src/CompanyPimApprovals.js": "c6b942735ed158632927c4f6cafed6a23985e40a5efcc63bf083532d770c64f6",
+    "services/core/identity-service/src/index.js": "05cb439eed0a9972c10598917505c95df0a6309a3d1c75614c20b67ed35395de",
+    "frontend/web-app/src/lib/companyPimApprovals.ts": "ed763b81970ae9e556fe2afd7c27cffe4f648458ec42f453b2faead1a57b6680",
+    "frontend/web-app/src/components/views/CompanyPimPolicyPanel.tsx": "127b711671c92991a1a8bc05fec2b827c58667df2f9cf9a1fbe20271a60279a3",
+    "frontend/web-app/src/components/views/CompanyPimPanel.tsx": "acf212879670174488acb5fe62946cad7857b3ab56dee51647931d53d8ebe114",
+    "frontend/web-app/src/components/views/CompanyPimRequestPanel.tsx": "097036de5686840943836ef7b0f12ffbd92cf5af42caa3f3be2fda4a001519ce",
+    "services/core/oauth-provider/scripts/test-browser.js": "23aa1b4e9bf73fcaed4f1f13e80fabf45f5178e84e260d6c6956aa97957e0b7e",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "4e568ef0d5bded518223f778315ab528a7c856bb7ea17bad7bb1f218dbdf557e"
+  },
+  "limits": [
+    "This source branch has not yet passed complete GitHub CI or been deployed.",
+    "The single new actual browser case and ten UI cases do not prove the entire final 60-case browser driver.",
+    "No productive accounts, grants or real human MFA were created for these tests.",
+    "Passwords in this new case use an explicit disposable provider fixture; hardware authenticators and live external identity providers were not tested.",
+    "Provider notification delivery, periodic group reviews, physical devices, full platform recovery, load and WCAG acceptance remain open."
+  ]
+}
