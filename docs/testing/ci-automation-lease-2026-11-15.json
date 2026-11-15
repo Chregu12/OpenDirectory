@@ -1,0 +1,75 @@
+{
+  "checkedAt": "2026-11-15T12:20:19.971413+00:00",
+  "baseCommit": "f88b301",
+  "status": "native-complete-group-verified-linux-pending",
+  "productionTouched": false,
+  "productionCodeChanged": false,
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43709205874",
+    "job": 132796908764,
+    "case": "an abandoned fifth lease becomes a visible failed result instead of an unclaimable running job",
+    "caseMilliseconds": 2748.36911,
+    "expected": "failed",
+    "actual": "succeeded",
+    "group": {
+      "tests": 903,
+      "pass": 902,
+      "fail": 1,
+      "skipped": 0
+    }
+  },
+  "mechanism": "The one-second fixture token may expire before a persisted worker claim. An unqualified assert.rejects then accepts admission failure as abandonment; a fresh call can legitimately perform and succeed at attempt five. The original CI log did not capture claim state, so its exact rejection stage is unknown.",
+  "deterministicBefore": {
+    "fixtureOnlyDelay": "Waited for the original one-second token to expire before the run admission call.",
+    "reproducedExpected": "failed",
+    "reproducedActual": "succeeded",
+    "caseMilliseconds": 3038.3775,
+    "pass": 0,
+    "fail": 1,
+    "skipped": 21
+  },
+  "correction": {
+    "provesActualClaim": {
+      "status": "running",
+      "attemptCount": "exactly 1 or 5",
+      "leaseToken": "present"
+    },
+    "waitsFor": "actual stored SQL lease_until",
+    "completionRejectionStatus": 409,
+    "provesRetainedAbandonment": [
+      "running",
+      "same attempt count",
+      "lease_until<=clock_timestamp()"
+    ],
+    "usesActualExportAfterExpiry": true,
+    "productionLeaseAndTokenDurationsUnchanged": true,
+    "productionRetryPolicyUnchanged": true,
+    "originalRecoveryAndFiveAttemptAssertionsRetained": true
+  },
+  "verification": {
+    "nativePostgres": {
+      "tests": 22,
+      "pass": 22,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "totalMilliseconds": 199957.682041,
+      "firstAbandonedLeaseCaseMilliseconds": 47147.129666,
+      "fifthAbandonedLeaseCaseMilliseconds": 47049.063166,
+      "node": "20.20.2",
+      "postgres": "16.15 actual disposable database"
+    },
+    "actionlint": "1.7.12 pass",
+    "diffCheck": "pass"
+  },
+  "limits": [
+    "Three Linux repetitions and the complete latest-source CI are pending.",
+    "The deterministic before case reproduces the timing mechanism, not a captured CI admission trace.",
+    "No personal production login, external provider acceptance or deployment was performed.",
+    "The full original BR/WF objective remains open."
+  ],
+  "sourceSha256": {
+    "services/core/identity-service/src/__tests__/companyAutomation.postgres.cjs": "564b9b9c4100a2193d5dc0e68cdea52d01a1948cc50262338d52383dc6ece0ac",
+    "services/core/identity-service/src/CompanyAutomation.js": "3222a0723bce0456ca290d9a8add1f505cc73155156bd5a5c5ceb58f853a8d7b"
+  }
+}
