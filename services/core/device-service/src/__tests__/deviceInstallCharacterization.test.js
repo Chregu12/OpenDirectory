@@ -161,7 +161,7 @@ jest.mock('ws', () => {
   return WebSocket;
 });
 
-jest.mock('../../../../packages/service-contracts/src/messageBus', () => {
+jest.mock('../../../../../packages/service-contracts/src/messageBus', () => {
   return jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue(undefined),
     publish: jest.fn().mockResolvedValue(undefined),
@@ -171,16 +171,16 @@ jest.mock('../../../../packages/service-contracts/src/messageBus', () => {
     consumeDeviceCommands: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined),
   }));
-}, { virtual: true });
+});
 
-jest.mock('../../../../packages/service-contracts/src/events', () => ({
+jest.mock('../../../../../packages/service-contracts/src/events', () => ({
   Events: {
     DEVICE_ENROLLED: 'device.enrolled',
     DEVICE_NON_COMPLIANT: 'device.non_compliant',
     APP_INSTALL_COMPLETED: 'app.install.completed',
     APP_INSTALL_FAILED: 'app.install.failed',
   },
-}), { virtual: true });
+}));
 
 const makeServiceMock = (extra = {}) => jest.fn().mockImplementation(() => ({
   init: jest.fn().mockResolvedValue(undefined),
@@ -200,7 +200,7 @@ jest.mock('../cache/manager', () => makeServiceMock({
   del: jest.fn().mockResolvedValue(1),
   healthCheck: jest.fn().mockResolvedValue({ status: 'healthy' }),
   close: jest.fn(),
-}), { virtual: true });
+}));
 
 jest.mock('../events/eventBus', () => {
   const EventEmitter = require('events');
@@ -209,22 +209,22 @@ jest.mock('../events/eventBus', () => {
     emitter.healthCheck = jest.fn().mockResolvedValue({ status: 'healthy' });
     return emitter;
   });
-}, { virtual: true });
+});
 
 jest.mock('../metrics/collector', () => makeServiceMock({
   recordResponseTime: jest.fn(),
   increment: jest.fn(),
-}), { virtual: true });
+}));
 
 jest.mock('../utils/circuitBreaker', () => {
   return jest.fn().mockImplementation(() => ({
     execute: jest.fn().mockImplementation((name, fn) => fn()),
   }));
-}, { virtual: true });
+});
 
 jest.mock('../utils/logger', () => ({
   info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(),
-}), { virtual: true });
+}));
 
 jest.mock('../middleware/oidcAuth', () => ({
   oidcAuth: () => (req, _res, next) => {
@@ -241,7 +241,7 @@ jest.mock('../config', () => ({
   security: { threatScanInterval: 999999999 },
   certificates: { renewalCheckInterval: 999999999 },
   analytics: { aggregationInterval: 999999999 },
-}), { virtual: true });
+}));
 
 // Deliberately NOT mocked: '../services/deviceManager' — we want the REAL
 // class (or, post-wiring, whatever real application-service code index.js
@@ -251,7 +251,7 @@ jest.mock('../services/policyEngine', () => jest.fn().mockImplementation(() => (
   getDevicePolicies: jest.fn().mockResolvedValue([]),
   assignDefaultPolicies: jest.fn().mockResolvedValue(undefined),
   getPolicies: jest.fn().mockResolvedValue({ policies: [] }),
-})), { virtual: true });
+})));
 
 jest.mock('../services/complianceScanner', () => jest.fn().mockImplementation(() => ({
   scanDevice: jest.fn().mockResolvedValue({ deviceId: 'device-123', compliant: true, violations: [] }),
@@ -260,7 +260,7 @@ jest.mock('../services/complianceScanner', () => jest.fn().mockImplementation(()
   getViolations: jest.fn().mockResolvedValue([]),
   autoRemediate: jest.fn().mockResolvedValue(undefined),
   updateComplianceStatus: jest.fn().mockResolvedValue(undefined),
-})), { virtual: true });
+})));
 
 jest.mock('../services/enrollmentService', () => jest.fn().mockImplementation(() => ({
   getPendingCount: jest.fn().mockResolvedValue(0),
@@ -270,12 +270,12 @@ jest.mock('../services/enrollmentService', () => jest.fn().mockImplementation(()
   getEnrollmentStatus: jest.fn().mockResolvedValue({ status: 'pending' }),
   approveEnrollment: jest.fn().mockResolvedValue({}),
   rejectEnrollment: jest.fn().mockResolvedValue({}),
-})), { virtual: true });
+})));
 
 jest.mock('../services/inventoryService', () => jest.fn().mockImplementation(() => ({
   updateInventory: jest.fn().mockResolvedValue(undefined),
   getInventory: jest.fn().mockResolvedValue({}),
-})), { virtual: true });
+})));
 
 jest.mock('../services/remoteActionService', () => jest.fn().mockImplementation(() => ({
   setDb: jest.fn(),
@@ -286,27 +286,27 @@ jest.mock('../services/remoteActionService', () => jest.fn().mockImplementation(
   lockDevice: jest.fn().mockResolvedValue({}),
   unlockDevice: jest.fn().mockResolvedValue({}),
   wipeDevice: jest.fn().mockResolvedValue({}),
-})), { virtual: true });
+})));
 
 jest.mock('../services/geofencingService', () => jest.fn().mockImplementation(() => ({
   getZones: jest.fn().mockResolvedValue([]),
   createZone: jest.fn().mockResolvedValue({ id: 'zone-1' }),
-})), { virtual: true });
+})));
 
 jest.mock('../services/certificateManager', () => jest.fn().mockImplementation(() => ({
   checkCertificateRenewal: jest.fn().mockResolvedValue(undefined),
   getCertificates: jest.fn().mockResolvedValue([]),
   issueCertificate: jest.fn().mockResolvedValue({ certId: 'cert-123' }),
-})), { virtual: true });
+})));
 
 jest.mock('../services/threatDetector', () => jest.fn().mockImplementation(() => ({
   performThreatScan: jest.fn().mockResolvedValue(undefined),
-})), { virtual: true });
+})));
 
 jest.mock('../services/analyticsEngine', () => jest.fn().mockImplementation(() => ({
   aggregateMetrics: jest.fn().mockResolvedValue(undefined),
   getDashboard: jest.fn().mockResolvedValue({}),
-})), { virtual: true });
+})));
 
 jest.mock('../clients/updateClient', () => ({
   configureUpdates: jest.fn().mockResolvedValue({}),
@@ -315,7 +315,7 @@ jest.mock('../clients/updateClient', () => ({
   getDeviceUpdateStatus: jest.fn().mockResolvedValue({}),
   configureWingetAutoUpdate: jest.fn().mockResolvedValue({}),
   handleCommandResult: jest.fn().mockResolvedValue(undefined),
-}), { virtual: true });
+}));
 
 jest.mock('../clients/networkProfileClient', () => ({
   configureWiFi: jest.fn().mockResolvedValue({}),
@@ -326,14 +326,14 @@ jest.mock('../clients/networkProfileClient', () => ({
   removeEmail: jest.fn().mockResolvedValue({}),
   getDeviceProfileState: jest.fn().mockResolvedValue({}),
   handleCommandResult: jest.fn().mockResolvedValue(undefined),
-}), { virtual: true });
+}));
 
 jest.mock('../clients/licenseClient', () => ({
   getDashboardData: jest.fn().mockResolvedValue({}),
   getTimeSeries: jest.fn().mockResolvedValue({}),
   getReportTemplates: jest.fn().mockResolvedValue([]),
   generateReport: jest.fn().mockResolvedValue({}),
-}), { virtual: true });
+}));
 
 jest.mock('../clients/backupClient', () => ({
   triggerBackup: jest.fn().mockResolvedValue({}),
@@ -344,7 +344,7 @@ jest.mock('../clients/backupClient', () => ({
   testFailover: jest.fn().mockResolvedValue({}),
   getReplicationStatus: jest.fn().mockResolvedValue({ active: false }),
   executeFailover: jest.fn().mockResolvedValue({}),
-}), { virtual: true });
+}));
 
 // ─── Now boot the real app ─────────────────────────────────────────────────
 //
@@ -369,6 +369,7 @@ describe('Device Service — Golden Master characterization (real repo/aggregate
 
   beforeAll(() => {
     service = new EnterpriseDeviceManagementService();
+    expect(jest.isMockFunction(service.messageBus.connect)).toBe(true);
     app = service.app;
   });
 
