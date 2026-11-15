@@ -12,6 +12,7 @@ COPY services/core/device-service/ ./
 COPY packages/device-inventory-contract/ /packages/device-inventory-contract/
 COPY packages/device-compliance-contract.js /packages/device-compliance-contract.js
 COPY packages/device-delegation-contract.js /packages/device-delegation-contract.js
+COPY packages/device-ou-contract.js /packages/device-ou-contract.js
 COPY packages/identity-authorization-contract.js /packages/identity-authorization-contract.js
 COPY packages/tenant-authorization-contract.js /packages/tenant-authorization-contract.js
 COPY packages/oidc-access-state.js /packages/oidc-access-state.js

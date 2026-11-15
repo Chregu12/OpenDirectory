@@ -13,9 +13,11 @@ const { DeviceReturns } = require('./DeviceReturns');
 const { DeviceAgents, agentEtag } = require('./DeviceAgents');
 const {DeviceSync,syncRequestEtag}=require('./DeviceSync');
 const { DeviceCompliance, compliancePolicyEtag } = require('./DeviceCompliance');
+const { DeviceOrganizationalUnits } = require('./DeviceOrganizationalUnits');
+const { etag: deviceOuEtag } = require('../../../../packages/device-ou-contract');
 const database = require('./db');
 
-function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }), compliance = new DeviceCompliance(db, { inventory }), sync = new DeviceSync(db,{inventory}) } = {}) {
+function createInventoryApp({ db = database, inventory = new DeviceInventory(db), returns = new DeviceReturns(db, { inventory }), agents = new DeviceAgents(db, { inventory }), compliance = new DeviceCompliance(db, { inventory }), sync = new DeviceSync(db,{inventory}), organizationalUnits = new DeviceOrganizationalUnits(db, { inventory }) } = {}) {
   const app=express();const issuer=process.env.OIDC_ISSUER || 'http://localhost:3001';const jwks=createRemoteJWKSet(new URL(process.env.JWKS_URI || 'http://localhost:3001/jwks'));const accessState=createAccessStateClient();
   app.disable('x-powered-by');app.use(helmet());app.use(cors({origin:(process.env.CORS_ORIGINS || 'http://localhost:3000').split(',')}));
   app.use(express.json({limit:'16kb',strict:true}));app.use(rateLimit({windowMs:60000,max:1000,standardHeaders:true,legacyHeaders:false}));
@@ -68,6 +70,10 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.get('/api/devices/:id/compliance',route(async(req,res)=>res.json(await compliance.get(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/:id/compliance/history',route(async(req,res)=>res.json(await compliance.history(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices',route(async(req,res)=>res.json(await inventory.list(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/organizational-units',route(async(req,res)=>res.json(await organizationalUnits.units(req.query,req.user,req.headers.authorization))));
+  app.get('/api/devices/:id/organizational-unit',route(async(req,res)=>{const value=await organizationalUnits.get(req.params.id,req.query,req.user,req.headers.authorization);res.set('ETag',deviceOuEtag(value.deviceId,value.deviceRevision,value.revision)).json(value);}));
+  app.put('/api/devices/:id/organizational-unit',route(async(req,res)=>{const value=await organizationalUnits.write(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId);res.set('ETag',deviceOuEtag(value.deviceId,value.deviceRevision,value.revision)).json(value);}));
+  app.get('/api/devices/:id/organizational-unit/history',route(async(req,res)=>res.json(await organizationalUnits.history(req.params.id,req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/fleet',route(async(req,res)=>res.json(await agents.fleet(req.query,req.user,req.headers.authorization))));
   app.get('/api/devices/fleet/export',route(async(req,res)=>{const value=await agents.fleet(req.query,req.user,req.headers.authorization,true);res.type('text/csv').set('Content-Disposition','attachment; filename="opendirectory-devices.csv"').set('X-Inventory-Tenant',value.tenantId).set('X-Inventory-Count',String(value.count)).send(value.csv);}));
   app.post('/api/devices',route(async(req,res)=>result(res,await inventory.create(req.body,req.user,req.headers.authorization,req.correlationId),201)));
@@ -96,7 +102,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   });
   return app;
 }
-async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_sync_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
+async function start(){await database.initDb();await database.transaction(client=>client.query('SELECT device_returns_receiving(),device_sync_receiving(),device_ou_receiving()'),{readOnly:true});return createInventoryApp().listen(Number(process.env.PORT || 3003));}
 if(require.main===module)start().then(server=>{
   const close=()=>{server.closeAllConnections();server.close(()=>database.pool.end().then(()=>process.exit(0)));};process.once('SIGTERM',close);process.once('SIGINT',close);
 }).catch(()=>{process.stderr.write('Device inventory startup requires migrated PostgreSQL and configured receiving dependencies.\n');process.exitCode=1;database.pool.end().catch(()=>{});});
