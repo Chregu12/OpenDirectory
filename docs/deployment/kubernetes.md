@@ -381,6 +381,26 @@ persistence:
 
 ---
 
+## Verify PostgreSQL restores
+
+The operator verifier requires Python 3.11+, POSIX file permissions, `kubectl`, and Docker. It exports a read-only transaction snapshot for each selected canonical public-schema database, shares that snapshot with `pg_dump`, and restores the full archive with ownership and ACL statements into an isolated Docker container. Source and restored table row counts and SHA-256 digests must match. The verifier also compares custom routines, triggers, constraints, indexes, columns, relation ownership/ACLs, policies, views, sequence properties and extension versions. ACL comparisons expand implicit defaults and include grantor, grantee, privilege and grant option. PostgreSQL's pretty constraint deparser avoids false differences from redundant parentheses. Selected databases must have the same database owner.
+
+```bash
+RESTORE_TEST_DOCKER_CONTEXT=desktop-linux python3 deploy/k8s/test_verify_postgres_restore.py -v
+python3 deploy/k8s/verify-postgres-restore.py \
+  --context default --namespace opendirectory --pod opendirectory-postgres-0 \
+  --database auth --database oauth --docker-context desktop-linux \
+  --restore-image postgres:15-alpine \
+  --verify-upgrade oauth=services/core/oauth-provider/migrations/017_credential_binding_validation.sql \
+  --output-dir "$HOME/opendirectory-backups/new-auth-oauth-check"
+```
+
+Choose a new output directory; existing backups are never overwritten. The new directory is private (`0700`) and files use `0600`. Other supported databases are `identity`, `devices`, and `app_store`. The source Kubernetes and target Docker contexts are always explicit. Without `--restore-image`, the verifier selects the source PostgreSQL major version. SQL deparsing and extension versions can differ across PostgreSQL versions, so a different target major may require separate migration verification. The PostgreSQL container uses `--network none` and disposable storage; the verifier removes its own container after the check and retains the private archives and reports.
+
+`--verify-upgrade DATABASE=SQL_FILE` is optional. It accepts one readable UTF-8 SQL file, at most 1 MiB, per explicitly selected database. SQL runs only against that restored Docker database. Retained table data must remain unchanged, existing receiver checks must still pass, and the report identifies changed schema categories and routines. Without this flag, the verifier only checks the original restore.
+
+On 15 November 2026, Auth (16 tables), OAuth (39), Identity (133), Devices (17) and App Store (9) were restored from PostgreSQL 15.19 into PostgreSQL 15.20 with matching data and the checked schema definitions across all 214 tables. Applying migration 017 changed only `oauth_valid_credential_authorization(jsonb)` and retained all stored data. Isolated PostgreSQL regression checks accept equivalent ACL/constraint representations and detect changed table privileges, function privileges and constraints. Snapshots are separate per database. Sequence positions are restored from archive commands but are not part of the MVCC table-digest comparison. Vault/signing/cookie/MFA key recovery, coordinated platform recovery and usable restored sign-in remain separate acceptance work. [Sanitized evidence](../testing/auth-oauth-restore-2026-11-15.json).
+
 ## Horizontal Pod Autoscaler
 
 Enable HPA globally to allow the cluster to scale all services automatically:

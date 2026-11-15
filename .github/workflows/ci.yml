@@ -255,6 +255,11 @@ jobs:
         id: test_device
         run: cd services/core/device-service && npm ci --ignore-scripts --no-audit --no-fund && npm test -- --forceExit
 
+      - name: Test database restore CLI and schema comparisons
+        env:
+          RESTORE_TEST_DOCKER_CONTEXT: default
+        run: python3 deploy/k8s/test_verify_postgres_restore.py -v
+
       - name: Test app-account automation client
         id: test_automation_client
         run: npm run test:automation-client

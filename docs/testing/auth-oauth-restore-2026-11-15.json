@@ -1,0 +1,192 @@
+{
+  "checkedAt": "2026-11-15T00:39:07.583146+00:00",
+  "sourceBaseCommit": "ffe416d598e2bfcb4f1ae34156dd23e1cf5543b0",
+  "status": "five-database-restore-and-isolated-mfa-upgrade-verified",
+  "tool": "deploy/k8s/verify-postgres-restore.py",
+  "toolSha256": "273621872fbdb3d55da75b8aba02f93b3c862dacabb004089169bb6ce5a32277",
+  "sourcePostgreSQL": "15.19",
+  "restorePostgreSQL": "15.20 (Debian 15.20-1.pgdg13+1)",
+  "restoreImage": "postgres:15",
+  "restoreImageId": "sha256:0ab7e41a0b6dd95da9ccb93edbc63671dbab149bd3ae3455948dab5b92284c22",
+  "privateOutputPermissionsVerified": true,
+  "totalTables": 214,
+  "databases": {
+    "auth": {
+      "archiveBytes": 83919,
+      "archiveSha256": "bfc449b59252aa9294699c05e8afabb4a56a88f40ae5e4b5bd9ad202d07a7e57",
+      "tables": 16,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [
+        "auth_employee_invitation_receiving"
+      ],
+      "schemaSha256": "591041add7eb6036b04c13708678910707b011ea05605498869726347ec2e1a1",
+      "sameCheckedSchemaDefinitions": true,
+      "schemaCategories": [
+        "columns",
+        "constraints",
+        "extensions",
+        "indexes",
+        "policies",
+        "relations",
+        "routines",
+        "sequences",
+        "triggers",
+        "views"
+      ]
+    },
+    "oauth": {
+      "archiveBytes": 176125,
+      "archiveSha256": "5babc6c027959fc5788a6a11eff2d07a5a1a3c8ca6929a35a8ba40428b33bfee",
+      "tables": 39,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [],
+      "schemaSha256": "758aefb107a6c248efd0156b40c4557e4bc1d8c8447db51f5b2f634be40e4ee2",
+      "sameCheckedSchemaDefinitions": true,
+      "schemaCategories": [
+        "columns",
+        "constraints",
+        "extensions",
+        "indexes",
+        "policies",
+        "relations",
+        "routines",
+        "sequences",
+        "triggers",
+        "views"
+      ],
+      "candidateUpgrade": {
+        "sqlSha256": "8bca67a78eef7d5b666b66e0e332e7135b1cf19dcd0d531e3c146efc01c78ffd",
+        "sameRetainedData": true,
+        "schemaSha256": "5b11ca65fac8c969b58575ed75e28eb30dc478261024a33d314f840c0c35649d",
+        "changedSchemaCategories": [
+          "routines"
+        ],
+        "changedRoutines": [
+          "oauth_valid_credential_authorization(jsonb)"
+        ]
+      }
+    },
+    "identity": {
+      "archiveBytes": 3735048,
+      "archiveSha256": "e23663c32f746fbc0000f5a70f71934498ea67008efc84b713e4dfa62347a27a",
+      "tables": 133,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [
+        "identity_company_role_receiving",
+        "identity_company_group_rule_live_receiving",
+        "identity_company_activation_receiving"
+      ],
+      "schemaSha256": "df11909a1ecefe76cfacc5e8b4b43d14a0febf46ed63ae5ff37548c5600b5b0c",
+      "sameCheckedSchemaDefinitions": true,
+      "schemaCategories": [
+        "columns",
+        "constraints",
+        "extensions",
+        "indexes",
+        "policies",
+        "relations",
+        "routines",
+        "sequences",
+        "triggers",
+        "views"
+      ]
+    },
+    "devices": {
+      "archiveBytes": 180853,
+      "archiveSha256": "956c1925c3acb974958e5f4b4a263e70b929098dd44c0f892e23a814ca82548b",
+      "tables": 17,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [
+        "device_inventory_receiving",
+        "device_compliance_receiving",
+        "device_sync_receiving",
+        "device_returns_receiving"
+      ],
+      "schemaSha256": "435c78e1737f337168260fda395a62a91495209693d32f5dc338c0e07c857416",
+      "sameCheckedSchemaDefinitions": true,
+      "schemaCategories": [
+        "columns",
+        "constraints",
+        "extensions",
+        "indexes",
+        "policies",
+        "relations",
+        "routines",
+        "sequences",
+        "triggers",
+        "views"
+      ]
+    },
+    "app_store": {
+      "archiveBytes": 19970,
+      "archiveSha256": "8bfde05e7bc3e95f7a7d13737072d66e78661f79cb0aa88882c336daf639fd47",
+      "tables": 9,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [],
+      "schemaSha256": "aa9126e397fbc3929a80128505655b3e8152d8af9cadee547bad41d863fda5bd",
+      "sameCheckedSchemaDefinitions": true,
+      "schemaCategories": [
+        "columns",
+        "constraints",
+        "extensions",
+        "indexes",
+        "policies",
+        "relations",
+        "routines",
+        "sequences",
+        "triggers",
+        "views"
+      ]
+    }
+  },
+  "checks": {
+    "separateConsistentSnapshotPerDatabase": true,
+    "sourceDatabaseWrites": 0,
+    "sourceSnapshotSharedWithDumpAndSchema": true,
+    "fullArchiveIncludingOwnershipAndAcl": true,
+    "schemaComparison": "Checked public-schema objects; expanded ACLs include grantor, grantee, privilege and grant option; PostgreSQL pretty constraint deparser preserves logical grouping",
+    "disposableDatabaseNetwork": "none",
+    "disposableStorage": "tmpfs",
+    "ownContainerRemovedAfterRun": true
+  },
+  "regressionChecks": {
+    "command": "RESTORE_TEST_DOCKER_CONTEXT=desktop-linux python3 deploy/k8s/test_verify_postgres_restore.py -v",
+    "methodsPassed": 2,
+    "cliRejectionCases": 10,
+    "equivalentDefaultAndExplicitOwnerAclAccepted": true,
+    "equivalentNestedAndFlatAndConstraintAccepted": true,
+    "changedTablePublicPrivilegesDetected": true,
+    "changedConstraintDetected": true,
+    "changedFunctionPublicPrivilegesDetected": true
+  },
+  "previousComparatorFalsePositives": [
+    "raw ACL null versus an explicit identical owner-only ACL",
+    "redundant SQL AND grouping after dump and reparse"
+  ],
+  "ciAtEvidenceTime": {
+    "runId": 43656782943,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43656782943",
+    "status": "in_progress",
+    "successfulJobs": 8,
+    "totalJobs": 9,
+    "newRestoreCliAndSchemaChecks": "local only; not part of the already running source commit"
+  },
+  "limits": [
+    "Snapshots are independent per database, not coordinated whole-platform recovery.",
+    "The checked schema categories do not cover every PostgreSQL object, role, database setting or object-level ACL.",
+    "Sequence properties are compared; sequence positions are restored from archive commands but are not part of the MVCC data digest proof.",
+    "Vault, signing, cookie and MFA key recovery and usable restored sign-in are not verified.",
+    "This rehearsal does not establish RTO/RPO, failure/load testing or physical device recovery.",
+    "Prepared release 1.0.52 remains undeployed pending complete CI and fresh backups."
+  ]
+}
