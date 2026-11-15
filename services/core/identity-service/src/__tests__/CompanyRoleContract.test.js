@@ -8,3 +8,12 @@ test.each([{targetType:'application'},{scopeType:'tenant',ouId:randomUUID()},{sc
 test('protected groups require exact human fields and bounded names',()=>{expect(()=>C.group({name:'g',description:'',reason:input.reason,confirm:true})).toThrow();expect(()=>C.group({name:'Group',description:'',reason:input.reason,confirm:true,roleAssignable:false})).toThrow();});
 test('five device duties are explicit additions and do not change the OU action catalog',()=>{expect(C.PERMISSIONS).toHaveLength(19);expect(C.OU_PERMISSIONS).toEqual(['users.read','users.update','users.status.manage']);expect(C.definition({...input,permissions:C.DEVICE_PERMISSIONS},true).permissions).toHaveLength(5);});
 test.each(['devices.inventory.create','devices.inventory.assign','devices.compliance.manage'])('device write duty %s needs its separately selected read duty',permission=>{expect(()=>C.definition({...input,permissions:[permission]},true)).toThrow(expect.objectContaining({code:'device_role_read_permission_required'}));});
+test('device OU scope is distinct from user OU and excludes tenant policy management',()=>{
+ const assignment={targetType:'user',targetId:randomUUID(),scopeType:'device-ou',ouId:randomUUID(),durationSeconds:3600,reason:input.reason,confirm:true};
+ expect(C.assignment(assignment).scopeType).toBe('device-ou');
+ const {durationSeconds,...fields}=assignment;expect(C.eligibility({...fields,validForSeconds:86400}).scopeType).toBe('device-ou');
+ expect(C.DEVICE_OU_PERMISSIONS).toEqual(['devices.inventory.read','devices.inventory.create','devices.inventory.assign','devices.compliance.read']);
+});
+test.each([null,'','A0000000-0000-4000-8000-000000000000'])('device OU scope requires an exact canonical OU: %j',ouId=>{
+ expect(()=>C.assignment({targetType:'user',targetId:randomUUID(),scopeType:'device-ou',ouId,durationSeconds:3600,reason:input.reason,confirm:true})).toThrow();
+});

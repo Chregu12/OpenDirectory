@@ -294,6 +294,74 @@ async function withDevices(operation){
  try{return await operation({inventory,deviceDb:fixture.db,source});}finally{await fixture.close();}
 }
 const deviceValues=()=>({assetId:'NATIVE-'+randomUUID(),serialNumber:randomUUID(),manufacturer:'Actual native fixture',model:'Delegated inventory',deviceClass:'laptop',platform:'linux'});
+async function deviceOuSources(actor,permission='devices.inventory.read',unit=null,kind=unit?'device-ou':null){
+ await pool.query('SELECT identity_company_role_receiving()');
+ return (await pool.query('SELECT identity_company_role_sources($1,$2,$3,$4,$5) AS sources',[actor.id,owner.receipt.tenantId,permission,kind,unit])).rows[0].sources;
+}
+test('device OU scope kernel binds direct duties to own OU generation and descendants without tenant authority',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Device Engineering'},owner.user,bearer),child=await creator.ou({name:'Device Platform',parentId:root.id},owner.user,bearer),outside=await creator.ou({name:'Other device area'},owner.user,bearer);
+ const role=await createRole({permissions:[...C.DEVICE_OU_PERMISSIONS]});const assigned=(await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).grant;
+ const stored=(await pool.query('SELECT ou_generation::text FROM identity_company_role_grants WHERE id=$1',[assigned.id])).rows[0];
+ for(const permission of C.DEVICE_OU_PERMISSIONS){
+  const sources=await deviceOuSources(delegate,permission,child.id);assert.equal(sources.length,1);assert.equal(sources[0].id,assigned.id);assert.equal(sources[0].scopeType,'device-ou');assert.equal(sources[0].ouId,root.id);assert.equal(sources[0].ouGeneration,stored.ou_generation);
+  assert.equal((await deviceOuSources(delegate,permission,root.id)).length,1);assert.deepEqual(await deviceOuSources(delegate,permission,outside.id),[]);assert.deepEqual(await deviceOuSources(delegate,permission,child.id,'user'),[]);
+ }
+ assert.deepEqual(await deviceOuSources(delegate,'users.read',child.id),[]);assert.deepEqual(await deviceOuSources(delegate,'devices.compliance.manage',child.id),[]);
+ assert.equal((await roles.detail(role.id,{},owner.user,bearer)).grants[0].status,'active');
+ await assert.rejects(new (require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(delegate.user,bearer),{status:403});
+ assert.deepEqual(delegate.user.roles,[]);
+});
+test('device OU scope kernel refuses user actions mixed roles tenant policy writes and foreign roots',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Strictly typed scopes'},owner.user,bearer);
+ for(const permissions of [['users.read'],['users.read','devices.inventory.read'],['devices.compliance.read','devices.compliance.manage']]){
+  const role=await createRole({name:'Rejected scope '+permissions.join(' '),permissions});await assert.rejects(assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id}),{status:409});await assert.rejects(makeEligible(role,delegate.id,{scopeType:'device-ou',ouId:root.id}),{status:409});
+ }
+ const role=await createRole({permissions:['devices.inventory.read']}),foreign=await activeCompany(db,schema,issuer),foreignOu=await creator.ou({name:'Foreign device scope'},foreign.user,bearer);
+ await assert.rejects(assign(role,delegate.id,{scopeType:'device-ou',ouId:foreignOu.id}),{status:404});await assert.rejects(makeEligible(role,delegate.id,{scopeType:'device-ou',ouId:foreignOu.id}),{status:404});
+ assert.equal((await pool.query("SELECT count(*)::int AS count FROM identity_company_role_grants WHERE scope_type='device-ou'")).rows[0].count,0);
+});
+test('device OU scope kernel neither widens nor withdraws independent tenant device duties',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Additional limited stock duty'},owner.user,bearer);
+ const globalRole=await createRole({name:'Actual tenant assignment duty',permissions:['devices.inventory.read','devices.inventory.assign']}),scopedRole=await createRole({name:'Scoped stock changes only',permissions:['devices.inventory.read','devices.inventory.create']});
+ await assign(globalRole,delegate.id);await assign(scopedRole,delegate.id,{scopeType:'device-ou',ouId:root.id});
+ const source=await new (require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(delegate.user,bearer);assert.deepEqual(source.permissions,['devices.inventory.read','devices.inventory.assign']);assert.ok(source.delegation.grants.every(grant=>grant.source.id&&grant.source.scopeType==='tenant'));assert.equal(source.delegation.grants.length,2);
+});
+test('device OU scope kernel PIM eligibility needs actual self activation and retains original generation and lease',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Eligible device area'},owner.user,bearer),child=await creator.ou({name:'Eligible devices',parentId:root.id},owner.user,bearer);
+ const role=await createRole({permissions:['devices.inventory.read']}),eligible=(await makeEligible(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).eligibility;
+ assert.deepEqual(await deviceOuSources(delegate),[]);assert.equal((await pim().self({},delegate.user,bearer)).items[0].eligibility.scopeType,'device-ou');
+ const active=(await activate(eligible,delegate.user)).activation;const actual=await deviceOuSources(delegate,'devices.inventory.read',child.id);assert.equal(actual.length,1);assert.equal(actual[0].activationId,active.id);assert.equal(actual[0].id,eligible.id);assert.ok(actual[0].ouGeneration);assert.ok(Number(actual[0].validUntil)<=Date.parse(active.expiresAt)/1000);
+ await assert.rejects(new (require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(delegate.user,bearer),{status:403});
+ await pim().end(active.id,{reason,confirm:true},C.etag('activation',active),delegate.user,bearer);assert.deepEqual(await deviceOuSources(delegate),[]);
+});
+test('device OU scope kernel protected group membership cannot revive an earlier PIM activation',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Grouped device area'},owner.user,bearer),collection=(await roles.createGroup({name:'Device scope operators',description:'Protected eligibility recipients',reason,confirm:true},owner.user,bearer)).group;
+ let group=await reader.group(collection.id,{},owner.user,bearer);group=await new GroupMutator(db,options).add(group.id,{userId:delegate.id},groupEtag(group),owner.user,bearer);
+ const role=await createRole({permissions:['devices.inventory.read']}),eligible=(await makeEligible(role,collection.id,{targetType:'group',scopeType:'device-ou',ouId:root.id})).eligibility;const active=(await activate(eligible,delegate.user)).activation;
+ const original=(await deviceOuSources(delegate))[0];assert.equal(original.activationId,active.id);assert.ok(original.membershipId);
+ group=await new GroupMutator(db,options).removeMember(group.id,delegate.id,groupEtag(group),owner.user,bearer);assert.deepEqual(await deviceOuSources(delegate),[]);
+ await new GroupMutator(db,options).add(group.id,{userId:delegate.id},groupEtag(group),owner.user,bearer);assert.deepEqual(await deviceOuSources(delegate),[]);
+ const again=(await activate(eligible,delegate.user)).activation;const replacement=(await deviceOuSources(delegate))[0];assert.equal(replacement.activationId,again.id);assert.notEqual(replacement.membershipId,original.membershipId);
+});
+test('device OU scope kernel independent approval is consumed once and never makes tenant inventory available',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Reviewed device access'},owner.user,bearer),role=await createRole({permissions:['devices.inventory.read']}),eligible=(await makeEligible(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).eligibility,policy=await approvalPolicy(role);
+ await assert.rejects(activate(eligible,delegate.user),{status:428});const pending=(await requested(eligible,delegate.user,policy)).request;assert.deepEqual(await deviceOuSources(delegate),[]);
+ const approved=(await decision(pending,'approve')).request;assert.deepEqual(await deviceOuSources(delegate),[]);
+ const current=await approvals().activate(approved.id,{reason,confirm:true},C.etag('request',approved),delegate.user,bearer);assert.equal((await deviceOuSources(delegate))[0].activationId,current.activation.id);
+ await assert.rejects(approvals().activate(approved.id,{reason,confirm:true},C.etag('request',approved),delegate.user,bearer),{status:412});await assert.rejects(new (require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(delegate.user,bearer),{status:403});
+});
+test('device OU scope kernel follows live reparenting and drops a replaced root generation',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Original device root'},owner.user,bearer),outside=await creator.ou({name:'Separate device root'},owner.user,bearer),child=await creator.ou({name:'Movable device area',parentId:root.id},owner.user,bearer),role=await createRole({permissions:['devices.inventory.read']});await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id});
+ assert.equal((await deviceOuSources(delegate,'devices.inventory.read',child.id)).length,1);await new OuMutator(db,options).update(child.id,{name:child.name,parentId:outside.id},ouEtag(child),owner.user,bearer);assert.deepEqual(await deviceOuSources(delegate,'devices.inventory.read',child.id),[]);
+ assert.equal((await deviceOuSources(delegate,'devices.inventory.read',root.id)).length,1);
+ await pool.query('ALTER TABLE identity_tenant_ownership DISABLE TRIGGER USER');await pool.query("UPDATE identity_tenant_ownership SET generation=generation+1 WHERE resource_kind='ou' AND resource_id=$1",[root.id]);await pool.query('ALTER TABLE identity_tenant_ownership ENABLE TRIGGER USER');assert.deepEqual(await deviceOuSources(delegate),[]);
+});
+test('device OU scope kernel full migration replay retains sources receipts and all original sealed receivers',async()=>{
+ const delegate=await person(),root=await creator.ou({name:'Retained device scope'},owner.user,bearer),role=await createRole({permissions:['devices.inventory.read']});await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id});const before=await deviceOuSources(delegate);
+ const evidence=async()=>(await pool.query('SELECT to_jsonb(event) AS event,to_jsonb(outbox) AS outbox FROM identity_company_role_events event JOIN identity_company_role_outbox outbox USING(id) ORDER BY event.id')).rows;const original=await evidence();
+ for(const file of fs.readdirSync(path.join(__dirname,'../../migrations')).filter(file=>file.endsWith('.sql')).sort())await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));
+ assert.deepEqual(await deviceOuSources(delegate),before);assert.deepEqual(await evidence(),original);await pool.query('SELECT identity_company_role_receiving(),identity_company_role_pim_receiving(),identity_company_pim_approval_receiving()');
+});
 test('custom device read and assignment duties reach real device storage without profile, create or compliance authority',async()=>{
  const delegate=await person('device-reader'),target=await person('device-recipient');
  const readRole=await createRole({name:'Actual device reader',permissions:['devices.inventory.read']});const readGrant=(await assign(readRole,delegate.id)).grant;

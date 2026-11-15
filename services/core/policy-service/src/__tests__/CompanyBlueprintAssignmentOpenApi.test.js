@@ -14,7 +14,7 @@ test('all new operations are uniquely merged into the published version with res
     if (value.$ref) references.push(value.$ref);
     Object.values(value).forEach(visit);
   };
-  visit(spec); expect(spec.info.version).toBe('1.41.0'); expect(new Set(operations).size).toBe(operations.length);
+  visit(spec); expect(spec.info.version).toBe('1.42.0'); expect(new Set(operations).size).toBe(operations.length);
   expect(references.every(reference => reference.startsWith('#/components/schemas/') && Object.hasOwn(spec.components.schemas, reference.slice('#/components/schemas/'.length)))).toBe(true);
   expect(spec).toEqual(JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../../docs/api/openapi.yaml'), 'utf8')));
 });

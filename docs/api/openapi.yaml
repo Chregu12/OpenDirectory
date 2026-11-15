@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.41.0",
+    "version": "1.42.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -41994,7 +41994,7 @@
       "get": {
         "operationId": "listOwnCompanyRoles",
         "summary": "List own custom roles and protected group choices",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42067,7 +42067,7 @@
       "post": {
         "operationId": "createOwnCompanyRole",
         "summary": "Create a bounded own role definition",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42126,7 +42126,7 @@
       "post": {
         "operationId": "createOwnRoleAssignableGroup",
         "summary": "Create a new immutable role-assignable static group",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42185,7 +42185,7 @@
       "get": {
         "operationId": "readOwnCompanyRole",
         "summary": "Read a role and actual paginated grants",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42260,7 +42260,7 @@
       "put": {
         "operationId": "updateOwnCompanyRole",
         "summary": "Version a definition and invalidate old grants",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42339,7 +42339,7 @@
       "get": {
         "operationId": "readOwnCompanyRoleHistory",
         "summary": "Read actual retained role audit and pending delivery",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42416,7 +42416,7 @@
       "post": {
         "operationId": "grantOwnCompanyRole",
         "summary": "Temporarily grant one original role version to a person or protected group",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42495,7 +42495,7 @@
       "post": {
         "operationId": "revokeOwnCompanyRole",
         "summary": "Conditionally revoke one exact retained grant",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -68328,7 +68328,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -68539,7 +68540,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -69096,7 +69098,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -69173,7 +69176,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -69952,7 +69956,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
