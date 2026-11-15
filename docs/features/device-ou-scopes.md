@@ -12,10 +12,16 @@ Der API-Vertrag 1.43.0 unterscheidet den neuen Scope in direkter Vergabe, Eligib
 
 Im ausdrücklich aktivierten Lesemodus werden tatsächliche lokale OU-Zuordnungen und Generationen bei Bestandslisten, Zählungen, Suche, Filtern, CSV, Einzelgeräten und Historien geprüft. Agent-/Hardware-, Compliance-, Sync- und allgemeine Rückgabeansichten nutzen dieselbe Begrenzung. Die aktuelle OU-Metadatenabfrage benötigt zusätzlich unabhängig `ous.read`. Lokale Zuordnungen werden nach der abschließenden Identity-Prüfung erneut gelesen; späte Umordnungen führen zu 412. Unzugeordnete Geräte bleiben ohne tenantweites Recht verborgen. Reine OU-Compliance-Leser erhalten keine tenantweiten Richtlinienansichten. Ursprüngliche tenantweite Rechte bleiben unabhängig erhalten. Private Offboarding-Elternquellen und sämtliche Schreibbelege bleiben noch im bisherigen Protokoll.
 
+Migration `014_device_scope_writes.sql` ergänzt jetzt die private Inventarpflege und Benutzerzuweisung. Begrenzte Änderungen binden die tatsächlich gesperrte Geräteversion und die lokale OU-Zuordnung an eine erneut gelesene ursprüngliche Identity-Quelle. SQL prüft diese Bindung vor dem Effekt und erneut beim physischen Commit. Sowohl eine späte Verschiebung innerhalb des erlaubten Bereichs als auch ein Wechsel nach ausserhalb führt zu 412 und rollt Inventar-/OU-Effekte gemeinsam zurück. Ein gespeicherter Nachweis allein ist weiterhin keine Berechtigung.
+
+Reine Geräte-OU-Aufgaben erlauben keine neue unzugeordnete Erfassung. Eigenständige tenantweite Bestandsrechte bleiben wirksam, auch wenn eine andere Aufgabe begrenzt ist. Alte Empfänger erhalten aus einer reinen Geräte-OU-Rolle keine tenantweite Quelle; bei gemischten Rollen bleiben nur tatsächlich tenantweite Pflichten im alten Protokoll. Das neue private Manifest versiegelt vierzehn Quell-, Bindungs- und Empfangsroutinen einschließlich der bisherigen Inventargrenzen. Es erzeugt keine zusätzliche Audit-/Befehlsablage: Originalquellen und tatsächliche Pending-Belege bleiben in den bestehenden Inventarereignissen.
+
+Die begrenzten Schreibwege für Agenten, Sync, Rückgabeentscheidungen und Geräte-OU-Metadaten sind noch nicht umgesetzt. Öffentliche Capabilities, GUI-Scope-Auswahl und Standardaktivierung bleiben ebenfalls offen. Getrennte Identity-/Device-Datenbanken erhalten keine atomare dienstübergreifende Widerrufsgarantie.
+
 Vor einer Freigabe müssen folgende Teile zusammen fertig sein:
 
-- Gerätebezogene ursprüngliche Schreibbelege und physische SQL-Commit-Prüfungen für Änderungen, Zuweisung/Freigabe, Agent-/Sync-Verwaltung und Rückgabeentscheidungen; tenantweite Neuerfassung und Richtlinienänderung benötigen weiterhin eine entsprechende tenantweite Pflicht.
-- Unabhängige Begrenzung von Änderungen der Geräte-OU selbst und überprüfte dienstübergreifende Verschiebungs-/Löschabhängigkeiten.
+- Gerätebezogene ursprüngliche Schreibbelege und physische SQL-Commit-Prüfungen auch für Agent-/Sync-Verwaltung und Rückgabeentscheidungen; die private Inventarpflege/Zuweisung ist lokal ergänzt. Tenantweite Neuerfassung und Richtlinienänderung benötigen weiterhin eine entsprechende tenantweite Pflicht.
+- Unabhängige Begrenzung von Änderungen der Geräte-OU selbst, Schutz gegen Bereichserweiterung durch gewöhnliche OU-Administratoren und überprüfte dienstübergreifende Verschiebungs-/Löschabhängigkeiten.
 - Firmenrollen-/PIM-Oberfläche mit verständlicher Scope-Auswahl, tatsächlichen gerätebezogenen Rechten, Ablauf/Sitzungsverlust und ehrlichen Teilfehlern.
 - Native PostgreSQL-, vollständige Linux-CI- und tatsächliche Browserabläufe sowie geprüfter separater Image-/Migrations-Rollout.
 
@@ -24,3 +30,5 @@ Die fünfminütige ursprüngliche Geräte-MFA-Frische bleibt verbindlich. Getren
 Der [lokale Kern-Prüfbericht](../testing/device-ou-scope-kernel-2026-11-15.json) belegt 62 tatsächliche PostgreSQL-Fälle, 1’288 Identity-Unit-Fälle und sieben Policy-API-Prüfungen. Diese Nachweise ersetzen die oben noch offenen Device-/UI-/Rollout-Prüfungen nicht.
 
 Der [lokale Quellen-/Lese-Prüfbericht](../testing/device-ou-scope-reads-2026-11-15.json) ergänzt den Kernnachweis: 76 tatsächliche PostgreSQL-Rollen-/PIM-Fälle einschließlich 14 neuer Quellen-/Lesefälle, 100 bisherige native Geräte-/Rückgabefälle, 708 Geräte-Unit-Fälle und 1’288 Identity-Unit-Fälle. Vollständige Linux-CI für diesen Quellenstand, schreibende SQL-Grenzen, Oberfläche und Rollout bleiben offen.
+
+Der [lokale Inventar-Schreib-Prüfbericht](../testing/device-ou-scope-inventory-writes-2026-11-15.json) ergänzt 19 native Schreibfälle, einen vollständigen 95-Fälle-Rollen-/PIM-Lauf und 138 native Gerätefälle mit tatsächlichem Rust-Agenten. Der Ablauf nach der letzten Identity-Prüfung und die alte Empfangsgrenze wurden nach zusätzlichen Testpräzisierungen gezielt erneut geprüft. Diese Nachweise schließen die übrigen Schreibwege, Oberfläche, vollständige aktuelle Linux-CI und produktive Freigabe nicht ab.

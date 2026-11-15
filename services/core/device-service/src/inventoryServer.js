@@ -98,7 +98,7 @@ function createInventoryApp({ db = database, inventory = new DeviceInventory(db)
   app.post('/api/devices/:id/lifecycle',route(async(req,res)=>result(res,await inventory.lifecycle(req.params.id,req.body,req.headers['if-match'],req.user,req.headers.authorization,req.correlationId))));
   app.use('/api',(req,res)=>res.status(501).json({error:'unsupported',managementMode:'inventory-only',message:'No enrolled provider or remote device action is implemented by this inventory receiver.'}));
   app.use((error,req,res,_next)=>{
-    const status=error.status || ({23505:409,23514:409,23503:409,28000:401,42501:503,'22P02':400,'22003':409,'55P03':409,'57014':503}[error.code]) || 503;
+    const status=error.status || ({23505:409,23514:409,23503:409,28000:401,42501:503,'P0412':412,'22P02':400,'22003':409,'55P03':409,'57014':503}[error.code]) || 503;
     res.status(status).json({error:status===503?'Persistent inventory or receiving evidence unavailable':status>=500?'Inventory operation unavailable':error.message,correlationId:req.correlationId});
   });
   return app;

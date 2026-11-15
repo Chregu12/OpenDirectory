@@ -41,4 +41,15 @@ async function verify(database,source,permission,original) {
   if (!isDeepStrictEqual(current,original)) fail(412,'Original device scope association changed');
   if (source.validUntil*1000 <= Date.now()) fail(401,'Original device scope expired');
 }
-module.exports = { limited,predicate,requireDevice,pin,verify };
+async function bind(client,inventory,source,permission,user,authorization,id,revision,recipient=null) {
+  if (source.schemaVersion === 1 || !limited(source,permission) && !limited(source,'devices.inventory.read')) return source;
+  await requireDevice(client,source,'devices.inventory.read',id);
+  await requireDevice(client,source,permission,id);
+  await receiving(client);
+  const assignment=(await client.query('SELECT revision::text,ou FROM device_ou_assignments WHERE device_id=$1 AND tenant_id=$2 FOR SHARE',[id,source.tenant.id])).rows[0];
+  const selected={deviceId:id,deviceRevision:revision,revision:assignment?.revision || '0',ou:assignment?.ou?{id:assignment.ou.id,generation:assignment.ou.generation}:null};
+  const current=await inventory.authority.read(authorization,user,recipient,selected);
+  if(!isDeepStrictEqual(current,{...source,scope:{...source.scope,resource:selected}}))fail(401,'Original device write scope changed');
+  return current;
+}
+module.exports = { limited,predicate,requireDevice,pin,verify,bind };

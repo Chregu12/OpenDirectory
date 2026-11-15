@@ -294,18 +294,173 @@ async function withDevices(operation,{scoped=false}={}){
  try{return await operation({inventory,deviceDb:fixture.db,source});}finally{await fixture.close();}
 }
 const deviceValues=()=>({assetId:'NATIVE-'+randomUUID(),serialNumber:randomUUID(),manufacturer:'Actual native fixture',model:'Delegated inventory',deviceClass:'laptop',platform:'linux'});
+const deviceUpdate=(device,changes={})=>({...Object.fromEntries(require('../../../../../packages/device-inventory-contract').DEVICE_FIELDS.map(field=>[field,device[field]])),...changes,reason,confirm:true});
+async function deviceState(database){
+ const state={};for(const table of ['devices','device_inventory_assignments','device_inventory_events','device_inventory_outbox','device_ou_assignments','device_ou_events','device_ou_outbox'])state[table]=(await database.query('SELECT to_jsonb(record)::text AS row FROM '+table+' record ORDER BY to_jsonb(record)::text')).rows;
+ return state;
+}
 async function scopedDevices(operation,permissions=['devices.inventory.read','devices.compliance.read']){
  const delegate=await person(),root=await creator.ou({name:'Scoped device reads'},owner.user,bearer),child=await creator.ou({name:'Scoped device child',parentId:root.id},owner.user,bearer),outside=await creator.ou({name:'Other device scope'},owner.user,bearer);
- await assign(await createRole({name:'Scoped device fixture duties',permissions}),delegate.id,{scopeType:'device-ou',ouId:root.id});
+ const role=await createRole({name:'Scoped device fixture duties',permissions}),grant=(await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).grant;
  return withDevices(async({inventory,deviceDb,source})=>{
   const originalOu=new(require('../DeviceOuAuthority').DeviceOuAuthority)(db,options),units=new(require('../../../device-service/src/DeviceOrganizationalUnits').DeviceOrganizationalUnits)(deviceDb,{inventory,authority:{read:(authorization,user,ouId)=>originalOu.resolve({ouId},user,authorization),status:(authorization,user,selection)=>originalOu.status({selection},user,authorization,true)}});
   const setUnit=async(device,unit)=>{const old=await units.get(device.id,{},owner.user,bearer),selected=unit?(await originalOu.resolve({ouId:unit.id},owner.user,bearer)).ou:null;return units.write(device.id,{ou:selected?{id:selected.id,generation:selected.generation,revision:selected.revision}:null,reason,confirm:true},require('../../../../../packages/device-ou-contract').etag(device.id,old.deviceRevision,old.revision),owner.user,bearer,randomUUID());};
   const inside=await inventory.create({...deviceValues(),assetId:'SCOPED-IN'},owner.user,bearer),nested=await inventory.create({...deviceValues(),assetId:'SCOPED-CHILD'},owner.user,bearer),hidden=await inventory.create({...deviceValues(),assetId:'SECRET-OUT',platform:'windows'},owner.user,bearer),unassigned=await inventory.create({...deviceValues(),assetId:'SECRET-NONE'},owner.user,bearer);
   await setUnit(inside,root);await setUnit(nested,child);await setUnit(hidden,outside);
   const agents=new(require('../../../device-service/src/DeviceAgents').DeviceAgents)(deviceDb,{inventory}),sync=new(require('../../../device-service/src/DeviceSync').DeviceSync)(deviceDb,{inventory}),compliance=new(require('../../../device-service/src/DeviceCompliance').DeviceCompliance)(deviceDb,{inventory,authority:{read:(authorization,user)=>source.readScoped(user,authorization,null,true)}});
-  return operation({inventory,deviceDb,source,delegate,root,child,outside,inside,nested,hidden,unassigned,units,setUnit,agents,sync,compliance});
+  return operation({inventory,deviceDb,source,delegate,role,grant,root,child,outside,inside,nested,hidden,unassigned,units,setUnit,agents,sync,compliance});
  },{scoped:true});
 }
+test('device OU writes maintain assign and release actual scoped inventory with the original bound source',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,source,delegate,inside,nested,hidden})=>{
+  const actualSource=await source.readScoped(delegate.user,bearer);await assert.rejects(source.read(delegate.user,bearer),{status:403});assert.equal((await deviceDb.query('SELECT device_scope_source_valid($1::jsonb) AS valid',[JSON.stringify(actualSource)])).rows[0].valid,true,'Actual original scoped Identity source must cross the physical receiver');
+  const updated=await inventory.update(inside.id,deviceUpdate(inside,{model:'Actually scoped maintenance'}),contract.deviceEtag(inside),delegate.user,bearer,randomUUID());assert.equal(updated.model,'Actually scoped maintenance');assert.equal(BigInt(updated.revision),BigInt(inside.revision)+1n);
+  const recipient=await person();const assigned=await inventory.assign(updated.id,{userId:recipient.id},contract.deviceEtag(updated),delegate.user,bearer,randomUUID());assert.equal(assigned.assignedUserId,recipient.id);
+  const released=await inventory.assign(assigned.id,{userId:null},contract.deviceEtag(assigned),delegate.user,bearer,randomUUID());assert.equal(released.assignedUserId,null);assert.equal(released.lifecycle,'available');
+  const maintained=await inventory.lifecycle(nested.id,{lifecycle:'maintenance',reason,confirm:true},contract.deviceEtag(nested),delegate.user,bearer,randomUUID());assert.equal(maintained.lifecycle,'maintenance');
+  const events=(await deviceDb.query("SELECT event.*,outbox.status FROM device_inventory_events event JOIN device_inventory_outbox outbox USING(id) WHERE event.device_id=$1 AND event.action<>'create' ORDER BY event.created_at",[inside.id])).rows;
+  assert.equal(events.length,3);for(const event of events){assert.equal(event.status,'pending');assert.equal(event.proof.source.schemaVersion,2);assert.equal(event.proof.source.scope.resource.deviceId,inside.id);assert.equal(event.proof.source.scope.resource.deviceRevision,event.before_state.inventory_revision);assert.equal(event.proof.source.scope.resource.ou.id,actualSource.scope.grants[0].source.ouId);assert.equal(event.proof.source.tokenId,delegate.user.jti);assert.deepEqual(event.proof.source.context,delegate.user.identity_authorization);}
+  assert.equal(events[1].proof.source.target.id,recipient.id);assert.equal(events[2].proof.source.target,null);
+  await assert.rejects(inventory.update(hidden.id,deviceUpdate(hidden,{model:'Must remain hidden'}),contract.deviceEtag(hidden),delegate.user,bearer,randomUUID()),{status:404});
+ },['devices.inventory.read','devices.inventory.create','devices.inventory.assign']);
+});
+test('device OU writes hide outside and unassigned devices before versions or business-state conflicts',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,hidden,unassigned,inside})=>{
+  const recipient=await person(),before=await deviceState(deviceDb);
+  for(const device of [hidden,unassigned]){
+   await assert.rejects(inventory.update(device.id,deviceUpdate(device),contract.deviceEtag(device),delegate.user,bearer),{status:404});
+   await assert.rejects(inventory.lifecycle(device.id,{lifecycle:'available',reason,confirm:true},contract.deviceEtag(device),delegate.user,bearer),{status:404});
+   await assert.rejects(inventory.assign(device.id,{userId:recipient.id},contract.deviceEtag({...device,revision:'999'}),delegate.user,bearer),{status:404});
+   await assert.rejects(inventory.assign(device.id,{userId:null},contract.deviceEtag(device),delegate.user,bearer),{status:404});
+  }
+  await assert.rejects(inventory.create(deviceValues(),delegate.user,bearer),{status:403});
+  await assert.rejects(inventory.assign(inside.id,{userId:randomUUID()},contract.deviceEtag(inside),delegate.user,bearer),{status:404});
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Expired factor'}),contract.deviceEtag(inside),{...delegate.user,auth_time:delegate.user.auth_time-301},bearer),{status:428});
+  assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create','devices.inventory.assign']);
+});
+test('device OU writes preserve an independent tenant stock duty without binding unrelated scoped assignment rights',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,source,delegate,hidden})=>{
+  await assign(await createRole({name:'Independent global stock duty',permissions:['devices.inventory.read','devices.inventory.create']}),delegate.id);
+  const legacy=await source.read(delegate.user,bearer);assert.equal(legacy.schemaVersion,1);assert.deepEqual(legacy.permissions,['devices.inventory.read','devices.inventory.create']);assert.equal(Object.hasOwn(legacy,'scope'),false);
+  await deviceDb.query('ALTER TABLE device_ou_assignments DISABLE TRIGGER device_ou_guard');
+  const changed=await inventory.update(hidden.id,deviceUpdate(hidden,{model:'Actual independent tenant maintenance'}),contract.deviceEtag(hidden),delegate.user,bearer);assert.equal(changed.model,'Actual independent tenant maintenance');
+  const added=await inventory.create(deviceValues(),delegate.user,bearer);assert.equal(added.assignedUserId,null);
+  const proof=(await deviceDb.query("SELECT proof FROM device_inventory_events WHERE device_id=$1 AND action='update'",[hidden.id])).rows[0].proof;assert.equal(proof.source.schemaVersion,2);assert.equal(proof.source.scope.resource,null);
+  await deviceDb.query('ALTER TABLE device_ou_assignments ENABLE TRIGGER device_ou_guard');
+  const recipient=await person();await assert.rejects(inventory.assign(added.id,{userId:recipient.id},contract.deviceEtag(added),delegate.user,bearer),{status:404});
+ },['devices.inventory.read','devices.inventory.assign']);
+});
+test('device OU writes reject a replacement grant at the final live checkpoint and roll back the entire effect',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,role,grant,root,inside})=>{
+  const before=await deviceState(deviceDb),checkpoint=inventory.checkpoint.bind(inventory);let calls=0;
+  inventory.checkpoint=async(...args)=>{if(++calls===2){await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id});}return checkpoint(...args);};
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Old grant must not commit'}),contract.deviceEtag(inside),delegate.user,bearer),{status:401});assert.equal(calls,2);assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes lose a genuinely ended PIM activation before commit without inheriting another source',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,role,grant,root,inside})=>{
+  await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);
+  const eligible=(await makeEligible(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).eligibility,current=(await activate(eligible,delegate.user,60)).activation;
+  const before=await deviceState(deviceDb),checkpoint=inventory.checkpoint.bind(inventory);let calls=0;
+  inventory.checkpoint=async(...args)=>{if(++calls===2)await pim().end(current.id,{reason,confirm:true},C.etag('activation',current),delegate.user,bearer);return checkpoint(...args);};
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Ended activation must not commit'}),contract.deviceEtag(inside),delegate.user,bearer),error=>[401,403].includes(error.status));assert.equal(calls,2);assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes keep the original recipient revision through the final independent Identity checkpoint',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  const recipient=await person(),before=await deviceState(deviceDb),checkpoint=inventory.checkpoint.bind(inventory);let calls=0;
+  inventory.checkpoint=async(...args)=>{if(++calls===2){const current=await reader.user(recipient.id,{},owner.user,bearer);await new UserMutator(db,options).update(recipient.id,{enabled:false},userEtag(current),owner.user,bearer);}return checkpoint(...args);};
+  await assert.rejects(inventory.assign(inside.id,{userId:recipient.id},contract.deviceEtag(inside),delegate.user,bearer),{status:401});assert.equal(calls,2);assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.assign']);
+});
+for(const destination of ['inside','outside'])test('device OU writes physically reject a late '+destination+' association move after the final Identity reply',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract'),ouContract=require('../../../../../packages/device-ou-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside,child,outside,units})=>{
+  const before=await deviceState(deviceDb);let moved=false;
+  inventory.database={...deviceDb,transaction:(operation,settings={})=>deviceDb.transaction(operation,{...settings,beforeCommit:async client=>{
+   if(settings.beforeCommit)await settings.beforeCommit(client);if(settings.readOnly)return;
+   const bound={...deviceDb,transaction:async(operation,options={})=>{const result=await operation(client);if(options.beforeCommit)await options.beforeCommit(client);return result;}};
+   const stock=new(require('../../../device-service/src/DeviceInventory').DeviceInventory)(bound,{authority:inventory.authority});
+   const metadata=new(require('../../../device-service/src/DeviceOrganizationalUnits').DeviceOrganizationalUnits)(bound,{inventory:stock,authority:units.authority});
+   const current=await metadata.get(inside.id,{},owner.user,bearer),selected=(await units.authority.read(bearer,owner.user,destination==='inside'?child.id:outside.id)).ou;
+   await metadata.write(inside.id,{ou:{id:selected.id,generation:selected.generation,revision:selected.revision},reason,confirm:true},ouContract.etag(inside.id,current.deviceRevision,current.revision),owner.user,bearer,randomUUID());moved=true;
+  }})};
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Late association must not commit'}),contract.deviceEtag(inside),delegate.user,bearer),{code:'P0412'});assert.equal(moved,true);assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes cannot physically commit after a shortened original source expires past the last live checkpoint',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  const before=await deviceState(deviceDb),deadline=Math.floor(Date.now()/1000)+10,read=inventory.authority.read.bind(inventory.authority);let reachedFinalCheckpoint=false;
+  inventory.authority.read=async(...args)=>{const source=await read(...args);assert.ok(deadline<=source.validUntil);return{...source,validUntil:deadline};};
+  inventory.database={...deviceDb,transaction:(operation,settings={})=>deviceDb.transaction(operation,{...settings,beforeCommit:async client=>{
+   if(settings.beforeCommit)await settings.beforeCommit(client);
+   if(!settings.readOnly){reachedFinalCheckpoint=true;await client.query('SELECT pg_sleep($1)',[Math.max(0,(deadline*1000-Date.now()+100)/1000)]);}
+  }})};
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Expired original deadline must not commit'}),contract.deviceEtag(inside),delegate.user,bearer),{code:'42501'});assert.equal(reachedFinalCheckpoint,true);assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes check exact physical resource versions even when called directly through the SQL kernel',async()=>{
+ await scopedDevices(async({inventory,deviceDb,delegate,inside,units})=>{
+  const current=await units.get(inside.id,{},delegate.user,bearer),selected={deviceId:inside.id,deviceRevision:inside.revision,revision:current.revision,ou:{id:current.ou.id,generation:current.ou.generation}},source=await inventory.authority.read(bearer,delegate.user,null,selected),before=await deviceState(deviceDb);
+  for(const alter of [resource=>resource.deviceId=randomUUID(),resource=>resource.deviceRevision='99',resource=>resource.revision='99',resource=>resource.ou.generation='99',resource=>resource.ou.id=randomUUID()]){
+   const changed=structuredClone(source);alter(changed.scope.resource);
+   await assert.rejects(deviceDb.transaction(async client=>{const actual=await inventory.current(client,source.tenant.id,inside.id);return client.query('SELECT device_inventory_change($1::jsonb)',[JSON.stringify({id:randomUUID(),deviceId:inside.id,correlationId:randomUUID(),action:'update',source:changed,before:actual.row,values:deviceUpdate(inside,{model:'Wrong physical binding'}),assignmentId:null})]);}),{code:'P0412'});
+   assert.deepEqual(await deviceState(deviceDb),before);
+  }
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes preserve historical scoped receipts and all receiving guards through full device migration replay',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  const changed=await inventory.update(inside.id,deviceUpdate(inside,{model:'Retained original scoped receipt'}),contract.deviceEtag(inside),delegate.user,bearer),before=await deviceState(deviceDb);
+  const directory=path.resolve(__dirname,'../../../device-service/migrations');for(const file of fs.readdirSync(directory).filter(file=>file.endsWith('.sql')).sort())await deviceDb.query(fs.readFileSync(path.join(directory,file),'utf8'));
+  assert.deepEqual(await deviceState(deviceDb),before);await deviceDb.query('SELECT device_scope_receiving()');await deviceDb.query('SELECT device_ou_receiving()');
+  const next=await inventory.lifecycle(changed.id,{lifecycle:'maintenance',reason,confirm:true},contract.deviceEtag(changed),delegate.user,bearer);assert.equal(next.lifecycle,'maintenance');assert.equal(BigInt(next.revision),BigInt(changed.revision)+1n);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes reject malformed private SQL scope sources without widening to a legacy tenant source',async()=>{
+ await scopedDevices(async({inventory,deviceDb,delegate})=>{
+  const source=await inventory.authority.read(bearer,delegate.user),contract=require('../../../../../packages/device-scope-contract');assert.equal(contract.validEnvelope(source,delegate.user),true);
+  const alterations=[value=>value.schemaVersion=1,value=>value.extra=true,value=>value.context.revision=2,value=>value.scope.override=true,value=>value.scope.units.reverse(),value=>value.scope.units.push(value.scope.units[0]),value=>value.scope.units[0].roots.push(value.scope.units[0].roots[0]),value=>value.scope.units[0].generation='9223372036854775808',value=>value.scope.grants.push(value.scope.grants[0]),value=>value.scope.grants[0].source.scopeType='ou',value=>value.scope.grants[0].source.validUntil='9223372036854775807',value=>value.scope.grants[0].source.ouGeneration='999',value=>value.scope.grants[0].source.targetId=randomUUID(),value=>value.scope.grants[0].permission='devices.compliance.manage',value=>value.scope.resource={deviceId:randomUUID(),deviceRevision:'1',revision:'0',ou:{id:randomUUID(),generation:'1'}}];
+  for(const change of alterations){const modified=structuredClone(source);change(modified);assert.equal(contract.validEnvelope(modified,delegate.user),false);assert.equal((await deviceDb.query('SELECT device_scope_source_valid($1::jsonb) AS valid',[JSON.stringify(modified)])).rows[0].valid,false);}
+ },['devices.inventory.read','devices.inventory.create']);
+});
+for(const fault of ['scope manifest guard','scope validator','inventory guard','OU receiver'])test('device OU writes refuse a missing or replaced '+fault,async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  const before=await deviceState(deviceDb);
+  if(fault==='scope manifest guard')await deviceDb.query('ALTER TABLE device_scope_manifest DISABLE TRIGGER device_scope_manifest_guard');
+  else if(fault==='scope validator')await deviceDb.query('CREATE OR REPLACE FUNCTION device_scope_source_valid(source jsonb) RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RETURN true; END; $$');
+  else if(fault==='inventory guard')await deviceDb.query('CREATE OR REPLACE FUNCTION device_inventory_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN NEW; END; $$');
+  else await deviceDb.query('CREATE OR REPLACE FUNCTION device_ou_receiving() RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN; END; $$');
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Missing receiver cannot authorize a write'}),contract.deviceEtag(inside),delegate.user,bearer),{status:503});assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+test('device OU writes cannot acknowledge a scoped mutation without its actual pending inventory receipt',async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  const before=await deviceState(deviceDb);
+  await deviceDb.query('CREATE FUNCTION suppress_scoped_inventory_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END; $$');await deviceDb.query('CREATE TRIGGER aaa_suppress_scoped_inventory_receipt BEFORE INSERT ON device_inventory_outbox FOR EACH ROW EXECUTE FUNCTION suppress_scoped_inventory_receipt()');
+  await assert.rejects(inventory.update(inside.id,deviceUpdate(inside,{model:'Suppressed pending receipt'}),contract.deviceEtag(inside),delegate.user,bearer),{status:503});assert.deepEqual(await deviceState(deviceDb),before);
+ },['devices.inventory.read','devices.inventory.create']);
+});
+for(const revision of ['9007199254740993','9223372036854775806'])test('device OU writes preserve the exact bound BIGINT device revision '+revision,async()=>{
+ const contract=require('../../../../../packages/device-inventory-contract');
+ await scopedDevices(async({inventory,deviceDb,delegate,inside})=>{
+  await deviceDb.transaction(async client=>{await client.query('ALTER TABLE devices DISABLE TRIGGER ALL');await client.query('UPDATE devices SET inventory_revision=$2::bigint WHERE id=$1',[inside.id,revision]);await client.query('ALTER TABLE devices ENABLE TRIGGER ALL');await client.query('SELECT device_inventory_receiving()');});
+  const current=await inventory.get(inside.id,delegate.user,bearer);assert.equal(current.revision,revision);
+  const changed=await inventory.update(inside.id,deviceUpdate(current,{model:'Lossless scoped BIGINT mutation'}),contract.deviceEtag(current),delegate.user,bearer);assert.equal(changed.revision,String(BigInt(revision)+1n));
+  const event=(await deviceDb.query("SELECT proof,before_state,after_state FROM device_inventory_events WHERE device_id=$1 AND action='update'",[inside.id])).rows[0];assert.equal(event.proof.source.scope.resource.deviceRevision,revision);assert.equal(event.before_state.inventory_revision,revision);assert.equal(event.after_state.inventory_revision,changed.revision);
+ },['devices.inventory.read','devices.inventory.create']);
+});
 test('device OU reads filter actual inventory fleet counts searches CSV and retained metadata without hidden devices',async()=>{
  await scopedDevices(async({inventory,delegate,inside,nested,hidden,unassigned,agents,units})=>{
   const page=await inventory.list({},delegate.user,bearer);assert.equal(page.total,2);assert.deepEqual(page.devices.map(device=>device.id).sort(),[inside.id,nested.id].sort());assert.equal((await inventory.list({search:'SECRET'},delegate.user,bearer)).total,0);assert.equal((await inventory.list({platform:'windows'},delegate.user,bearer)).total,0);

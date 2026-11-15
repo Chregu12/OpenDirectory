@@ -94,12 +94,15 @@ class DeviceInventory {
     const target=identifier(id);const values=validateDeviceLifecycle(body);validateDeviceEtag(expected);return this.change('lifecycle',target,values,expected,user,authorization,correlationId);
   }
   async change(action,id,values,expected,user,authorization,correlationId) {
-    const recipient=action==='assign'?values.userId:null;const source=await this.authorized(user,authorization,['create','update','lifecycle'].includes(action)?'devices.inventory.create':'devices.inventory.assign',recipient);
+    const recipient=action==='assign'?values.userId:null,permission=['create','update','lifecycle'].includes(action)?'devices.inventory.create':'devices.inventory.assign';let source=await this.authorized(user,authorization,permission,recipient);
+    if(action==='create'&&(Scope.limited(source,permission)||Scope.limited(source,'devices.inventory.read')))fail(403,'New inventory requires a tenant-wide stock duty');
     const deviceId=id || this.newId();identifier(deviceId);const operationId=this.newId();identifier(operationId);const correlation=validUuid(correlationId)?correlationId.toLowerCase():this.newId();
     return this.database.transaction(async client=>{
       await this.receiving(client);let before=null;
       if(action!=='create'){
-        const current=await this.current(client,source.tenant.id,deviceId,true);before=current.row;const actual=device(before,current.link);
+        const current=await this.current(client,source.tenant.id,deviceId,true);before=current.row;
+        source=await Scope.bind(client,this,source,permission,user,authorization,deviceId,String(before.inventory_revision),recipient);
+        const actual=device(before,current.link);
         if(deviceEtag(actual)!==expected)fail(412,'Device changed; reload before retrying');
         if(['assign','release'].includes(action) && actual.assignedUserId===(recipient || null))fail(409,'Assignment already has that recipient');
         if(action==='assign' && !['available','assigned'].includes(actual.lifecycle))fail(409,'Restore the device before assignment');

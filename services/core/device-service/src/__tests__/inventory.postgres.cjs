@@ -13,7 +13,7 @@ const { INVENTORY_PERMISSIONS, validateDeviceValues, deviceEtag } = require('../
 assert.ok(process.env.DEVICE_TEST_DATABASE_URL, 'Run scripts/test-inventory-postgres.js or set DEVICE_TEST_DATABASE_URL');
 
 const administration = new Pool({ connectionString: process.env.DEVICE_TEST_DATABASE_URL, max: 1 });
-const migrations = ['001_devices.sql', '002_device_system_info.sql', '003_device_columns_align.sql', '004_install_jobs.sql', '005_device_inventory.sql', '007_inventory_maintenance.sql'];
+const migrations = fs.readdirSync(path.join(__dirname, '../../migrations')).filter(file => file.endsWith('.sql')).sort();
 const relations = ['devices', 'device_inventory_events', 'device_inventory_assignments', 'device_inventory_outbox'];
 const authorization = 'Bearer inventory.explicit.server.fixture';
 let schema;
@@ -772,9 +772,10 @@ for (const [importedRevision, nextRevision] of [
     const created = await create();
     const creationState = await snapshot();
     await database.transaction(async client => {
-      await client.query('ALTER TABLE devices DISABLE TRIGGER device_inventory_guard');
+      // This isolated privileged import seeds BIGINT state; the actual command below runs with every guard restored.
+      await client.query('ALTER TABLE devices DISABLE TRIGGER ALL');
       assert.equal((await client.query('UPDATE devices SET inventory_revision=$2::bigint WHERE id=$1 AND tenant_id=$3', [created.id, importedRevision, created.tenantId])).rowCount, 1);
-      await client.query('ALTER TABLE devices ENABLE TRIGGER device_inventory_guard');
+      await client.query('ALTER TABLE devices ENABLE TRIGGER ALL');
       await client.query('SELECT device_inventory_receiving()');
     });
     const importedState = await snapshot();
