@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.43.0",
+    "version": "1.44.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -21080,19 +21080,37 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "device": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DeviceScopeResource"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
-                }
+                },
+                "description": "device is accepted only with private protocol opt-in. It binds the exact requested inventory and OU association versions; no browser-supplied grants or authority are accepted."
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Original bearer-bound current source with validated minimal parent provenance; no new token or grant",
+            "description": "Original bearer-bound source and validated parent; private opted-in sources may retain the entire original scoped source",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingAuthoritySource"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingAuthoritySource"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingScopedAuthoritySource"
+                    }
+                  ]
                 }
               }
             },
@@ -21248,7 +21266,18 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "X-OD-Device-Scope-Protocol",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "const": "1"
+            },
+            "description": "Private opt-in to a nested protocol 2 parent only when original device-ou grants exist; pure tenant sources remain legacy protocol 1. Unsupported values are rejected. This does not enable the scoped DeviceReturns writer."
+          }
+        ]
       }
     },
     "/api/blueprints/preview": {
@@ -73795,6 +73824,153 @@
           }
         },
         "description": "With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released."
+      },
+      "DeviceOffboardingScopedAuthoritySource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOffboardingReturnsProtocol",
+          "inventory",
+          "target",
+          "parent"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "deviceOffboardingReturnsProtocol": {
+            "const": 2
+          },
+          "inventory": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InventoryScopedAuthoritySource"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "revision",
+                      "enabled"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+                      },
+                      "enabled": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "description": "Unmodified original targeted scoped inventory source. Its target authorization revision is distinct from the outer negative eligibility and parent record revisions. Requested device scope.resource is echoed binding data, not an Identity attestation of Device storage."
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "enabled",
+              "eligibilityRevision"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "enabled": {
+                "const": false
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            }
+          },
+          "parent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "workflowId",
+              "tenantId",
+              "userId",
+              "action",
+              "operationId",
+              "afterRevision",
+              "afterEligibilityRevision",
+              "createdAt",
+              "deliveryStatus"
+            ],
+            "properties": {
+              "workflowId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "tenantId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "action": {
+                "enum": [
+                  "disabled",
+                  "already_disabled"
+                ]
+              },
+              "operationId": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "afterRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              },
+              "afterEligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "deliveryStatus": {
+                "const": "pending"
+              }
+            }
+          }
+        }
       }
     }
   }

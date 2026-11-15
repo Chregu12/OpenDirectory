@@ -267,7 +267,7 @@ function organizationOpenApi() {
   const compliance=require('../../device-service/scripts/device-compliance-openapi').deviceComplianceOpenApi();Object.assign(document.paths,compliance.paths);Object.assign(document.components.schemas,compliance.components.schemas);
   const sync=require('../../device-service/scripts/device-sync-openapi').deviceSyncOpenApi();Object.assign(document.paths,sync.paths);Object.assign(document.components.schemas,sync.components.schemas);
   const deviceOus=require('../../device-service/scripts/device-ou-openapi').deviceOuOpenApi();Object.assign(document.paths,deviceOus.paths);Object.assign(document.components.schemas,deviceOus.components.schemas);
-  document.info.version = '1.43.0';
+  document.info.version = '1.44.0';
   return document;
 }
 if (require.main === module) process.stdout.write(JSON.stringify(organizationOpenApi(), null, 2) + '\n');

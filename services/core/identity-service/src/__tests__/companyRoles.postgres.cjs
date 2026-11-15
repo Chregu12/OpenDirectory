@@ -511,6 +511,63 @@ async function deviceOuSources(actor,permission='devices.inventory.read',unit=nu
  return (await pool.query('SELECT identity_company_role_sources($1,$2,$3,$4,$5) AS sources',[actor.id,owner.receipt.tenantId,permission,kind,unit])).rows[0].sources;
 }
 function scopedAuthority(revalidate=options.revalidate){return new(require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,{...options,revalidate});}
+for (const mode of ['direct', 'PIM']) {
+ test(`device OU offboarding source retains an actual ${mode} grant and negative parent across the private HTTP boundary`, async () => {
+  const delegate = await person(), target = await person(), root = await creator.ou({ name: 'Scoped handback source' }, owner.user, bearer);
+  const role = await createRole({ permissions: ['devices.inventory.read', 'devices.inventory.assign'] });
+  if (mode === 'PIM') await activate((await makeEligible(role, delegate.id, { scopeType: 'device-ou', ouId: root.id })).eligibility, delegate.user);
+  else await assign(role, delegate.id, { scopeType: 'device-ou', ouId: root.id });
+  const profile = await reader.user(target.id, {}, owner.user, bearer), workflowId = randomUUID();
+  const parent = await new (require('../CompanyOffboarding').CompanyOffboarding)(db, options).receive(target.id, { workflowId, expectedRevision: profile.revision, confirm: true }, owner.user, bearer);
+  const authority = new (require('../DeviceOffboardingAuthority').DeviceOffboardingAuthority)(db, options);
+  const generation = (await deviceOuSources(delegate))[0].ouGeneration;
+  const selected = { deviceId: randomUUID(), deviceRevision: '9007199254740993', revision: '5', ou: { id: root.id, generation } }, calls = [];
+  const server = require('node:http').createServer(async (req, res) => {
+   try {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    calls.push({ path: req.url, authorization: req.headers.authorization, protocol: req.headers['x-od-device-scope-protocol'], body });
+    const result = await authority[req.headers['x-od-device-scope-protocol'] === '1' ? 'readScoped' : 'read'](delegate.user, req.headers.authorization, body);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(result));
+   } catch (error) { res.writeHead(error.status || 503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: error.message })); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+   const { DeviceReturnAuthority } = require('../../../device-service/src/DeviceReturnAuthority');
+   const endpoint = `http://127.0.0.1:${server.address().port}/api/identity/device-offboarding`;
+   const result = await new DeviceReturnAuthority({ scoped: true, endpoint }).read(bearer, delegate.user, workflowId, target.id, selected);
+   assert.equal(require('../../../../../packages/device-return-scope-contract').validSource(result, delegate.user, workflowId, target.id, selected), true);
+   assert.equal(result.schemaVersion, 2); assert.equal(result.deviceOffboardingReturnsProtocol, 2); assert.equal(Object.hasOwn(result, 'permissions'), false);
+   assert.deepEqual(result.inventory.permissions, ['devices.inventory.read', 'devices.inventory.assign']);
+   assert.deepEqual(result.inventory.scope.resource, selected, 'Identity echoes the requested binding; it does not attest Device storage');
+   assert.equal(result.target.eligibilityRevision, parent.afterEligibilityRevision); assert.equal(result.parent.afterRevision, parent.afterRevision);
+   const account = (await pool.query('SELECT authorization_revision,eligibility_revision FROM users WHERE id=$1', [target.id])).rows[0];
+   assert.equal(result.inventory.target.revision, String(account.authorization_revision)); assert.equal(result.target.eligibilityRevision, String(account.eligibility_revision));
+   assert.equal(Object.hasOwn(result.inventory.scope.grants[0].source, 'activationId'), mode === 'PIM');
+   assert.deepEqual(calls, [{ path: '/api/identity/device-offboarding', authorization: bearer, protocol: '1', body: { workflowId, userId: target.id, device: selected } }]);
+   await assert.rejects(new DeviceReturnAuthority({ endpoint }).read(bearer, delegate.user, workflowId, target.id), { status: 403 });
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+ });
+ test(`device OU offboarding source rejects an equivalent replacement ${mode} source after the original checkpoint`, async () => {
+  const delegate = await person(), target = await person(), root = await creator.ou({ name: 'Held handback source' }, owner.user, bearer);
+  const role = await createRole({ permissions: ['devices.inventory.read', 'devices.inventory.assign'] });
+  let grant, eligible, active;
+  if (mode === 'PIM') { eligible = (await makeEligible(role, delegate.id, { scopeType: 'device-ou', ouId: root.id })).eligibility; active = (await activate(eligible, delegate.user)).activation; }
+  else grant = (await assign(role, delegate.id, { scopeType: 'device-ou', ouId: root.id })).grant;
+  const profile = await reader.user(target.id, {}, owner.user, bearer), workflowId = randomUUID();
+  await new (require('../CompanyOffboarding').CompanyOffboarding)(db, options).receive(target.id, { workflowId, expectedRevision: profile.revision, confirm: true }, owner.user, bearer);
+  let calls = 0;
+  const authority = new (require('../DeviceOffboardingAuthority').DeviceOffboardingAuthority)(db, { ...options, revalidate: async (authorization, user) => {
+   if (++calls === 3) {
+    if (mode === 'PIM') { await pim().end(active.id, { reason, confirm: true }, C.etag('activation', active), delegate.user, bearer); await activate(eligible, delegate.user); }
+    else { await roles.revoke(grant.id, { reason, confirm: true }, C.etag('grant', grant), owner.user, bearer); await assign(role, delegate.id, { scopeType: 'device-ou', ouId: root.id }); }
+   }
+   return options.revalidate(authorization, user);
+  } });
+  await assert.rejects(authority.readScoped(delegate.user, bearer, { workflowId, userId: target.id }), { status: 401 });
+  assert.equal((await deviceOuSources(delegate, 'devices.inventory.assign')).length, 1, 'Equivalent replacement rights are still not the original source');
+ });
+}
 test('device OU source returns only current own descendant generations and independently bounded duties',async()=>{
  const delegate=await person(),root=await creator.ou({name:'Private scoped source'},owner.user,bearer),child=await creator.ou({name:'Current own child',parentId:root.id},owner.user,bearer),outside=await creator.ou({name:'Outside own area'},owner.user,bearer),foreign=await activeCompany(db,schema,issuer),foreignOu=await creator.ou({name:'Foreign private child'},foreign.user,bearer);
  await assign(await createRole({permissions:[...C.DEVICE_OU_PERMISSIONS]}),delegate.id,{scopeType:'device-ou',ouId:root.id});

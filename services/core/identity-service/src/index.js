@@ -200,8 +200,8 @@ app.post('/api/identity/device-inventory', asyncRoute(async (req, res) => {
 }));
 app.post('/api/identity/device-offboarding', asyncRoute(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  if (Object.keys(req.query).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact offboarding device source request required' });
-  res.json(await deviceOffboardingAuthority.read(req.user, req.headers.authorization, req.body));
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol']!==undefined && req.headers['x-od-device-scope-protocol']!=='1') return res.status(400).json({ error: 'Exact offboarding device source request required' });
+  res.json(await deviceOffboardingAuthority[req.headers['x-od-device-scope-protocol']==='1'?'readScoped':'read'](req.user, req.headers.authorization, req.body));
 }));
 app.get('/api/identity/company-license-eligibility', asyncRoute(async (req, res) => {
   if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact company license eligibility request required' });
