@@ -4125,7 +4125,8 @@ test('production gateway registers an actual roleless company blueprint Owner an
 });
 
 // Registration/review precede the actual original-token MFA deadline checked below.
-test('production gateway applies actual roleless company blueprint license origins atomically and retires original offboarding captures', { timeout: 360000 }, async () => {
+// Two independently authenticated journeys each retain their original 300-second deadline, plus bounded fixture setup.
+test('production gateway applies actual roleless company blueprint license origins atomically and retires original offboarding captures', { timeout: 660000 }, async () => {
   const previousRegistration = process.env.COMPANY_REGISTRATION_ENABLED; const previousActivation = process.env.COMPANY_ACTIVATION_ENABLED;
   const registration = { registrationId: randomUUID(), username: 'company-assignment-owner', password: 'disposable-password', mfaCode: '', confirm: true, profile: { ...organizationProfileFixture(), name: 'Actual Signed Assignment Company' } };
   try {
