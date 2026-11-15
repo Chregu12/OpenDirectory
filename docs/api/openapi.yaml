@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.39.0",
+    "version": "1.43.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -10151,23 +10151,41 @@
       "get": {
         "operationId": "readOriginalInventoryAuthority",
         "summary": "Resolve the original human inventory home/duties from live canonical identity",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Canonical administration, the current Engineering duty and the actual own-company owner retain their duties; explicit current own-company roles/PIM can delegate separate inventory read, stock/agent management and assignment duties. Device roles require tenant scope. Selected grant/activation provenance and the shorter source expiry are retained; the five-minute MFA boundary remains unchanged. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Canonical administration, the current Engineering duty and the actual own-company owner retain their duties; explicit current own-company roles/PIM can delegate separate inventory read, stock/agent management and assignment duties. Device roles require tenant scope. Selected grant/activation provenance and the shorter source expiry are retained; the five-minute MFA boundary remains unchanged. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released.",
         "responses": {
           "200": {
             "description": "Original bearer-bound current authority; not a reusable credential or a new access grant",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/InventoryAuthoritySource"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/InventoryAuthoritySource"
+                        },
+                        {
+                          "properties": {
+                            "target": {
+                              "type": "null"
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "target": {
-                          "type": "null"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/InventoryScopedAuthoritySource"
+                        },
+                        {
+                          "properties": {
+                            "target": {
+                              "type": "null"
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -10537,28 +10555,75 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "X-OD-Device-Scope-Protocol",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "const": "1"
+            },
+            "description": "Private upgraded receiver opt-in. Absent retains the legacy tenant source; unknown versions return 400. Public device clients do not enable this protocol yet."
+          }
+        ]
       },
       "post": {
         "operationId": "readOriginalInventoryRecipient",
         "summary": "Resolve one exact own canonical inventory recipient with original live authority",
-        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Canonical administration, the current Engineering duty and the actual own-company owner retain their duties; explicit current own-company roles/PIM can delegate separate inventory read, stock/agent management and assignment duties. Device roles require tenant scope. Selected grant/activation provenance and the shorter source expiry are retained; the five-minute MFA boundary remains unchanged. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred.",
+        "description": "Actual original human access token, canonical home tenant and fresh verified MFA at most 300 seconds old are required. Canonical administration, the current Engineering duty and the actual own-company owner retain their duties; explicit current own-company roles/PIM can delegate separate inventory read, stock/agent management and assignment duties. Device roles require tenant scope. Selected grant/activation provenance and the shorter source expiry are retained; the five-minute MFA boundary remains unchanged. Claimed owner/permissions, API keys, shared enrollment secrets and workloads do not grant access. The existing device-service owns its PostgreSQL devices; unowned legacy rows are not automatically adopted. All writes retain original live identity/recipient evidence before/after locks and at the final application checkpoint, with exact physical SQL deadline/effect/event/pending-outbox checks. Separate databases do not provide an atomic identity-user FK or instantaneous distributed revocation. No physical enrollment, telemetry, compliance success, license or provider command is inferred. With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "userId"
-                ],
-                "properties": {
-                  "userId": {
-                    "type": "string",
-                    "format": "uuid"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "userId"
+                    ],
+                    "properties": {
+                      "userId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "userId",
+                      "device"
+                    ],
+                    "properties": {
+                      "userId": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "device": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/components/schemas/DeviceScopeResource"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "description": "Requires the explicit scope protocol header. The resource is echoed for independent verification by Device, not verified against a Device database by Identity."
                   }
-                }
+                ]
               }
             }
           }
@@ -10569,36 +10634,43 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/InventoryAuthoritySource"
-                    },
-                    {
-                      "properties": {
-                        "target": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "id",
-                            "revision",
-                            "enabled"
-                          ],
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/InventoryAuthoritySource"
+                        },
+                        {
                           "properties": {
-                            "id": {
-                              "type": "string",
-                              "format": "uuid"
-                            },
-                            "revision": {
-                              "type": "string",
-                              "pattern": "^[1-9][0-9]{0,18}$",
-                              "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
-                            },
-                            "enabled": {
-                              "type": "boolean"
+                            "target": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "revision",
+                                "enabled"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "revision": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,18}$",
+                                  "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
                             }
                           }
                         }
-                      }
+                      ]
+                    },
+                    {
+                      "$ref": "#/components/schemas/InventoryScopedAuthoritySource"
                     }
                   ]
                 }
@@ -10968,7 +11040,18 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "X-OD-Device-Scope-Protocol",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "const": "1"
+            },
+            "description": "Private upgraded receiver opt-in. Absent retains the legacy tenant source; unknown versions return 400. Public device clients do not enable this protocol yet."
+          }
+        ]
       }
     },
     "/api/license-users/{id}/snapshot": {
@@ -41994,7 +42077,7 @@
       "get": {
         "operationId": "listOwnCompanyRoles",
         "summary": "List own custom roles and protected group choices",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42067,7 +42150,7 @@
       "post": {
         "operationId": "createOwnCompanyRole",
         "summary": "Create a bounded own role definition",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42126,7 +42209,7 @@
       "post": {
         "operationId": "createOwnRoleAssignableGroup",
         "summary": "Create a new immutable role-assignable static group",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42185,7 +42268,7 @@
       "get": {
         "operationId": "readOwnCompanyRole",
         "summary": "Read a role and actual paginated grants",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42260,7 +42343,7 @@
       "put": {
         "operationId": "updateOwnCompanyRole",
         "summary": "Version a definition and invalidate old grants",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42339,7 +42422,7 @@
       "get": {
         "operationId": "readOwnCompanyRoleHistory",
         "summary": "Read actual retained role audit and pending delivery",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42416,7 +42499,7 @@
       "post": {
         "operationId": "grantOwnCompanyRole",
         "summary": "Temporarily grant one original role version to a person or protected group",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -42495,7 +42578,7 @@
       "post": {
         "operationId": "revokeOwnCompanyRole",
         "summary": "Conditionally revoke one exact retained grant",
-        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. OU scopes permit only users.read/users.update/users.status.manage in the named unit and descendants. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
+        "description": "Original issuer-verified human bearer, current canonical home tenant and independently checked actual owner or canonical roles duty. Read permits identities.roles.read; writes require identities.roles.manage or original company ownership and independently bound MFA at most 300 seconds old. No custom global token roles are created. Definitions are versioned: edits invalidate existing grants. Direct recipients bind their current eligibility generation; static role-assignable groups bind original ownership and live membership reviews. The ou scope permits only users.read/users.update/users.status.manage in the named unit and descendants. The distinct device-ou scope permits only devices.inventory.read/create/assign and devices.compliance.read, binds the original own root generation, and never grants tenant-wide device authority. Tenant compliance policy management cannot be scoped to an OU. A Device receiver must independently bind actual device membership and current own hierarchy before consuming device-ou sources. Scope/group membership and hierarchy are protected against ordinary administrators. All rights are additive to existing canonical duties. Physical SQL commit rechecks the original source, unextended deadline, actual effect, immutable audit and pending outbox. No automatic retry or provider provisioning.",
         "security": [
           {
             "bearerAuth": []
@@ -45900,8 +45983,18 @@
       "get": {
         "operationId": "readOriginalComplianceAuthority",
         "summary": "Read the original current compliance source",
-        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement.",
-        "parameters": [],
+        "description": "Original human bearer, actual current home company and independently verified MFA at most 300 seconds old. Actual company owner, admin, policy-administrator, device-enrollment-operator or compliance-reader may read. Only owner, admin or policy-administrator may change platform policies. Claims, workloads and device credentials grant no human authority. Own PostgreSQL snapshots and retained transitions; agent observations are not hardware attestation or provider/MDM state. Policy changes await a new actual security heartbeat. Reissued/revoked/expired connections do not inherit old assessments; stale reports do not confirm compliance. No remote remediation or conditional login enforcement. With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released.",
+        "parameters": [
+          {
+            "name": "X-OD-Device-Scope-Protocol",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "const": "1"
+            },
+            "description": "Private upgraded receiver opt-in. Absent retains the legacy tenant source; unknown versions return 400. Public device clients do not enable this protocol yet."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Actual own-company data",
@@ -45915,7 +46008,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceComplianceAuthority"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceComplianceAuthority"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceComplianceScopedAuthoritySource"
+                    }
+                  ]
                 }
               }
             }
@@ -50028,6 +50128,2636 @@
                   "deviceId": {
                     "type": "string",
                     "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/organizational-units": {
+      "get": {
+        "operationId": "readOwnDeviceOrganizationalUnitChoices",
+        "summary": "Read own OU choices with server pagination and search",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read own OU choices with server pagination and search",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuChoices"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}/organizational-unit": {
+      "get": {
+        "operationId": "readOwnDeviceOrganizationalUnit",
+        "summary": "Read retained own device OU metadata and exact current versions",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read retained own device OU metadata and exact current versions",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Exact strong device-ou-DEVICE-DEVICE_REVISION-ASSIGNMENT_REVISION version."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuAssignment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "changeOwnDeviceOrganizationalUnit",
+        "summary": "Confirm one current own device OU assignment, move or removal",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"device-ou-[a-f0-9-]{36}-[1-9][0-9]*-(0|[1-9][0-9]*)\"$"
+            },
+            "description": "Exact current device-ou-DEVICE-DEVICE_REVISION-ASSIGNMENT_REVISION ETag."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirm one current own device OU assignment, move or removal",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Exact strong device-ou-DEVICE-DEVICE_REVISION-ASSIGNMENT_REVISION version."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ou",
+                  "reason",
+                  "confirm"
+                ],
+                "properties": {
+                  "ou": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DeviceOuSelection"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "confirm": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}/organizational-unit/history": {
+      "get": {
+        "operationId": "readOwnDeviceOrganizationalUnitHistory",
+        "summary": "Read retained own device OU changes without source tokens",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read retained own device OU changes without source tokens",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/device-organizational-units": {
+      "get": {
+        "operationId": "readOriginalDeviceOuChoices",
+        "summary": "Read original own-tenant OU metadata for device selection",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read original own-tenant OU metadata for device selection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuChoices"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "resolveOriginalDeviceOuAuthority",
+        "summary": "Resolve the actual original human inventory and selected own OU source",
+        "description": "Own canonical human bearer and unchanged original source, tenant and MFA deadline are required. Read requires devices.inventory.read; changes require tenant-wide devices.inventory.create and selecting an OU additionally requires ous.read. The selected OU UUID, ownership generation and revision must match the explicit confirmation. Source/grant replacement, rename or expiry before commit rejects the entire change. Immutable actual effect, event and local pending outbox are checked at physical commit. OU snapshot names and versions describe the assignment time; this metadata does not grant device or PIM access. Device OU/group access scopes remain separate work. Separate Identity/Device databases do not provide instantaneous distributed revocation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Resolve the actual original human inventory and selected own OU source",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuAuthority"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ouId"
+                ],
+                "properties": {
+                  "ouId": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}/organizational-unit/status": {
+      "get": {
+        "operationId": "readCurrentOwnDeviceOrganizationalUnitStatus",
+        "summary": "Read the live own OU status for one exact retained device association",
+        "description": "Read-only current OU lookup requires original devices.inventory.read and, for an assigned OU, separate ous.read. No create or assignment right is granted. The server selects the original OU UUID and ownership generation from the actual owned device association. Retired, foreign or replaced-generation resources return not-current without current metadata. Rename, revision and parent changes return changed; current means the saved and live snapshots match. Original inventory/OU grants and the actual local association are revalidated before response; source replacement and concurrent changes reject the read. No device rows, audit events or pending outbox are changed. The reply expires at validUntil. Identity and Device remain separate databases, not an instantaneous distributed revocation transaction.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact strong ETag of the underlying retained device OU association; both device and assignment versions are checked."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the live own OU status for one exact retained device association",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuCurrentStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/device-organizational-units/status": {
+      "post": {
+        "operationId": "resolveOriginalDeviceOuCurrentStatus",
+        "summary": "Resolve original read duties and current own OU metadata for one original reference",
+        "description": "Read-only current OU lookup requires original devices.inventory.read and, for an assigned OU, separate ous.read. No create or assignment right is granted. The server selects the original OU UUID and ownership generation from the actual owned device association. Retired, foreign or replaced-generation resources return not-current without current metadata. Rename, revision and parent changes return changed; current means the saved and live snapshots match. Original inventory/OU grants and the actual local association are revalidated before response; source replacement and concurrent changes reject the read. No device rows, audit events or pending outbox are changed. The reply expires at validUntil. Identity and Device remain separate databases, not an instantaneous distributed revocation transaction. With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OD-Device-Scope-Protocol",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "const": "1"
+            },
+            "description": "Private upgraded receiver opt-in. Absent retains the legacy tenant source; unknown versions return 400. Public device clients do not enable this protocol yet."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolve original read duties and current own OU metadata for one original reference",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuStatusAuthority"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Exact input/selectors required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original actor or source changed",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Separate actual inventory/OU duties required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Own device or selected OU absent",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unchanged or conflicting assignment",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original device, assignment or selected OU version changed; reload, never automatically retry",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Bounded JSON body required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Fresh MFA and exact strong If-Match required",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original source or physical receiving evidence unavailable",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "selection"
+                ],
+                "properties": {
+                  "selection": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DeviceOuReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -65708,7 +68438,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -65919,7 +68650,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -66476,7 +69208,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -66553,7 +69286,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -67332,7 +70066,8 @@
           "scopeType": {
             "enum": [
               "tenant",
-              "ou"
+              "ou",
+              "device-ou"
             ]
           },
           "ouId": {
@@ -69201,6 +71936,1865 @@
             }
           }
         }
+      },
+      "DeviceOrganizationalUnit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "generation",
+          "revision",
+          "name",
+          "parentId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generation": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "parentId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeviceOuSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "generation",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generation": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          }
+        }
+      },
+      "DeviceOuAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuProtocol",
+          "actorUserId",
+          "tenantId",
+          "deviceId",
+          "deviceRevision",
+          "revision",
+          "ou",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          },
+          "ou": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeviceOuReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuProtocol",
+          "actorUserId",
+          "tenantId",
+          "deviceId",
+          "deviceRevision",
+          "revision",
+          "ou",
+          "updatedAt",
+          "updatedBy",
+          "operationId",
+          "deliveryStatus"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          },
+          "ou": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deliveryStatus": {
+            "const": "pending"
+          }
+        }
+      },
+      "DeviceOuChoices": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuProtocol",
+          "actorUserId",
+          "tenantId",
+          "page",
+          "limit",
+          "total",
+          "units"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "units": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+            }
+          }
+        }
+      },
+      "DeviceOuHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuProtocol",
+          "actorUserId",
+          "tenantId",
+          "deviceId",
+          "page",
+          "limit",
+          "total",
+          "events"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "actorUserId",
+                "correlationId",
+                "reason",
+                "createdAt",
+                "before",
+                "after",
+                "deliveryStatus"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "actorUserId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "correlationId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 500
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "before": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "revision",
+                        "ou",
+                        "updatedAt",
+                        "updatedBy"
+                      ],
+                      "properties": {
+                        "revision": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        "ou": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updatedAt": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updatedBy": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "after": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "revision",
+                    "ou",
+                    "updatedAt",
+                    "updatedBy"
+                  ],
+                  "properties": {
+                    "revision": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]{0,18})$"
+                    },
+                    "ou": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "updatedBy": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "deliveryStatus": {
+                  "const": "pending"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DeviceOuAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuProtocol",
+          "inventory",
+          "ou",
+          "directoryGrant",
+          "validUntil"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuProtocol": {
+            "const": 1
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/InventoryAuthoritySource"
+          },
+          "ou": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "directoryGrant": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "roleId",
+                      "roleRevision",
+                      "scopeType",
+                      "ouId",
+                      "targetType",
+                      "targetId",
+                      "membershipId",
+                      "validUntil"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "scopeType": {
+                        "const": "tenant"
+                      },
+                      "ouId": {
+                        "type": "null"
+                      },
+                      "targetType": {
+                        "enum": [
+                          "user",
+                          "group"
+                        ]
+                      },
+                      "targetId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "membershipId": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "validUntil": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "roleId",
+                      "roleRevision",
+                      "scopeType",
+                      "ouId",
+                      "targetType",
+                      "targetId",
+                      "membershipId",
+                      "validUntil",
+                      "activationId",
+                      "mfaRevision",
+                      "authTime",
+                      "issuer",
+                      "subject",
+                      "actorContext"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "scopeType": {
+                        "const": "tenant"
+                      },
+                      "ouId": {
+                        "type": "null"
+                      },
+                      "targetType": {
+                        "enum": [
+                          "user",
+                          "group"
+                        ]
+                      },
+                      "targetId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "membershipId": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "validUntil": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                      },
+                      "activationId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "mfaRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "authTime": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$"
+                      },
+                      "issuer": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      },
+                      "actorContext": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "userId",
+                          "revision",
+                          "linkRevision",
+                          "rolesRevision"
+                        ],
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "revision": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,18}$",
+                            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                          },
+                          "linkRevision": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,18}$",
+                            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                          },
+                          "rolesRevision": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "No later than the original inventory, selected directory grant, token and fresh MFA deadlines."
+          }
+        }
+      },
+      "DeviceOuReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "generation"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generation": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          }
+        }
+      },
+      "DeviceOuCurrentStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuStatusProtocol",
+          "actorUserId",
+          "tenantId",
+          "deviceId",
+          "deviceRevision",
+          "revision",
+          "selection",
+          "state",
+          "currentOu",
+          "checkedAt",
+          "validUntil"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuStatusProtocol": {
+            "const": 1
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          },
+          "selection": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOuReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "unassigned",
+              "current",
+              "changed",
+              "not-current"
+            ]
+          },
+          "currentOu": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "Original read/source deadline; the displayed check must expire at this time."
+          }
+        }
+      },
+      "DeviceOuStatusAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuStatusProtocol",
+          "inventory",
+          "selection",
+          "currentOu",
+          "directoryGrant",
+          "validUntil"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuStatusProtocol": {
+            "const": 1
+          },
+          "inventory": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InventoryAuthoritySource"
+              },
+              {
+                "$ref": "#/components/schemas/InventoryScopedAuthoritySource"
+              }
+            ]
+          },
+          "selection": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOuReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentOu": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOrganizationalUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "directoryGrant": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "roleId",
+                      "roleRevision",
+                      "scopeType",
+                      "ouId",
+                      "targetType",
+                      "targetId",
+                      "membershipId",
+                      "validUntil"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "scopeType": {
+                        "const": "tenant"
+                      },
+                      "ouId": {
+                        "type": "null"
+                      },
+                      "targetType": {
+                        "enum": [
+                          "user",
+                          "group"
+                        ]
+                      },
+                      "targetId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "membershipId": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "validUntil": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "roleId",
+                      "roleRevision",
+                      "scopeType",
+                      "ouId",
+                      "targetType",
+                      "targetId",
+                      "membershipId",
+                      "validUntil",
+                      "activationId",
+                      "mfaRevision",
+                      "authTime",
+                      "issuer",
+                      "subject",
+                      "actorContext"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "roleRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "scopeType": {
+                        "const": "tenant"
+                      },
+                      "ouId": {
+                        "type": "null"
+                      },
+                      "targetType": {
+                        "enum": [
+                          "user",
+                          "group"
+                        ]
+                      },
+                      "targetId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "membershipId": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "validUntil": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$",
+                        "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                      },
+                      "activationId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "mfaRevision": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,18}$",
+                        "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                      },
+                      "authTime": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$"
+                      },
+                      "issuer": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      },
+                      "actorContext": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "userId",
+                          "revision",
+                          "linkRevision",
+                          "rolesRevision"
+                        ],
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "revision": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,18}$",
+                            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                          },
+                          "linkRevision": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,18}$",
+                            "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                          },
+                          "rolesRevision": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "No later than the original inventory, selected directory grant, token and fresh MFA deadlines."
+          }
+        }
+      },
+      "DeviceScopeResource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deviceId",
+          "deviceRevision",
+          "revision",
+          "ou"
+        ],
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "deviceRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "description": "Original local association revision, at most BIGINT max. Zero requires ou=null."
+          },
+          "ou": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceOuReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeviceScopeDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocol",
+          "inherent",
+          "grants",
+          "units",
+          "resource"
+        ],
+        "properties": {
+          "protocol": {
+            "const": 1
+          },
+          "inherent": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 3,
+            "items": {
+              "enum": [
+                "devices.inventory.read",
+                "devices.inventory.create",
+                "devices.inventory.assign",
+                "devices.compliance.read",
+                "devices.compliance.manage"
+              ]
+            }
+          },
+          "grants": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "permission",
+                "source"
+              ],
+              "properties": {
+                "permission": {
+                  "enum": [
+                    "devices.inventory.read",
+                    "devices.inventory.create",
+                    "devices.inventory.assign",
+                    "devices.compliance.read",
+                    "devices.compliance.manage"
+                  ]
+                },
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "roleId",
+                        "roleRevision",
+                        "targetType",
+                        "targetId",
+                        "membershipId",
+                        "validUntil",
+                        "scopeType",
+                        "ouId"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "targetType": {
+                          "enum": [
+                            "user",
+                            "group"
+                          ]
+                        },
+                        "targetId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "membershipId": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "validUntil": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "description": "Original expiry, no earlier than the source deadline."
+                        },
+                        "scopeType": {
+                          "const": "tenant"
+                        },
+                        "ouId": {
+                          "type": "null"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "roleId",
+                        "roleRevision",
+                        "targetType",
+                        "targetId",
+                        "membershipId",
+                        "validUntil",
+                        "scopeType",
+                        "ouId",
+                        "activationId",
+                        "mfaRevision",
+                        "authTime",
+                        "issuer",
+                        "subject",
+                        "actorContext"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "targetType": {
+                          "enum": [
+                            "user",
+                            "group"
+                          ]
+                        },
+                        "targetId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "membershipId": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "validUntil": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "description": "Original expiry, no earlier than the source deadline."
+                        },
+                        "scopeType": {
+                          "const": "tenant"
+                        },
+                        "ouId": {
+                          "type": "null"
+                        },
+                        "activationId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "mfaRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "authTime": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "issuer": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "actorContext": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "userId",
+                            "revision",
+                            "linkRevision",
+                            "rolesRevision"
+                          ],
+                          "properties": {
+                            "userId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]{0,18}$",
+                              "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                            },
+                            "linkRevision": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]{0,18}$",
+                              "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                            },
+                            "rolesRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "roleId",
+                        "roleRevision",
+                        "targetType",
+                        "targetId",
+                        "membershipId",
+                        "validUntil",
+                        "scopeType",
+                        "ouId",
+                        "ouGeneration"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "targetType": {
+                          "enum": [
+                            "user",
+                            "group"
+                          ]
+                        },
+                        "targetId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "membershipId": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "validUntil": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "description": "Original expiry, no earlier than the source deadline."
+                        },
+                        "scopeType": {
+                          "const": "device-ou"
+                        },
+                        "ouId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "ouGeneration": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "roleId",
+                        "roleRevision",
+                        "targetType",
+                        "targetId",
+                        "membershipId",
+                        "validUntil",
+                        "scopeType",
+                        "ouId",
+                        "ouGeneration",
+                        "activationId",
+                        "mfaRevision",
+                        "authTime",
+                        "issuer",
+                        "subject",
+                        "actorContext"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "roleRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "targetType": {
+                          "enum": [
+                            "user",
+                            "group"
+                          ]
+                        },
+                        "targetId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "membershipId": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "validUntil": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "description": "Original expiry, no earlier than the source deadline."
+                        },
+                        "scopeType": {
+                          "const": "device-ou"
+                        },
+                        "ouId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "ouGeneration": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "activationId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                        },
+                        "mfaRevision": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "authTime": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,18}$",
+                          "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                        },
+                        "issuer": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "actorContext": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "userId",
+                            "revision",
+                            "linkRevision",
+                            "rolesRevision"
+                          ],
+                          "properties": {
+                            "userId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]{0,18}$",
+                              "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                            },
+                            "linkRevision": {
+                              "type": "string",
+                              "pattern": "^[1-9][0-9]{0,18}$",
+                              "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                            },
+                            "rolesRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "units": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "generation",
+                "roots"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "generation": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Canonical positive BIGINT decimal, at most 9223372036854775807."
+                },
+                "roots": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 128,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  }
+                }
+              }
+            }
+          },
+          "resource": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceScopeResource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "Canonical permission/source ordering and UUID-sorted current own units/roots. At least one device-ou source; each original root must occur with its original generation. No compliance.manage in scoped grants. Duties equal the inherent/grant union; source expiry cannot exceed any selected original grant/PIM expiry. PIM sources retain the same actor context and independently bound MFA. No private provenance is included in public device DTOs."
+      },
+      "InventoryScopedAuthoritySource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil",
+          "target",
+          "scope"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "devices.inventory.read",
+                "devices.inventory.create",
+                "devices.inventory.assign"
+              ]
+            },
+            "description": "Canonical ordered duties. Legacy sources carry all three. Partial delegated sources require exact retained delegation."
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "Unextended original deadline, at most the original token expiry and auth_time+300; enforced again at physical inventory commit."
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "revision",
+                  "enabled"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,18}$",
+                    "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/DeviceScopeDescriptor"
+          }
+        },
+        "description": "With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released."
+      },
+      "DeviceComplianceScopedAuthoritySource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil",
+          "target",
+          "scope"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "permissions": {
+            "oneOf": [
+              {
+                "const": [
+                  "devices.compliance.read"
+                ]
+              },
+              {
+                "const": [
+                  "devices.compliance.read",
+                  "devices.compliance.manage"
+                ]
+              }
+            ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "Unextended original deadline, at most the original token expiry and auth_time+300; enforced again at physical inventory commit."
+          },
+          "target": {
+            "type": "null"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/DeviceScopeDescriptor"
+          }
+        },
+        "description": "With the explicit private protocol header, Identity may return source schema 2 when a duty depends on device-ou grants. The original bearer, independent MFA age of at most 300 seconds, current original root generations, hierarchy, grant/PIM provenance and earliest expiry remain mandatory. Tenant and inherent duties remain independent. The source is not a reusable credential. Device must independently check actual local association versions and generations; the echoed resource is only a requested binding. Read receivers are implemented behind explicit opt-in; scoped writes, public capabilities and GUI activation are not released."
       }
     }
   }

@@ -22,3 +22,12 @@ test('the return routing fix does not route unrelated remote commands into a ret
   const match = rules.find(rule => getPathMatch(rule.source)(pathname));
   expect(match).toBeUndefined();
 });
+
+// First-match routing must cover both the static catalog and per-device metadata.
+test.each(['/api/devices/organizational-units', `/api/devices/${requestId}/organizational-unit`, `/api/devices/${requestId}/organizational-unit/history`])('device OU route %s reaches the canonical receiver', async pathname => {
+  const rules = await configuration.rewrites();
+  const match = rules.find(rule => getPathMatch(rule.source)(pathname));
+  expect(match).toBeDefined();
+  expect(match.source).toBe(pathname === '/api/devices/organizational-units' ? pathname : '/api/devices/:id/organizational-unit/:path*');
+  expect(match.destination).toBe(`${process.env.DEVICE_SERVICE_URL || 'http://device-service:3003'}${match.source}`);
+});

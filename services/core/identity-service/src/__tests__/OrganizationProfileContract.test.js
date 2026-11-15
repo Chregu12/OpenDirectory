@@ -1,5 +1,9 @@
 const { FIELDS, normalizeProfile, organizationEtag } = require('../../../../../packages/organization-profile-contract');
 const profile = { name: 'Company AG', legalForm: '', registrationNumber: '', taxId: '', addressLine1: 'Street 1', addressLine2: '', postalCode: '8000', city: 'Zürich', country: 'CH', timezone: 'UTC', defaultLanguage: 'de', contactEmail: 'contact@example.invalid', contactPhone: '', website: '' };
+test('grant eligibility and approval schemas distinguish device OU scopes from user OU scopes',()=>{
+ const schemas=require('../../scripts/organization-openapi').organizationOpenApi().components.schemas;
+ for(const name of ['CompanyRoleGrant','CompanyRoleAssignment','CompanyRoleEligibility','CompanyPimEligibilityInput','CompanyPimRequest'])expect(schemas[name].properties.scopeType.enum).toEqual(require('../CompanyRoleContract').SCOPE_TYPES);
+});
 test('normalizes only explicit profile fields without inventing company or verification data', () => {
   expect(normalizeProfile({ ...profile, name: '  Company AG  ' })).toEqual(profile);
   expect(Object.keys(normalizeProfile(profile))).toEqual(Object.keys(FIELDS));
@@ -46,7 +50,7 @@ test('every minimal license or policy source documents the mandatory receiving p
 });
 test('company license operations document real finite inventory, exact versions and explicit original source without a global licensing permission', () => {
   const document = require('../../scripts/organization-openapi').organizationOpenApi(); const schemas = document.components.schemas;
-  expect(document.info.version).toBe('1.39.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
+  expect(document.info.version).toBe('1.43.0'); expect(schemas.CompanyLicensePool.properties.totalSeats).toEqual({ type: 'integer', minimum: 1, maximum: 10000 });
   expect(schemas.CompanyLicenseAuthoritySource.required).toHaveLength(11); expect(schemas.CompanyLicenseAuthoritySource.properties).not.toHaveProperty('delegation');
   expect(schemas.CompanyLicensePool.properties.allocationMode.const).toBe('local-only'); expect(schemas.CompanyLicenseCapabilities.properties.permissions.const).toEqual(['company.apps.read', 'company.apps.create', 'company.apps.assign']);
   expect(document.paths['/api/licenses/company/pools/{id}/assignments'].post.parameters).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'If-Match', required: true })]));

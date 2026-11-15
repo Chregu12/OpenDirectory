@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { validUuid } = require('../../../../packages/identity-authorization-contract');
 const { validateDeviceValues, validateDeviceAssignment, validateDeviceUpdate, validateDeviceLifecycle, validateDeviceEtag, deviceEtag, DEVICE_FIELDS, DEVICE_CLASSES, INVENTORY_LIFECYCLES } = require('../../../../packages/device-inventory-contract');
 const { InventoryAuthority } = require('./InventoryAuthority');
+const Scope = require('./DeviceScope');
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function identifier(value) { if (!validUuid(value)) fail(400, 'Canonical inventory device UUID required'); return value.toLowerCase(); }
 function pageQuery(query = {}, searchAllowed = false) {
@@ -38,7 +39,7 @@ class DeviceInventory {
   }
   async receiving(client) { try { await client.query('SELECT device_inventory_receiving()'); } catch(error) { throw Object.assign(new Error('Inventory receiver unavailable'),{status:503,cause:error}); } }
   async checkpoint(source,user,authorization,target=null) {
-    if(JSON.stringify(source)!==JSON.stringify(await this.authority.read(authorization,user,target)))fail(401,'Original inventory authority changed');
+    if(JSON.stringify(source)!==JSON.stringify(await this.authority.read(authorization,user,target,...(source.schemaVersion===2&&source.scope.resource!==null?[source.scope.resource]:[]))))fail(401,'Original inventory authority changed');
   }
   async capabilities(user, authorization) {
     const source=await this.authorized(user,authorization,'devices.inventory.read');await this.database.transaction(client=>this.receiving(client),{readOnly:true});await this.checkpoint(source,user,authorization);
@@ -46,34 +47,41 @@ class DeviceInventory {
   }
   async list(query,user,authorization) {
     const page=pageQuery(query,true);const source=await this.authorized(user,authorization,'devices.inventory.read');
+    let scope;
     const result=await this.database.transaction(async client=>{
-      await this.receiving(client);const where=selectionWhere;
+      await this.receiving(client);
       const params=[source.tenant.id,page.search,page.platform,page.lifecycle,page.ownership,page.deviceClass];
+      const where=selectionWhere+await Scope.predicate(client,source,'devices.inventory.read','devices.id',params);
       const total=Number((await client.query('SELECT count(*) AS count FROM devices WHERE '+where,params)).rows[0].count);
       const column={createdAt:'inventory_created_at',updatedAt:'inventory_updated_at',assetId:'lower(asset_id)'}[page.sort];
-      const rows=(await client.query('SELECT id FROM devices WHERE '+where+' ORDER BY '+column+' '+page.order+',id LIMIT $7 OFFSET $8',[...params,page.limit,(page.page-1)*page.limit])).rows;
+      const rows=(await client.query('SELECT id FROM devices WHERE '+where+' ORDER BY '+column+' '+page.order+',id LIMIT $'+(params.length+1)+' OFFSET $'+(params.length+2),[...params,page.limit,(page.page-1)*page.limit])).rows;
       const devices=[];for(const row of rows){const current=await this.current(client,source.tenant.id,row.id);devices.push(device(current.row,current.link));}
+      scope=await Scope.pin(client,source,'devices.inventory.read',rows.map(row=>row.id));
       return{schemaVersion:1,actorUserId:source.actorUserId,devices,total,page:page.page,limit:page.limit};
-    },{readOnly:true});await this.checkpoint(source,user,authorization);return result;
+    },{readOnly:true});await this.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
   }
   async get(id,user,authorization) {
     const target=identifier(id);const source=await this.authorized(user,authorization,'devices.inventory.read');
-    const result=await this.database.transaction(async client=>{await this.receiving(client);const current=await this.current(client,source.tenant.id,target);return device(current.row,current.link);},{readOnly:true});
-    await this.checkpoint(source,user,authorization);return result;
+    let scope;
+    const result=await this.database.transaction(async client=>{await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',target);const current=await this.current(client,source.tenant.id,target);scope=await Scope.pin(client,source,'devices.inventory.read',[target]);return device(current.row,current.link);},{readOnly:true});
+    await this.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
   }
   async exportCsv(query,user,authorization) {
     if (query.page!==undefined || query.limit!==undefined) fail(400,'Export uses the complete filtered inventory');
     const filter=pageQuery(query,true);const source=await this.authorized(user,authorization,'devices.inventory.read');
+    let scope;
     const result=await this.database.transaction(async client=>{
       await this.receiving(client);
       const column={createdAt:'inventory_created_at',updatedAt:'inventory_updated_at',assetId:'lower(asset_id)'}[filter.sort];
-      const rows=(await client.query('SELECT device_inventory_row(unit) AS state,(SELECT to_jsonb(link) FROM device_inventory_assignments link WHERE link.device_id=unit.id AND link.released_at IS NULL) AS assignment FROM devices unit WHERE '+selectionWhere+' ORDER BY '+column+' '+filter.order+',id LIMIT 5001',[source.tenant.id,filter.search,filter.platform,filter.lifecycle,filter.ownership,filter.deviceClass])).rows;
+      const params=[source.tenant.id,filter.search,filter.platform,filter.lifecycle,filter.ownership,filter.deviceClass],where=selectionWhere+await Scope.predicate(client,source,'devices.inventory.read','unit.id',params);
+      const rows=(await client.query('SELECT device_inventory_row(unit) AS state,(SELECT to_jsonb(link) FROM device_inventory_assignments link WHERE link.device_id=unit.id AND link.released_at IS NULL) AS assignment FROM devices unit WHERE '+where+' ORDER BY '+column+' '+filter.order+',id LIMIT 5001',params)).rows;
       if(rows.length>5000)fail(413,'Narrow the export filters; at most 5000 devices can be exported');
       const fields=[...DEVICE_FIELDS,'lifecycle','assignedUserId'];
       const cell=value=>'"'+String(value ?? '').replace(/^([\s]*)([=+\-@])/u,"'$1$2").replace(/"/g,'""')+'"';
       const data=rows.map(row=>device(row.state,row.assignment));
+      scope=await Scope.pin(client,source,'devices.inventory.read',data.map(row=>row.id));
       return {tenantId:source.tenant.id,count:data.length,csv:'\uFEFF'+[fields.map(cell).join(','),...data.map(row=>fields.map(field=>cell(row[field])).join(','))].join('\r\n')+'\r\n'};
-    },{readOnly:true});await this.checkpoint(source,user,authorization);return result;
+    },{readOnly:true});await this.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
   }
   async create(body,user,authorization,correlationId) { return this.change('create',null,validateDeviceValues(body),null,user,authorization,correlationId); }
   async assign(id,body,expected,user,authorization,correlationId) {
@@ -108,15 +116,17 @@ class DeviceInventory {
   }
   async history(id,query,user,authorization) {
     const target=identifier(id);const page=pageQuery(query);const source=await this.authorized(user,authorization,'devices.inventory.read');
+    let scope;
     const result=await this.database.transaction(async client=>{
-      await this.receiving(client);await this.current(client,source.tenant.id,target);
+      await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',target);await this.current(client,source.tenant.id,target);
+      scope=await Scope.pin(client,source,'devices.inventory.read',[target]);
       const total=Number((await client.query('SELECT count(*) AS count FROM device_inventory_events WHERE tenant_id=$1 AND device_id=$2',[source.tenant.id,target])).rows[0].count);
       const rows=(await client.query("SELECT event.*,outbox.status AS delivery_status FROM device_inventory_events event LEFT JOIN device_inventory_outbox outbox ON outbox.id=event.id AND outbox.tenant_id=event.tenant_id WHERE event.tenant_id=$1 AND event.device_id=$2 ORDER BY event.created_at DESC,event.id DESC LIMIT $3 OFFSET $4",[source.tenant.id,target,page.limit,(page.page-1)*page.limit])).rows;
       if(rows.some(row=>row.delivery_status!=='pending'))fail(503,'Retained inventory history evidence unavailable');
       const columns={assetId:'asset_id',serialNumber:'serial_number',manufacturer:'manufacturer',model:'model',deviceClass:'device_class',platform:'platform',osVersion:'os_version',ownership:'ownership',purchaseDate:'purchase_date',warrantyEnd:'warranty_end',description:'description',lifecycle:'inventory_lifecycle'};
       return{schemaVersion:1,actorUserId:source.actorUserId,deviceId:target,total,page:page.page,limit:page.limit,events:rows.map(row=>({id:row.id,tenantId:row.tenant_id,deviceId:row.device_id,type:row.type,version:row.version,actorUserId:row.actor_user_id,correlationId:row.correlation_id,createdAt:iso(row.created_at),before:row.before_state?summary(row.before_state,row.before_assignment):null,after:summary(row.after_state,row.after_assignment),deliveryStatus:row.delivery_status,
         ...(['update','lifecycle'].includes(row.action)?{reason:row.proof.values.reason,changes:Object.entries(columns).filter(([,column])=>(row.before_state[column] || '')!==(row.after_state[column] || '')).map(([field,column])=>({field,before:row.before_state[column] || '',after:row.after_state[column] || ''}))}:{})}))};
-    },{readOnly:true});await this.checkpoint(source,user,authorization);return result;
+    },{readOnly:true});await this.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
   }
 }
 module.exports={DeviceInventory,pageQuery,selectionWhere,inventoryDevice:device};

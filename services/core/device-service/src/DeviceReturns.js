@@ -1,4 +1,5 @@
 'use strict';
+const Scope=require('./DeviceScope');
 
 const { randomUUID } = require('node:crypto');
 const { DeviceInventory } = require('./DeviceInventory');
@@ -48,31 +49,36 @@ class DeviceReturns {
   }
   async list(query, user, authorization) {
     const page = returnListQuery(query); const source = await this.initial(user, authorization);
+    let scope;
     const result = await this.database.transaction(async client => {
       await this.receiving(client);
-      const where = "task.tenant_id=$1 AND ($2::text IS NULL OR CASE WHEN task.status='requested' AND link.released_at IS NOT NULL THEN 'assignment_changed' ELSE task.status END=$2)";
+      const params=[source.tenant.id,page.status];
+      const where = "task.tenant_id=$1 AND ($2::text IS NULL OR CASE WHEN task.status='requested' AND link.released_at IS NOT NULL THEN 'assignment_changed' ELSE task.status END=$2)"+await Scope.predicate(client,source,'devices.inventory.read','task.device_id',params);
       const from = ' FROM device_return_requests task JOIN device_inventory_assignments link ON link.id=task.assignment_id WHERE ' + where;
-      const total = Number((await client.query('SELECT count(*) AS count' + from, [source.tenant.id, page.status])).rows[0].count);
-      const ids = (await client.query('SELECT task.id' + from + ' ORDER BY task.requested_at DESC,task.id DESC LIMIT 25 OFFSET $3', [source.tenant.id, page.status, (page.page - 1) * 25])).rows;
+      const total = Number((await client.query('SELECT count(*) AS count' + from, params)).rows[0].count);
+      const ids = (await client.query('SELECT task.id' + from + ' ORDER BY task.requested_at DESC,task.id DESC LIMIT 25 OFFSET $'+(params.length+1), [...params, (page.page - 1) * 25])).rows;
       const requests = []; for (const item of ids) requests.push(taskDto(await this.readTask(client, source.tenant.id, item.id)));
+      scope=await Scope.pin(client,source,'devices.inventory.read',requests.map(request=>request.deviceId));
       return { ...envelope(source), requests, total, page: page.page, limit: 25 };
-    }, { readOnly: true }); await this.checkpoint(source, user, authorization); return result;
+    }, { readOnly: true }); await this.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async get(id, user, authorization) {
     identifier(id); const source = await this.initial(user, authorization);
-    const result = await this.database.transaction(async client => { await this.receiving(client); return taskDto(await this.readTask(client, source.tenant.id, id)); }, { readOnly: true });
-    await this.checkpoint(source, user, authorization); return result;
+    let scope;
+    const result = await this.database.transaction(async client => { await this.receiving(client);const row=await this.readTask(client, source.tenant.id, id);await Scope.requireDevice(client,source,'devices.inventory.read',row.state.device_id);scope=await Scope.pin(client,source,'devices.inventory.read',[row.state.device_id]); return taskDto(row); }, { readOnly: true });
+    await this.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async history(id, query, user, authorization) {
     identifier(id); const page = returnListQuery(query); if (Object.hasOwn(query, 'status')) fail(400, 'No history status selector'); const source = await this.initial(user, authorization);
+    let scope;
     const result = await this.database.transaction(async client => {
-      await this.receiving(client); await this.readTask(client, source.tenant.id, id);
+      await this.receiving(client);const task=await this.readTask(client, source.tenant.id, id);await Scope.requireDevice(client,source,'devices.inventory.read',task.state.device_id);scope=await Scope.pin(client,source,'devices.inventory.read',[task.state.device_id]);
       const total = Number((await client.query('SELECT count(*) AS count FROM device_return_events WHERE request_id=$1 AND tenant_id=$2', [id, source.tenant.id])).rows[0].count);
       const rows = (await client.query("SELECT event.* FROM device_return_events event JOIN device_return_outbox outbox ON outbox.id=event.id AND outbox.tenant_id=event.tenant_id AND outbox.status='pending' WHERE event.request_id=$1 AND event.tenant_id=$2 ORDER BY event.created_at,event.id LIMIT 25 OFFSET $3", [id, source.tenant.id, (page.page - 1) * 25])).rows;
       return { ...envelope(source), requestId: id, events: rows.map(event => ({ id: event.id, tenantId: event.tenant_id, requestId: event.request_id, deviceId: event.device_id, assignmentId: event.assignment_id,
         type: event.type, version: event.version, actorUserId: event.actor_user_id, correlationId: event.correlation_id, createdAt: iso(event.created_at), before: event.before_state, after: event.after_state,
         inventoryOperationId: event.inventory_operation_id, reason: event.reason, deliveryStatus: 'pending' })), total, page: page.page, limit: 25 };
-    }, { readOnly: true }); await this.checkpoint(source, user, authorization); return result;
+    }, { readOnly: true }); await this.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async offboardingCapabilities(userId, query, user, authorization) {
     const { workflowId } = offboardingReturnCapabilityQuery(query); const source = await this.initial(user, authorization, workflowId, userId);
@@ -80,11 +86,12 @@ class DeviceReturns {
   }
   async offboardingList(userId, query, user, authorization) {
     const page = offboardingReturnQuery(query); const source = await this.initial(user, authorization, page.workflowId, userId);
+    let scope;
     const result = await this.database.transaction(async client => {
       await this.receiving(client);
-      const from = ' FROM device_inventory_assignments link JOIN devices unit ON unit.id=link.device_id AND unit.tenant_id=link.tenant_id WHERE link.tenant_id=$1 AND link.user_id=$2 AND link.released_at IS NULL';
-      const total = Number((await client.query('SELECT count(*) AS count' + from, [source.tenant.id, userId])).rows[0].count);
-      const rows = (await client.query('SELECT unit.id,unit.asset_id,unit.serial_number,unit.inventory_revision::text AS revision,link.id AS assignment_id' + from + ' ORDER BY unit.inventory_created_at,unit.id LIMIT 25 OFFSET $3', [source.tenant.id, userId, (page.page - 1) * 25])).rows;
+      const params=[source.tenant.id,userId],from = ' FROM device_inventory_assignments link JOIN devices unit ON unit.id=link.device_id AND unit.tenant_id=link.tenant_id WHERE link.tenant_id=$1 AND link.user_id=$2 AND link.released_at IS NULL'+await Scope.predicate(client,source,'devices.inventory.read','unit.id',params);
+      const total = Number((await client.query('SELECT count(*) AS count' + from, params)).rows[0].count);
+      const rows = (await client.query('SELECT unit.id,unit.asset_id,unit.serial_number,unit.inventory_revision::text AS revision,link.id AS assignment_id' + from + ' ORDER BY unit.inventory_created_at,unit.id LIMIT 25 OFFSET $'+(params.length+1), [...params, (page.page - 1) * 25])).rows;
       const devices = [];
       for (const row of rows) {
         const current = await this.inventory.current(client, source.tenant.id, row.id);
@@ -93,19 +100,21 @@ class DeviceReturns {
         if (open) await this.readTask(client, source.tenant.id, open.id);
         devices.push({ deviceId: row.id, assetId: row.asset_id, serialNumber: row.serial_number, deviceRevision: row.revision, assignmentId: row.assignment_id, openRequestId: open?.id || null });
       }
-      return { ...negativeEnvelope(source), devices, total, page: page.page, limit: 25 };
-    }, { readOnly: true }); await this.checkpoint(source, user, authorization); return result;
+      scope=await Scope.pin(client,source,'devices.inventory.read',rows.map(row=>row.id));return { ...negativeEnvelope(source), devices, total, page: page.page, limit: 25 };
+    }, { readOnly: true }); await this.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async offboardingHistory(userId, query, user, authorization) {
     const page = offboardingReturnQuery(query); const source = await this.initial(user, authorization, page.workflowId, userId);
+    let scope;
     const result = await this.database.transaction(async client => {
       await this.receiving(client);
-      const where = 'tenant_id=$1 AND workflow_id=$2 AND user_id=$3'; const values = [source.tenant.id, page.workflowId, userId];
+      const values = [source.tenant.id, page.workflowId, userId],where = 'tenant_id=$1 AND workflow_id=$2 AND user_id=$3'+await Scope.predicate(client,source,'devices.inventory.read','device_return_requests.device_id',values);
       const total = Number((await client.query('SELECT count(*) AS count FROM device_return_requests WHERE ' + where, values)).rows[0].count);
-      const ids = (await client.query('SELECT id FROM device_return_requests WHERE ' + where + ' ORDER BY requested_at DESC,id DESC LIMIT 25 OFFSET $4', [...values, (page.page - 1) * 25])).rows;
+      const ids = (await client.query('SELECT id FROM device_return_requests WHERE ' + where + ' ORDER BY requested_at DESC,id DESC LIMIT 25 OFFSET $'+(values.length+1), [...values, (page.page - 1) * 25])).rows;
       const requests = []; for (const item of ids) requests.push(taskDto(await this.readTask(client, source.tenant.id, item.id)));
+      scope=await Scope.pin(client,source,'devices.inventory.read',requests.map(request=>request.deviceId));
       return { ...envelope(source), workflowId: page.workflowId, userId, target: { enabled: false, eligibilityRevision: source.target.eligibilityRevision }, requests, total, page: page.page, limit: 25 };
-    }, { readOnly: true }); await this.checkpoint(source, user, authorization); return result;
+    }, { readOnly: true }); await this.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async captured(client, source, item, reason, lock = false) {
     if (lock) await client.query('SELECT id FROM devices WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [item.deviceId, source.tenant.id]);
