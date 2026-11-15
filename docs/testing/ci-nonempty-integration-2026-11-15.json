@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T02:34:23.070557+00:00",
+  "checkedAt": "2026-11-15T04:19:39.185403+00:00",
   "sourceBaseCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
-  "status": "local-cross-platform-runner-regressions-passed-full-ci-pending",
+  "status": "local-cross-platform-and-complete-linux-source-ci-passed",
   "originalReproduction": {
     "node": "20.20.2",
     "exitCode": 0,
@@ -89,6 +89,32 @@
     "The harness tests use explicit disposable test programs and prove runner behavior, not application authorization.",
     "The five real PostgreSQL cases validate shared-runner operation, not complete native Identity/OAuth/browser coverage.",
     "No production application source, users, grants, keys or database data were changed.",
-    "Complete CI for this test-only followup is still pending."
-  ]
+    "Complete main and PIM source CI passed; later feature branches retain their own separate gates."
+  ],
+  "completeLinuxCi": {
+    "main": {
+      "runId": 43669454896,
+      "commit": "a8affc5a51f0f15290e5c13ad31219a083887c82",
+      "successfulJobs": 9,
+      "totalJobs": 9,
+      "licensePassed": 557,
+      "identityPassed": 806,
+      "oauthPassed": 306,
+      "browserMediationPassed": 67,
+      "actualBrowserPassed": 59,
+      "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669454896"
+    },
+    "pim": {
+      "runId": 43669472668,
+      "commit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+      "successfulJobs": 9,
+      "totalJobs": 9,
+      "licensePassed": 557,
+      "identityPassed": 815,
+      "oauthPassed": 306,
+      "browserMediationPassed": 67,
+      "actualBrowserPassed": 60,
+      "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669472668"
+    }
+  }
 }

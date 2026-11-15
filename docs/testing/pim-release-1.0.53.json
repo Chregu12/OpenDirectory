@@ -1,14 +1,44 @@
 {
-  "checkedAt": "2026-11-15T02:20:18.493419+00:00",
-  "status": "images-published-migration-and-startup-passed-full-ci-and-rollout-pending",
+  "checkedAt": "2026-11-15T04:19:39.185403+00:00",
+  "status": "deployed-complete-source-ci-and-live-runtime-verified",
   "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
   "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/5",
   "ci": {
-    "mainRunId": 43662796359,
-    "pimRunId": 43663348061,
-    "lastObservedSuccessfulJobsPerRun": 8,
+    "mainRunId": 43669454896,
+    "pimRunId": 43669472668,
+    "lastObservedSuccessfulJobsPerRun": 9,
     "totalJobsPerRun": 9,
-    "completeResult": "pending"
+    "completeResult": "success",
+    "results": {
+      "main": {
+        "runId": 43669454896,
+        "commit": "a8affc5a51f0f15290e5c13ad31219a083887c82",
+        "successfulJobs": 9,
+        "totalJobs": 9,
+        "licensePassed": 557,
+        "identityPassed": 806,
+        "oauthPassed": 306,
+        "browserMediationPassed": 67,
+        "actualBrowserPassed": 59,
+        "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669454896"
+      },
+      "pim": {
+        "runId": 43669472668,
+        "commit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+        "successfulJobs": 9,
+        "totalJobs": 9,
+        "licensePassed": 557,
+        "identityPassed": 815,
+        "oauthPassed": 306,
+        "browserMediationPassed": 67,
+        "actualBrowserPassed": 60,
+        "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669472668"
+      }
+    },
+    "previousFailedRuns": {
+      "mainRunId": 43662796359,
+      "pimRunId": 43663348061
+    }
   },
   "chart": {
     "chartVersion": "0.1.56",
@@ -33,7 +63,8 @@
       "opendirectory-policy-service"
     ],
     "allOtherResourceBodiesUnchanged": true,
-    "allowedChanges": "Four image references and explicit OAuth Identity receiver only"
+    "allowedChanges": "Four image references and explicit OAuth Identity receiver only",
+    "releaseAfter": 86
   },
   "images": {
     "identity-service": {
@@ -185,9 +216,18 @@
     "reason": "Restrictive archive extraction umask made source inaccessible to non-root users. Corrected code modes and rebuilt under distinct r2 tags.",
     "validImagesAreR2Only": true
   },
-  "rollout": "not-applied; complete source CI and fresh database/upload backups required",
+  "rollout": {
+    "status": "deployed-and-verified",
+    "context": "default",
+    "namespace": "opendirectory",
+    "releaseBefore": 85,
+    "releaseAfter": 86,
+    "appVersion": "1.0.53",
+    "verifiedAt": "2026-11-15T04:15:13.158535+00:00",
+    "automaticRollbackUsed": false
+  },
   "limits": [
-    "This is prepared-release evidence, not evidence of productive availability.",
+    "Live verification covers the reviewed release, ready deployments, exact image digests, service health, certificate-verified HTTPS denials and SQL receivers. It is not full platform or actual human sign-in acceptance.",
     "The 133-table migration rehearsal used an earlier consistent per-database production archive, not a current coordinated platform backup.",
     "Container smoke covers actual image startup, PostgreSQL migration, login page and anonymous denials. Complete authenticated flows use the separately documented disposable browser fixtures.",
     "No productive users, credentials, MFA proofs, grants or PIM activations were created.",
@@ -311,5 +351,166 @@
     "previousImagePimReceiverAccepted": false,
     "testedForwardRepair": true,
     "sqlApprovalReceiverRequiredInAcceptance": true
+  },
+  "testedSourceCommit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+  "releaseRuntimeSourceMatchesTestedPimHead": true,
+  "liveVerification": {
+    "checkedAt": "2026-11-15T04:15:13.158535+00:00",
+    "release": {
+      "name": "opendirectory",
+      "namespace": "opendirectory",
+      "revision": "86",
+      "updated": "2026-11-15 05:14:34.8754 +0100 CET",
+      "status": "deployed",
+      "chart": "opendirectory-lite-0.1.56",
+      "app_version": "1.0.53"
+    },
+    "backupCompletedAt": "2026-11-15T04:13:14.029047+00:00",
+    "deployments": {
+      "opendirectory-api-backend": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-api-gateway": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-app-store": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:a2a7344c7a678e6e977f6448eed4fb4558f63eab75ae869d69aa07c533cd35cc"
+      },
+      "opendirectory-auth-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-device-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-identity-service": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:615439dad407944883e836c3aaa1f5b2f0990bcf3756e4d4e94aa463e67722f6"
+      },
+      "opendirectory-integration-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-license-management": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-oauth-provider": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:7067417be5cf7fbca88f35ace2c65ee17086a190c9aead42446ec8a061c822c7"
+      },
+      "opendirectory-policy-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-web-app": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:5f98bcbff77ebd6f80b653eb5d4107a48a1253aa8567b9a7ef28f02c6a83594c"
+      }
+    },
+    "health": {
+      "opendirectory-identity-service": {
+        "status": 200
+      },
+      "opendirectory-web-app": {
+        "status": 200
+      },
+      "opendirectory-oauth-provider": {
+        "status": 200
+      },
+      "opendirectory-app-store": {
+        "status": 200
+      }
+    },
+    "https": {
+      "/login": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/.well-known/openid-configuration": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/api/identity/access": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/capabilities": {
+        "status": 401,
+        "certificateVerified": true
+      }
+    },
+    "receivers": {
+      "identity_company_role_receiving": true,
+      "identity_company_group_rule_live_receiving": true,
+      "identity_company_activation_receiving": true,
+      "identity_company_pim_approval_receiving": true
+    },
+    "appStoreUploadDirectoryWritableAsContainerUser": true,
+    "credentialValidator": {
+      "validShapeAccepted": true,
+      "invalidShapeRejected": true,
+      "pureReadOnlyInputs": true,
+      "noUserRecordsCreated": true
+    },
+    "limits": [
+      "Actual human production sign-in was not performed.",
+      "Device OU metadata PR #6 is not deployed.",
+      "The archives are individually consistent, not a coordinated cross-database or key-recovery checkpoint."
+    ],
+    "status": "passed"
+  },
+  "freshBackup": {
+    "startedAt": "2026-11-15T04:13:07.198827+00:00",
+    "completedAt": "2026-11-15T04:13:14.029047+00:00",
+    "consistentAcrossDatabases": false,
+    "databases": {
+      "auth": {
+        "bytes": 83919,
+        "sha256": "0d9160239536b772ce6ca8ca82a38573d68e5bdd20769236bdb6608caae7b70d",
+        "tocEntries": 150
+      },
+      "oauth": {
+        "bytes": 176125,
+        "sha256": "80591036de213765572fdbb0c0623e2b44987ff7eca15c49555239d09b55ba53",
+        "tocEntries": 270
+      },
+      "identity": {
+        "bytes": 3735048,
+        "sha256": "6e71da9b3c430ad0efdc70ed6fd6f98154b0f844a73f329c5585bc75d4114c91",
+        "tocEntries": 6230
+      },
+      "devices": {
+        "bytes": 180853,
+        "sha256": "e319c6fef27a5c4d3ad7f0c3b1e028e916da9949ac2c9dd5607ca85d63a5208e",
+        "tocEntries": 209
+      },
+      "app_store": {
+        "bytes": 19970,
+        "sha256": "d54c8cad822d7dcbb577cd96494c62cdda8c1058c6855ffd3e199f425e87c86b",
+        "tocEntries": 39
+      }
+    },
+    "uploads": {
+      "bytes": 173,
+      "sha256": "d1b117e16bba7a533b2fd0031ccd8059c6ff9d54cb299b418d3dc9f503db7acd",
+      "members": 3
+    },
+    "privateStoragePermissions": "directory 0700, files 0600"
+  },
+  "productionCredentialValidatorBefore": {
+    "checkedAt": "2026-11-15T04:07:40.022572+00:00",
+    "release": 85,
+    "oauthImage": "harbor.heusser.local/opendirectory/oauth-provider:1.0.31",
+    "validShapeAccepted": false,
+    "noUserRecordsReadOrCreated": true
   }
 }

@@ -427,11 +427,20 @@ Its image overrides are under `apps.<service>.imageTag`. Preserve the current
 release's complete values and review the rendered resources before upgrading;
 the checked-in k3s example alone does not contain all live configuration.
 
-[Release 1.0.53 preparation](../testing/pim-release-1.0.53.json) records the
-tested image digests, migration rehearsal and frozen Helm manifest. Complete
-source CI and fresh private database and App Store upload backups are required
-before applying it. The earlier rehearsal archive is not a fresh rollout backup
-or a coordinated platform recovery point.
+[Release 1.0.53 verification](../testing/pim-release-1.0.53.json) records the
+tested image digests, migration rehearsal and frozen Helm manifest. It was
+deployed on 15 November 2026 as lite chart 0.1.56, Helm revision 86, after both
+source runs passed all nine CI jobs. Fresh private archives of Auth, OAuth,
+Identity, Devices and App Store, plus the App Store uploads, were taken before
+the upgrade. All eleven Deployments, four image digests, four SQL receivers and
+certificate-verified HTTPS checks passed afterward. The live credential-shape
+validator now accepts the valid shape it previously rejected; actual human
+production sign-in remains a separate check.
+
+Future upgrades still require complete source CI and fresh database/upload
+backups. The migration rehearsal archive is not a current rollout backup or a
+coordinated platform recovery point. Device OU metadata in PR #6 is a separate
+feature and is not part of this release.
 
 Migration `061_company_pim_approver_groups.sql` adds the reviewer-group columns
 and expands the sealed approval receiver from six routines to eight. **An image
