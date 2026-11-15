@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-11-15T18:07:54Z",
+  "baseCommit": "ad72beb1d29a6d2b46aa8012ea6f892405d474b4",
+  "feature": "Standalone Microsoft 365 subscription read probe",
+  "command": "LICENSE_PROVIDER_PROBE_CONFIG_FILE=/run/opendirectory/provider-read.json node scripts/license-provider-probe.js",
+  "scope": {
+    "provider": "microsoft-365",
+    "databaseRequired": false,
+    "localConnectorOrSubjectRequired": false,
+    "cloudWrites": false,
+    "localBindingsCreated": false,
+    "companyOwnedPoolsRemainLocal": true,
+    "productionChanged": false
+  },
+  "checks": [
+    {
+      "command": "npm test -- --runInBand src/licenses/__tests__/MicrosoftProviderProbe.test.js src/licenses/__tests__/ProviderReadClient.test.js src/licenses/__tests__/RustGraphCapacityClient.test.js",
+      "directory": "services/core/policy-service",
+      "status": "passed",
+      "suites": 3,
+      "tests": 106,
+      "durationSeconds": 12.386
+    },
+    {
+      "command": "npm test -- --runInBand",
+      "directory": "services/core/policy-service",
+      "status": "passed",
+      "suites": 46,
+      "tests": 1489,
+      "durationSeconds": 24.961
+    }
+  ],
+  "covered": [
+    "Tenant-specific fixed OAuth endpoint and body, token reuse, access-token-only private child stdin and empty inherited child environment.",
+    "Canonical IDs, exact configuration keys, explicit reviewed consent, protected regular configuration file.",
+    "Normalized SKU metadata, no account/debug fields or secrets in successful output.",
+    "Pre-cancelled calls do not fetch credentials or spawn a connector.",
+    "Actual CLI process with disposable process/token fixtures; loading PostgreSQL is explicitly forbidden.",
+    "Credential-redacted configuration, provider-403 and throttling failures."
+  ],
+  "testFixtureFix": {
+    "file": "services/core/policy-service/src/__tests__/CompanyLicenseV2Routes.test.js",
+    "change": "Bind the existing fixture explicitly to 127.0.0.1 via the shared loopback helper and await teardown. All route assertions and application handlers retained.",
+    "initialFullRun": {
+      "passed": 1488,
+      "failed": 1,
+      "failure": "An already_applied fixture request returned HTTP 404 instead of 200."
+    },
+    "historicalFailureCause": "Not retrospectively proven for that individual request. The deterministic bind removes the known macOS IPv6/IPv4 fixture ambiguity."
+  },
+  "limits": [
+    "No real Microsoft tenant credentials or external cloud acceptance were used.",
+    "New Node/CLI regression tests use a disposable executable implementing the existing Rust stdin/stdout contract; they are not a newly executed live Rust-to-Microsoft integration.",
+    "No automatic import, GUI connection setup, company-pool cloud assignment or provider fulfillment was added.",
+    "The new first-step probe requires an image built from this revision; the running policy service is unchanged."
+  ],
+  "references": [
+    "https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0",
+    "https://learn.microsoft.com/en-us/graph/api/resources/licenseunitsdetail?view=graph-rest-1.0"
+  ]
+}

@@ -4,6 +4,8 @@ const { createPrivateKey } = require('node:crypto');
 const { SignJWT } = require('jose');
 const { ProviderError, jsonRequest, bearer, ClientCredentialToken } = require('../fulfillment/transport');
 const { runConnector } = require('../fulfillment/rustConnector');
+const { RustGraphCapacityClient } = require('../fulfillment/RustGraphCapacityClient');
+const { snapshot: capacitySnapshot } = require('../fulfillment/GraphCapacityClient');
 const { validateConfiguration, email, userLogin, text, slackId } = require('./ReadConfiguration');
 const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/apps.licensing';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -29,6 +31,7 @@ class GoogleToken {
 }
 
 function snapshot(data, config) {
+  if (config.provider === 'microsoft-365') return capacitySnapshot(data);
   const fail = () => { throw new ProviderError(STAGES[config.provider] + '_invalid_response'); };
   const exact = (object, keys) => object && typeof object === 'object' && !Array.isArray(object) && Object.keys(object).sort().join(',') === [...keys].sort().join(',');
   if (config.provider === 'google-workspace') {
@@ -100,12 +103,18 @@ function snapshot(data, config) {
 class ProviderReadClient {
   constructor(config, { fetchImpl = (...args) => fetch(...args), binary = '/usr/local/bin/opendirectory-connectors', spawnImpl } = {}) {
     this.config = validateConfiguration(config); this.binary = binary; this.spawnImpl = spawnImpl;
+    if (this.config.provider === 'microsoft-365') {
+      this.microsoft = new RustGraphCapacityClient({ tenantId: this.config.tenantId, clientId: this.config.clientId,
+        clientSecret: this.config.clientSecret, fetchImpl, binary, spawnImpl });
+      return;
+    }
     if (this.config.provider === 'google-workspace') this.tokens = new GoogleToken(this.config, fetchImpl);
     else if (this.config.provider === 'adobe-enterprise') this.tokens = new ClientCredentialToken({ url: ADOBE_TOKEN_URL, clientId: this.config.clientId,
       clientSecret: this.config.clientSecret, scope: ADOBE_SCOPE, fetchImpl, stage: 'adobe_token' });
     else this.tokens = { get: async () => this.config.accessToken, clear() {} };
   }
   async inspect(signal) {
+    if (this.microsoft) return this.microsoft.inspect(signal);
     const controller = new AbortController(); const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort();
     const timer = setTimeout(abort, 20000);

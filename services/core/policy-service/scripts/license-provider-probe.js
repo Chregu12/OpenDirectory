@@ -6,6 +6,7 @@ const { ProviderError } = require('../src/licenses/fulfillment/transport');
 
 async function probe(config, options) {
   const data = await new ProviderReadClient(config, options).inspect();
+  if (config.provider === 'microsoft-365') return { ok: true, provider: config.provider, tenantId: config.tenantId, products: data };
   if (config.provider === 'adobe-enterprise') return { ok: true, provider: config.provider, organizationId: data.organizationId,
     profileId: data.profileId, profileName: data.profileName, productName: data.productName, observedMembers: data.members.length };
   if (config.provider === 'slack-scim') return { ok: true, provider: config.provider, directoryKind: data.directoryKind, directoryId: data.directoryId,
@@ -22,7 +23,7 @@ async function main() {
   process.stdout.write(JSON.stringify(await probe(config)) + '\n');
 }
 if (require.main === module) main().catch(error => {
-  const code = error instanceof ProviderError && /^(google_licenses|google_token|github_copilot|adobe_profiles|adobe_token|slack_directory|atlassian_directory|gitlab_billable)_[a-z0-9_]{1,80}$/.test(error.code) ? error.code : 'provider_probe_rejected';
+  const code = error instanceof ProviderError && /^(graph_capacity|google_licenses|google_token|github_copilot|adobe_profiles|adobe_token|slack_directory|atlassian_directory|gitlab_billable)_[a-z0-9_]{1,80}$/.test(error.code) ? error.code : 'provider_probe_rejected';
   process.stderr.write(JSON.stringify({ ok: false, code, ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}) }) + '\n'); process.exitCode = 1;
 });
 module.exports = { probe };

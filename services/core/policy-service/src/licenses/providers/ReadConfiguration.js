@@ -16,7 +16,12 @@ const slackId = (value, prefixes) => typeof value === 'string' && value.length >
 
 function validateConfiguration(data) {
   const common = ['schemaVersion', 'provider', 'consentReviewed'];
-  if (data?.provider === 'google-workspace') {
+  if (data?.provider === 'microsoft-365') {
+    fields(data, [...common, 'tenantId', 'clientId', 'clientSecret']);
+    uuid(data.tenantId); uuid(data.clientId);
+    if (typeof data.clientSecret !== 'string' || data.clientSecret.length < 12 || data.clientSecret.length > 4096
+      || /[\u0000-\u0020\u007f]/.test(data.clientSecret)) throw new Error('Invalid Microsoft read configuration');
+  } else if (data?.provider === 'google-workspace') {
     fields(data, [...common, 'customerId', 'productId', 'skuId', 'serviceAccountEmail', 'delegatedSubject', 'privateKey']);
     if (typeof data.customerId !== 'string' || !/^C[A-Za-z0-9]{1,63}$/.test(data.customerId) || !productId(data.productId) || !productId(data.skuId)
       || !email(data.serviceAccountEmail) || !data.serviceAccountEmail.endsWith('.gserviceaccount.com') || !email(data.delegatedSubject)

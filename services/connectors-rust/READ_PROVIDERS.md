@@ -7,12 +7,57 @@ The earlier SDK research is recorded in
 [the architecture evaluation](../../docs/architecture/rust-connector-evaluation.md).
 No SDK source was copied and no SDK dependency was added.
 
-The executable is included in policy-service `1.0.26`. The manual probe is a
+The original Google/GitHub readers are included in policy-service `1.0.26`.
+The Microsoft first-step probe below requires an image built from this revision.
+The manual probe is a
 connection test, not a scheduled sync. It does not write the database, change
 catalog entries, provision accounts, assign licenses or infer local user links.
 The existing provider registry/fulfillment worker is still Microsoft-specific;
 these new readers do not create entries in that registry or adopt company pools.
 The normal `/licenses` view is unchanged by this step.
+
+## Microsoft 365: test subscription access first
+
+Use a commercial Microsoft 365 tenant and a dedicated Entra application with
+the Microsoft Graph **application** permission `LicenseAssignment.Read.All`.
+Have an authorized administrator grant consent for this read permission.
+Microsoft documents it as the least privileged application permission for
+[`GET /subscribedSkus`](https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0).
+
+Put the reviewed values into the protected file described under **Run the probe**:
+
+```json
+{
+  "schemaVersion": 1,
+  "provider": "microsoft-365",
+  "consentReviewed": true,
+  "tenantId": "YOUR-DIRECTORY-TENANT-UUID",
+  "clientId": "YOUR-APPLICATION-CLIENT-UUID",
+  "clientSecret": "YOUR-CLIENT-SECRET-VALUE"
+}
+```
+
+Replace all placeholders. `clientSecret` is the secret's value, and `clientId`
+is the application client ID. Keep the file outside Git and chat, owned by the
+executing UID with mode `0600`. Set `consentReviewed` after reviewing the grant.
+
+Run the same `license-provider-probe.js` command shown below. This first check
+needs no database URL, local provider IDs or user mapping. Node obtains a token
+from the tenant-specific Microsoft endpoint; the existing Rust capacity reader
+fetches `subscribedSkus` from the fixed Microsoft Graph v1.0 endpoint. Only the
+access token crosses private stdin into Rust.
+
+Success contains `ok`, `provider`, the configured `tenantId` and `products`:
+normalized SKU IDs/names, subscription states, prepaid units and consumed units.
+Compare these observations with the selected tenant's Microsoft 365 license
+inventory. An empty `products` array means no subscriptions were returned.
+The [unit-state meanings](https://learn.microsoft.com/en-us/graph/api/resources/licenseunitsdetail?view=graph-rest-1.0)
+come from Microsoft's licensing contract.
+
+The command reads subscription metadata; it creates no local bindings and
+assigns or removes no licenses. Existing manufacturer fulfillment remains a
+separate platform-catalog workflow. Company-owned pools remain local, and this
+probe does not connect them to cloud assignments.
 
 ## Google Workspace
 
