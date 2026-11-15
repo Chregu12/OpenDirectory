@@ -3501,6 +3501,10 @@ test('production gateway does not treat a real credential-bound pending company 
       const revokedOwner = await issue(body.username); assert.equal((await revoke(revokedOwner.access_token)).status, 200);
       for (const method of ['GET', 'POST']) assert.equal((await request(base, returnRoute, { method, token: revokedOwner.access_token, ...(method === 'POST' ? { body: returnInput } : {}) })).status, 401);
       assert.deepEqual(await returnState(), afterReturns);
+      // Start the independent offboarding journey with a real fresh MFA login.
+      token = (await issue(body.username)).access_token;
+      assert.equal(payload(token).identity_authorization.userId, activated.body.administratorId);
+      assert.deepEqual(payload(token).roles, []); assert.equal(provenMfa(payload(token)), true);
       const workflowRoute = appBase + '/offboarding-workflows'; const previewRoute = appBase + '/users/' + returnUserId + '/offboarding-preview';
       const secondGroup = await request(base, '/api/groups', { method: 'POST', token, body: { name: 'Own company operations' } }); assert.equal(secondGroup.status, 201, JSON.stringify(secondGroup.body));
       for (const [groupId, userId] of [[group.body.id, returnUserId], [secondGroup.body.id, returnUserId], [secondGroup.body.id, created.body.id]]) {
@@ -3965,7 +3969,12 @@ test('production gateway does not treat a real credential-bound pending company 
       const reenabled = await request(base, '/api/users/' + returnUserId, { method: 'PUT', token, headers: { 'If-Match': require('../../../identity-service/src/DirectoryUsers').userEtag(reactivation.body) }, body: { enabled: true } }); assert.equal(reenabled.status, 200);
       assert.equal((await request(base, deviceOffboardingRoute + '/capabilities?workflowId=' + workflow.id, { token })).status, 409);
       const beforeReactivatedDecision = await originalInventoryState(); const afterReactivationDecision = await request(base, deviceReturnBase + '/' + survivingReturn.id + '/decision', { method: 'POST', token, headers: { 'If-Match': returnEtag(survivingReturn) }, body: { action: 'cancelled', reason: 'Actual inventory return task remains independently manageable after account reactivation', confirm: true } }); assert.equal(afterReactivationDecision.status, 200, JSON.stringify(afterReactivationDecision.body)); assert.equal(afterReactivationDecision.body.outcome, 'cancelled'); assert.equal((await accountState()).enabled, true); assert.deepEqual(await originalInventoryState(), beforeReactivatedDecision);
-      for (const kind of ['role', 'eligibility']) { assert.equal((await request(base, accessRoute + accessQuery(kind), { token: accessOperator.access_token })).status, 409); assert.equal((await request(base, accessRoute, { method: 'POST', token: accessOperator.access_token, body: { ...accessInput, kind } })).status, 409); }
+      // The later reactivation check tests the workflow epoch, after fresh MFA.
+      const reactivatedAccessOperator = await issue('company-access-operator');
+      assert.equal(payload(reactivatedAccessOperator.access_token).identity_authorization.userId, accessOperatorId);
+      assert.deepEqual(payload(reactivatedAccessOperator.access_token).roles, payload(accessOperator.access_token).roles);
+      assert.equal(provenMfa(payload(reactivatedAccessOperator.access_token)), true);
+      for (const kind of ['role', 'eligibility']) { assert.equal((await request(base, accessRoute + accessQuery(kind), { token: reactivatedAccessOperator.access_token })).status, 409); assert.equal((await request(base, accessRoute, { method: 'POST', token: reactivatedAccessOperator.access_token, body: { ...accessInput, kind } })).status, 409); }
       const beforeReactivatedCleanup = await cleanupState();
       for (const suffix of ['', '/history']) assert.equal((await request(base, cleanupRoute + suffix + cleanupQuery, { token })).status, 409);
       assert.equal((await request(base, cleanupRoute, { method: 'POST', token, body: cleanupInput })).status, 409); assert.deepEqual(await cleanupState(), beforeReactivatedCleanup);

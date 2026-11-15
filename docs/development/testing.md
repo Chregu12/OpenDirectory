@@ -158,6 +158,12 @@ navigation can discard Chrome's response-body handle.
 Company onboarding expects the current own-company role permissions and device
 form. Native multi-device return recovery uses the same 60-second HTTP budget
 as initial submission and recovery; the original 300-second MFA cutoff is unchanged.
+The long native signed company-registration case performs another actual
+password/TOTP login before the independent offboarding journey and the later
+reactivation-epoch check. On a slower runner, reusing an earlier login can
+correctly yield 401/428 before the intended 201/409 behavior is reached. Each
+operation still carries its exact original bearer, and expired/revoked MFA
+denials and immutable receipt/token-hash assertions remain in the test.
 Browser teardown stops the clients and their frontend processes before closing
 SQL fixture services, so outstanding browser activity cannot stall cleanup.
 
