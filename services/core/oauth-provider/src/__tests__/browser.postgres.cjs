@@ -1571,7 +1571,8 @@ async function reviewFirstFactor(page,username) {
   assert.equal(confirmed.status(),200,username+' first-factor confirmation: '+String(outcome.error||'unconfirmed').slice(0,100)); await page.getByText(/Ersteinrichtung bestätigt/).waitFor();
   assert.equal((await page.context().cookies()).some(cookie=>cookie.name==='od_session'),false); assert.equal(await page.getByText(setup.secret,{ exact:true }).count(),0); rememberFactor(username,setup.secret,counter);
 }
-test('real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery', { timeout: 360000 }, async () => {
+// Three independently authenticated Owner journeys retain their own 300-second MFA window, plus registration setup.
+test('real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery', { timeout: 960000 }, async () => {
   const isolated = await context({ onboarded: false }); const page = await isolated.newPage();
   try {
     await page.goto(origin + '/register'); await page.getByLabel('Benutzername', { exact: true }).fill('company-registration-owner'); await page.getByLabel('Aktuelles Passwort', { exact: true }).fill('disposable-password');
@@ -2023,7 +2024,17 @@ test('real company registration UI persists one disabled tenant and candidate th
       const response = await page.request.fetch(origin + route, { method, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, ...(body ? { data: body } : {}) });
       return { status: response.status(), body: await response.json() };
     };
-    const accessOwnerToken = (await mediated(page)).body.access_token; const accessActors = new Map();
+    const initialOwnerClaims = JSON.parse(Buffer.from(ownerSession.body.access_token.split('.')[1], 'base64url'));
+    await login(page, 'company-registration-owner');
+    const accessOwnerSession = await mediated(page); assert.equal(accessOwnerSession.status, 200);
+    const accessOwnerToken = accessOwnerSession.body.access_token;
+    const accessOwnerClaims = JSON.parse(Buffer.from(accessOwnerToken.split('.')[1], 'base64url'));
+    assert.deepEqual([accessOwnerClaims.iss, accessOwnerClaims.sub, accessOwnerClaims.identity_authorization.userId, accessOwnerClaims.mfa_authorization.revision], [initialOwnerClaims.iss, initialOwnerClaims.sub, receipt.administratorId, initialOwnerClaims.mfa_authorization.revision]);
+    assert.notEqual(accessOwnerClaims.jti, initialOwnerClaims.jti); assert.ok(accessOwnerClaims.auth_time >= initialOwnerClaims.auth_time);
+    assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(accessOwnerClaims), true);
+    assert.ok(Math.floor(Date.now()/1000)-accessOwnerClaims.auth_time <= 300); assert.deepEqual(accessOwnerClaims.roles, []);
+    process.stdout.write('Independent offboarding Owner journey: same actor/factor, real password/TOTP login and new JTI; original MFA cutoff retained.\n');
+    const accessActors = new Map();
     for (const [name, roles] of [['company-access-operator', ['role-administrator', 'pim-administrator']], ['company-access-reviewer', ['admin', 'pim-approver']]]) {
       const account = await accessApi('/api/users', { method: 'POST', token: accessOwnerToken, body: { username: name, email: name + '@example.invalid' } }); assert.equal(account.status, 201, JSON.stringify(account.body));
       const enabled = await accessApi('/api/users/' + account.body.id, { method: 'PUT', token: accessOwnerToken, headers: { 'If-Match': require('../../../identity-service/src/DirectoryUsers').userEtag(account.body) }, body: { enabled: true } }); assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
@@ -2103,7 +2114,12 @@ test('real company registration UI persists one disabled tenant and candidate th
     assert.equal(companyWrites.length, 9); await page.screenshot({ path: '/tmp/od-business15-offboarding-confirmation.png', fullPage: true });
     const creatingOffboarding = page.waitForResponse(response => new URL(response.url()).pathname === workflowRoute && response.request().method() === 'POST');
     await offboardingDialog.getByRole('button', { name: 'Bestätigen', exact: true }).click();
-    const offboardingResponse = await creatingOffboarding; assert.equal(offboardingResponse.status(), 201, await offboardingResponse.text()); const offboarding = await offboardingResponse.json(); const offboardingJob = offboarding.workflow;
+    const offboardingResponse = await creatingOffboarding;
+    const offboardingAuthorization = offboardingResponse.request().headers().authorization; assert.match(offboardingAuthorization, /^Bearer [A-Za-z0-9._~-]+$/u);
+    const offboardingClaims = JSON.parse(Buffer.from(offboardingAuthorization.slice('Bearer '.length).split('.')[1], 'base64url'));
+    assert.equal(offboardingResponse.status(), 201, JSON.stringify({ response: await offboardingResponse.text(), authAgeSeconds: Math.floor(Date.now()/1000)-offboardingClaims.auth_time, sameOwner: offboardingClaims.identity_authorization?.userId === receipt.administratorId, provenMfa: require('../../../../../packages/mfa-authorization-contract').provenMfa(offboardingClaims) }));
+    assert.equal(offboardingClaims.auth_time, accessOwnerClaims.auth_time); assert.notEqual(offboardingClaims.jti, initialOwnerClaims.jti);
+    const offboarding = await offboardingResponse.json(); const offboardingJob = offboarding.workflow;
     assert.match(offboardingJob.id, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u);
     assert.deepEqual(offboardingResponse.request().postDataJSON(), { workflowId: offboardingJob.id, userId: employeeIds[0], userRevision: offboardingPreview.user.userRevision, eligibilityRevision: offboardingPreview.user.eligibilityRevision, reason: offboardingReason, confirm: true });
     assert.deepEqual([offboarding.actorUserId, offboarding.tenantId, offboardingJob.userId, offboardingJob.createdBy, offboardingJob.phase, offboardingJob.totalLicenses, offboardingJob.completedLicenses, offboardingJob.failure], [receipt.administratorId, receipt.tenantId, employeeIds[0], receipt.administratorId, 'completed_local', 2, 2, null]);
@@ -2117,8 +2133,6 @@ test('real company registration UI persists one disabled tenant and candidate th
     const offboardingIdentityReceipt = (await identityDb.query(`SELECT record.operation_id,record.action,outbox.status FROM identity_company_offboarding_receipts record JOIN identity_company_offboarding_outbox outbox USING(tenant_id,workflow_id) WHERE record.tenant_id=$1 AND record.workflow_id=$2 AND record.user_id=$3`, [receipt.tenantId, offboardingJob.id, employeeIds[0]])).rows;
     assert.deepEqual(offboardingIdentityReceipt, [{ operation_id: offboardingJob.checkpoint.operationId, action: 'disabled', status: 'pending' }]);
     assert.equal(Object.keys(offboardingJob.checkpoint).length, 13);
-    const offboardingAuthorization = offboardingResponse.request().headers().authorization; assert.match(offboardingAuthorization, /^Bearer [A-Za-z0-9._~-]+$/u);
-    const offboardingClaims = JSON.parse(Buffer.from(offboardingAuthorization.slice('Bearer '.length).split('.')[1], 'base64url'));
     assert.deepEqual(offboardingClaims.roles, []); assert.equal(offboardingClaims.identity_authorization.userId, receipt.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(offboardingClaims), true);
     const offboardingChildren = (await policyDb.query(`SELECT event.id,event.license_id,event.type,event.target_user_id,event.actor_user_id,event.correlation_id,event.before_state,event.proof,outbox.status,license_company_event_valid(event) AS valid
       FROM license_company_events event JOIN license_company_outbox outbox ON outbox.id=event.id WHERE event.tenant_id=$1 AND event.correlation_id=$2 ORDER BY event.license_id`, [receipt.tenantId, offboardingJob.id])).rows;

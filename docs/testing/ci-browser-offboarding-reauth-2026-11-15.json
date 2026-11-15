@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-11-15T13:42:24.150255+00:00",
+  "baseCommit": "09bae71596767c31fc0c3a9dd11cabbcad00a11d",
+  "status": "original-browser-registration-case-native-verified-linux-pending",
+  "productionTouched": false,
+  "productionCodeChanged": false,
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43708905305",
+    "job": 132795978009,
+    "sourceCommit": "6819aa2f0fa3eb877ead74928bac790cb7e3d556",
+    "case": "real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery",
+    "caseMilliseconds": 308010.186965,
+    "line": 2106,
+    "operation": "POST durable account/local-license offboarding workflow",
+    "expected": 201,
+    "actual": 401,
+    "error": "Company license identity rejected the original request",
+    "originalAuthTimeAndRejectionSubreasonCaptured": false
+  },
+  "finding": "The long original browser case reused its first Owner session after directory/license work and several other actors real MFA setups, before an independent offboarding journey. A later device-return journey already explicitly authenticated the same Owner again. The CI log lacks auth_time; exact deadline versus other original-context rejection cannot be determined retrospectively.",
+  "correction": {
+    "independentOwnerJourneys": 3,
+    "newMiddleBoundary": "Real same-Owner password/TOTP browser login before the independent offboarding preparation; no POST or authentication failure retry.",
+    "proofs": [
+      "same original issuer, subject, actor user and factor revision",
+      "new JTI and proven password/TOTP MFA",
+      "current five-minute MFA window at the new session",
+      "actual offboarding HTTP bearer uses that same new auth_time and differs from the historical initial JTI",
+      "existing historical receipts, original bearer checks, cleanup and later-assignment assertions retained"
+    ],
+    "harnessBudgetMilliseconds": 960000,
+    "budgetDerivation": "Three separately authenticated 300-second Owner windows plus 60 seconds registration setup. Production token/MFA/API deadlines are unchanged.",
+    "sanitizedFailureEvidence": "An unexpected offboarding response now includes auth age, same-Owner and proven-MFA booleans, never a token or secret."
+  },
+  "verification": {
+    "actualNativeBrowser": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 59,
+      "caseMilliseconds": 257415.295958,
+      "totalMilliseconds": 296461.44625,
+      "filter": "^real company registration UI persists",
+      "allOriginalDurableWorkflowAssertionsRetained": true,
+      "node": "20.20.2",
+      "postgres": "16.15 actual disposable schemas",
+      "browser": "Actual isolated headless Google Chrome on macOS; Playwright uses the installed executable."
+    },
+    "nodeSyntax": "pass",
+    "diffCheck": "pass"
+  },
+  "limits": [
+    "Three Linux repetitions and the complete newest-source CI remain pending.",
+    "The original CI did not log auth_time or a finer rejection reason; exact retrospective causality is not claimed.",
+    "This exact case is not the complete 60-case browser suite or the full cross-service CI.",
+    "The device-OU draft adds separate UI assertions; its merged browser variant still needs verification.",
+    "No personal production login, external provider acceptance or deployment was performed.",
+    "The full original BR/WF objective remains open."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "5d1c8af2e7dba7952572cc92aa900839223820203f4b4103e93ef340a90956f3",
+    "packages/role-authentication-contract.js": "ef0986c6c96dc672315353603c93f5307c4e8ecefce0ebf51b605ef2c8f9b184",
+    "services/core/identity-service/src/CompanyLicenseAuthority.js": "c00d94e5d933e0e0e2abbe9dd0be4b845a5e995136375322ee2d2197fcff8bd6",
+    "services/core/policy-service/src/licenses/CompanyLicenseAuthority.js": "4d8395b5f8754aad033785637c469fae671d98ccb2e10e4fffb6768a73eb65d7",
+    "services/core/oauth-provider/src/MfaAuthority.js": "dd317d44dff7f6b374e6c1b0513b6da3b106d565bcff8250e908009c2aab463c"
+  }
+}
