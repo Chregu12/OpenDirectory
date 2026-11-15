@@ -209,7 +209,7 @@ beforeEach(async () => {
   userMode = null;
   await pool.query('TRUNCATE api_keys,webhooks,webhook_deliveries CASCADE');
   await pool.query('TRUNCATE license_grants,license_assignments,license_requests,license_catalog,license_subjects,license_audit_events,license_assignment_sources,license_group_rules CASCADE');
-  await directory.query('TRUNCATE users,groups,group_members,identity_deleted_groups,identity_group_audit,identity_group_outbox,identity_subject_links,identity_link_audit,identity_user_audit,identity_user_outbox,identity_deleted_users CASCADE');
+  await require('../../../../../../scripts/lib/reset-directory-fixture.cjs').resetDirectoryFixture(directory,'TRUNCATE users,groups,group_members,identity_deleted_groups,identity_group_audit,identity_group_outbox,identity_subject_links,identity_link_audit,identity_user_audit,identity_user_outbox,identity_deleted_users CASCADE');
   for (const subject of ['manager', 'requester', 'independent-reviewer']) await link(subject, await person());
 });
 

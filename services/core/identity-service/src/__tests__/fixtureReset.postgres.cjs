@@ -36,3 +36,8 @@ test('unrecognized schemas and non-truncate commands are refused before fixture 
 test('pre-role historical fixture storage is supported without claiming installed role receivers',async()=>fixture('ou_mutations',false,async pool=>{
  await pool.query('INSERT INTO users VALUES(1)');await resetDirectoryFixture(pool,'TRUNCATE users CASCADE');assert.equal((await pool.query('SELECT count(*) AS count FROM users')).rows[0].count,'0');
 }));
+test('license group fixture resets the new empty reviewer FK cascade and restores every role truncate guard',async()=>fixture('identity_groups',true,async pool=>{
+ await pool.query("INSERT INTO groups(id,name) VALUES($1,'Explicit empty role FK fixture')",[randomUUID()]);
+ await resetDirectoryFixture(pool,'TRUNCATE groups CASCADE');assert.equal((await pool.query('SELECT count(*) AS count FROM groups')).rows[0].count,'0');await pool.query('SELECT identity_company_role_receiving()');
+ await assert.rejects(pool.query('TRUNCATE identity_company_pim_policies CASCADE'),{code:'42501'});
+}));

@@ -43197,7 +43197,7 @@
       "get": {
         "operationId": "readOwnCompanyPimApprovalPolicy",
         "summary": "Read the actual role approval policy",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43255,7 +43255,7 @@
       "put": {
         "operationId": "updateOwnCompanyPimApprovalPolicy",
         "summary": "Version the role policy and invalidate old activations/requests",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43334,7 +43334,7 @@
       "get": {
         "operationId": "readOwnCompanyPimApprovalOptions",
         "summary": "Read actual personal eligibility approval options",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43394,7 +43394,7 @@
       "post": {
         "operationId": "requestOwnCompanyPimApproval",
         "summary": "Create one exact original activation intent",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43473,7 +43473,7 @@
       "get": {
         "operationId": "readOwnCompanyPimRequests",
         "summary": "Read only own retained requests",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43555,7 +43555,7 @@
       "get": {
         "operationId": "readCompanyPimReviewQueue",
         "summary": "Read the actual own-tenant independent review queue",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43642,7 +43642,7 @@
       "post": {
         "operationId": "decideOwnCompanyPimRequestApprove",
         "summary": "Independently approve one exact pending original request",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43721,7 +43721,7 @@
       "post": {
         "operationId": "decideOwnCompanyPimRequestDeny",
         "summary": "Independently deny one exact pending original request",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43800,7 +43800,7 @@
       "post": {
         "operationId": "decideOwnCompanyPimRequestCancel",
         "summary": "Cancel an own unconsumed original request",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -43879,7 +43879,7 @@
       "post": {
         "operationId": "consumeOwnCompanyPimApproval",
         "summary": "Consume the exact independent approval with original fresh MFA",
-        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; actual original canonical PIM approver or role manager independently approves/denies. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
+        "description": "Original human bearer and current own canonical home tenant. Actual company owner/role manager configures the versioned approval policy; a current member of the explicitly selected own protected reviewer group independently approves/denies. Without a selected group, existing canonical PIM approvers, role managers and own company owners review requests. Selected groups do not allow a central-role or owner bypass; queue rows and counts use the actual role scope and source revalidation. Self review and service principals are rejected. Request creation and approval require independently bound MFA at most five minutes old. Pending requests last at most 24 hours and the original captured source deadline. Role definition, eligibility revision, original membership incarnation, scope, actor context and policy revision remain bound. Approval grants no rights: the original person consumes it once with fresh MFA within the configured 1–60 minute activation window. Requested duration and target scope cannot change. Policy edits invalidate old active leases and outstanding requests. Exact row effects, immutable actor/reason/history, local pending outbox and original deadlines are rechecked at physical commit. Normal issuer assurance policies remain binding. No notification delivery or scheduled activation is implied.",
         "security": [
           {
             "bearerAuth": []
@@ -67073,12 +67073,17 @@
             "maximum": 3600
           },
           "reviewerGroupId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true.",
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -67093,8 +67098,8 @@
           "revision",
           "approvalRequired",
           "windowSeconds",
-          "canManage",
-          "reviewerGroupId"
+          "reviewerGroupId",
+          "canManage"
         ],
         "properties": {
           "schemaVersion": {
@@ -67139,12 +67144,17 @@
             "type": "boolean"
           },
           "reviewerGroupId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true.",
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -67175,12 +67185,17 @@
             "const": true
           },
           "reviewerGroupId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true.",
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "description": "reviewerGroupId may be omitted only when no group is currently configured. An existing group requires an explicit ID or null; omission never clears a selected group."
@@ -67606,10 +67621,10 @@
           "revision",
           "approvalRequired",
           "windowSeconds",
+          "reviewerGroupId",
           "canRequest",
           "maximumDurationSeconds",
-          "existingRequest",
-          "reviewerGroupId"
+          "existingRequest"
         ],
         "properties": {
           "schemaVersion": {
@@ -67679,12 +67694,17 @@
             ]
           },
           "reviewerGroupId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true."
+            "description": "Explicit own protected static reviewer group. Current members can read and decide requests of this role; central roles do not bypass a configured group. Null selects canonical reviewers. A non-null group requires approvalRequired=true.",
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
