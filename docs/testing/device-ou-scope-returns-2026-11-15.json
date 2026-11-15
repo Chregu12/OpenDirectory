@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-15T13:19:48.048466+00:00",
+  "checkedAt": "2026-11-15T14:03:56.415512+00:00",
   "baseCommit": "02270eb2b9eae312a06a606006995d7d2dd5f198",
   "status": "scoped-return-boundaries-verified-in-complete-native-regression-and-three-linux-groups",
   "productionTouched": false,
@@ -131,6 +131,26 @@
         }
       ],
       "notAFull160CaseLinuxClaim": true
+    },
+    "browserOwnerReauthenticationRegression": {
+      "report": "ci-browser-offboarding-reauth-2026-11-15.json",
+      "mergedDraft": {
+        "pass": 1,
+        "fail": 0,
+        "skipped": 59,
+        "caseMilliseconds": 256145.19375,
+        "totalMilliseconds": 291458.389042,
+        "defaultScopedMode": false
+      },
+      "mainSourceLinuxRun": 43720908507,
+      "mainSourceLinuxJobs": [
+        132832473179,
+        132832473432,
+        132832473482
+      ],
+      "passPerJob": 1,
+      "skippedPerJob": 59,
+      "notSignedScopedAcceptance": true
     }
   },
   "testPreparationCorrections": [
@@ -140,7 +160,7 @@
   ],
   "limits": [
     "Complete current-source CI 43717207162 remains pending. The three targeted Linux return groups do not replace its full integration/browser gates.",
-    "An older main CI run 43708905305 failed the independent long company-registration/offboarding browser case with HTTP401 instead of201. The original auth_time/rejection subreason was not logged; separate actual-authentication investigation remains open.",
+    "The older main browser offboarding401 is addressed by real independent Owner reauthentication in main28b351c. The original full browser case passed in the merged device draft and in three main-source Linux runs; see ci-browser-offboarding-reauth-2026-11-15.json. This does not replace complete current CI or actual signed scoped acceptance.",
     "OU writes, hierarchy/delete dependencies, overall device capabilities and role/PIM/device scope UI remain open.",
     "Actual signed scoped OAuth/browser acceptance and verified Harbor/image/migration rollout remain open; defaults scoped:false.",
     "Separate Identity and Device databases cannot supply instantaneous distributed revocation or an atomic cross-database commit.",
