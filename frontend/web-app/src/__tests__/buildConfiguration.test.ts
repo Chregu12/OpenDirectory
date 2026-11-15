@@ -18,3 +18,7 @@ test('device fleet export and lifecycle actions reach the canonical device recei
     expect(routes[0].destination).toBe(`${process.env.DEVICE_SERVICE_URL || 'http://device-service:3003'}${path}`);
   }
 });
+
+test('the production proxy outlives the bounded durable Identity write', () => {
+  expect(configuration.experimental.proxyTimeout).toBe(60000);
+});

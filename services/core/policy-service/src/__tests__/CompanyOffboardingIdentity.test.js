@@ -49,6 +49,48 @@ test('oversized source responses and unknown transport completion remain unconfi
   const client = new CompanyOffboardingIdentity({ fetchImpl });
   for (let index = 0; index < 2; index += 1) await expect(client.disable(job, authorization, source)).rejects.toMatchObject({ status: 503 });
 });
+test('a durable account receipt may arrive after the read budget without retrying the mutation', async () => {
+  jest.useFakeTimers();
+  try {
+    const body = receipt(); let signal;
+    const fetchImpl = jest.fn((_url, options) => new Promise((resolve, reject) => {
+      signal = options.signal;
+      const timer = setTimeout(() => resolve(response(body)), 6000);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    }));
+    const pending = new CompanyOffboardingIdentity({ fetchImpl }).disable(job, authorization, source);
+    await jest.advanceTimersByTimeAsync(5001); expect(signal.aborted).toBe(false);
+    await jest.advanceTimersByTimeAsync(999); await expect(pending).resolves.toEqual(body);
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(signal.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally { jest.useRealTimers(); }
+});
+test.each(['headers', 'body'])('the complete account response still has a bounded deadline while waiting for %s', async phase => {
+  jest.useFakeTimers();
+  try {
+    let signal;
+    const fetchImpl = jest.fn((_url, options) => {
+      signal = options.signal;
+      const untilAbort = () => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      return phase === 'headers' ? untilAbort() : Promise.resolve({ status: 200, headers: new Headers({ 'content-type': 'application/json' }),
+        body: (async function* () { await untilAbort(); yield Buffer.from('{}'); })() });
+    });
+    const pending = new CompanyOffboardingIdentity({ fetchImpl }).disable(job, authorization, source);
+    const rejected = expect(pending).rejects.toMatchObject({ status: 503 });
+    await jest.advanceTimersByTimeAsync(29999); expect(signal.aborted).toBe(false);
+    await jest.advanceTimersByTimeAsync(1); await rejected;
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(signal.aborted).toBe(true); expect(jest.getTimerCount()).toBe(0);
+  } finally { jest.useRealTimers(); }
+});
+test('employee reads retain their shorter deadline and never retry', async () => {
+  jest.useFakeTimers();
+  try {
+    const fetchImpl = jest.fn((_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })));
+    const rejected = expect(new CompanyOffboardingIdentity({ fetchImpl }).user(userId, authorization, source)).rejects.toMatchObject({ status: 503 });
+    await jest.advanceTimersByTimeAsync(5000); await rejected;
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(jest.getTimerCount()).toBe(0);
+  } finally { jest.useRealTimers(); }
+});
 test('workflow input rejects selectors and requires the exact captured workflow ETag', () => {
   const intent = { workflowId, userId, userRevision: '1', eligibilityRevision: '2', reason: 'Confirmed original local offboarding', confirm: true };
   expect(offboardingIntent(intent)).toEqual(intent); expect(() => offboardingIntent({ ...intent, tenantId })).toThrow();

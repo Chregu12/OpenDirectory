@@ -148,7 +148,7 @@ export class CompanyOffboardingV2Client {
   write(intent: CompanyOffboardingV2Intent, signal?: AbortSignal): Promise<CompanyOffboardingV2Job> {
     return this.session.write(intent, async (requestSignal, check) => {
       const response = await api.post(jobs + (intent.action === 'continue' ? '/' + intent.workflowId + '/continue' : ''), intent.body,
-        { headers: { 'Idempotency-Key': intent.operationId, ...(intent.etag ? { 'If-Match': intent.etag } : {}) }, signal: requestSignal }); check();
+        { headers: { 'Idempotency-Key': intent.operationId, ...(intent.etag ? { 'If-Match': intent.etag } : {}) }, signal: requestSignal, timeout: 60000 }); check();
       if (![200, ...(intent.action === 'create' ? [201] : [])].includes(response.status)) companyUnconfirmed();
       const value = this.parseJob(response.data, intent.workflowId);
       if (value.workflow.userId !== intent.userId || value.workflow.reason !== intent.body.reason

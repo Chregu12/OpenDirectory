@@ -1,0 +1,146 @@
+{
+  "checkedAt": "2026-11-15T07:46:32.987605+00:00",
+  "baseCommit": "d189305bce42b16f5d91ba05f7c885c15efd654e",
+  "status": "durable-account-receipt-fix-verified-later-batch-fixture-and-full-source-ci-pending",
+  "productionTouched": false,
+  "diagnosis": {
+    "originalMfaOnlyExplanationInsufficient": true,
+    "failingRun": "https://github.com/Chregu12/OpenDirectory/actions/runs/43689686939",
+    "sourceCommit": "1dc1a4cc19401ff87e8602cd24a7943cb0b9d20a",
+    "isolatedLinuxJobs": 3,
+    "failed": 3,
+    "failures": [
+      {
+        "jobId": 132737490776,
+        "mfaAgeSeconds": 95,
+        "originalSourceRemainingSeconds": 205,
+        "changedFields": [
+          "target.revision",
+          "target.eligibilityRevision",
+          "target.enabled"
+        ],
+        "actualStatus": 401,
+        "expectedStatus": 201
+      },
+      {
+        "jobId": 132737490932,
+        "mfaAgeSeconds": 97,
+        "originalSourceRemainingSeconds": 203,
+        "changedFields": [
+          "target.revision",
+          "target.eligibilityRevision",
+          "target.enabled"
+        ],
+        "actualStatus": 401,
+        "expectedStatus": 201
+      },
+      {
+        "jobId": 132737490933,
+        "mfaAgeSecondsBeforeRequest": 64,
+        "actualPhase": "paused",
+        "failure": {
+          "code": 503,
+          "step": "account"
+        }
+      }
+    ],
+    "inference": "Actual Linux Identity returned a valid account receipt after 6408ms, beyond the previous 5000ms transport deadline. With the bounded write budget, that account phase completed in all three runs; one full case later hit the separate 10000ms test helper deadline for group cleanup.",
+    "confirmedIdentityResponseMilliseconds": 6408
+  },
+  "changes": {
+    "identityAccountWriteResponseDeadlineMilliseconds": 30000,
+    "employeeReadResponseDeadlineMilliseconds": 5000,
+    "offboardingFrontendWriteDeadlineMilliseconds": 60000,
+    "nextRewriteProxyDeadlineMilliseconds": 60000,
+    "otherAxiosRequestsKeepDefaultDeadlineMilliseconds": 30000,
+    "automaticWriteRetries": 0,
+    "originalMfaMaxAgeSeconds": 300,
+    "originalLiveSourceChecksPreserved": true,
+    "receiptBindingsAndPhysicalSqlGuardsPreserved": true,
+    "nonemptyReporter": "Keep native failures nonzero and report their actual cause; only reject an empty/entirely skipped selection when no native test has already failed.",
+    "nativePositiveOffboardingBatchDeadlineMilliseconds": 60000,
+    "blueprintOriginsCaseDeadlineMilliseconds": 360000,
+    "blueprintOriginsOriginalMfaJourneyMaximumMilliseconds": 240000,
+    "blueprintBudgetReason": "Independent registration/review/MFA bootstrap is outside the separately timed 240-second original-token journey. The previous 240-second total case deadline also charged bootstrap time. The original same-bearer assertions, 240-second journey assertion and 300-second MFA cutoff are retained."
+  },
+  "localChecks": {
+    "completePolicyUnits": {
+      "pass": 1475,
+      "fail": 0,
+      "suites": 45
+    },
+    "realChildRunnerAndAutomationClient": {
+      "pass": 57,
+      "fail": 0,
+      "skipped": 0
+    },
+    "affectedFrontendUnits": {
+      "pass": 96,
+      "fail": 0,
+      "suites": 3
+    },
+    "newDeadlineCases": [
+      "A genuine receipt after six seconds remains accepted without repeating the write",
+      "The full account response times out at thirty seconds both before headers and during the body",
+      "Employee reads still time out at five seconds",
+      "Original bearer, exact durable intent and receipt target/revision checks remain mandatory"
+    ],
+    "reporterRegression": "A selected failing native case exits 1 and retains its error without a misleading empty-selection error; all-skipped, empty, forged TAP and misspelled filters still exit 1."
+  },
+  "actualLinuxValidation": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43690500383",
+    "sourceCommit": "80a5ae10e0d8d3eef7a5e2357992c53671440122",
+    "status": "completed-two-full-passes-account-phase-passed-all-three-one-later-fixture-timeout",
+    "matrixCases": 3,
+    "scope": "Real original signed registration/review/activation, account offboarding, license returns, access cleanup and device returns through actual services and the production Gateway. Timing-only diagnostics do not replace the original methods or assertions.",
+    "results": [
+      {
+        "jobId": 132739941850,
+        "completeCase": "pass",
+        "identityAccountResponseMilliseconds": 3881
+      },
+      {
+        "jobId": 132739942041,
+        "completeCase": "fail-later-test-helper-timeout",
+        "identityAccountResponseMilliseconds": 6408,
+        "failure": "POST company-offboarding-groups exceeded the test helper default 10000ms at line 3756; this was after a confirmed successful account receipt."
+      },
+      {
+        "jobId": 132739942050,
+        "completeCase": "pass",
+        "identityAccountResponseMilliseconds": 4404
+      }
+    ]
+  },
+  "limits": [
+    "Complete main source CI has not yet run for this fix.",
+    "The longer bounded response wait does not make separate databases atomic or remove the need for explicit recovery after a genuinely lost receipt.",
+    "No production deployment, personal login or external SaaS acceptance was performed."
+  ],
+  "sourceSha256": {
+    "frontend/web-app/next.config.js": "bcd80492d6db79288caf3ca74a7aad691a4255a4da012506517a3fb2898e1bd0",
+    "frontend/web-app/src/__tests__/buildConfiguration.test.ts": "a4738279977216d9139c29c5171ba993c97e3e2b74f2ac4920d15e0a9d1f4701",
+    "frontend/web-app/src/__tests__/lib/companyOffboarding.test.ts": "6e0465c229fb8b6a5c23508e8e755ab727deb5dc77429838a0fda224ba3faa74",
+    "frontend/web-app/src/__tests__/lib/companyOffboardingV2.test.ts": "3c8fd0b2da2b2cb97e2796b7aa527ec55b113d36030f5159cb2db5984c8672aa",
+    "frontend/web-app/src/lib/companyOffboarding.ts": "f20a9fdb07360b039bf61de0b4d402a516e3944957a7c6f84cdac831d305a350",
+    "frontend/web-app/src/lib/companyOffboardingV2.ts": "edd4feb22934865614414c424aefd6540ddee3391bd31822039814288d08aba5",
+    "scripts/lib/__tests__/run-postgres-tests.test.mjs": "e1936ab17c6ff5a79a3df0aa660925d952e98391d6bece5245d504ec635152cf",
+    "scripts/lib/nonempty-test-reporter.cjs": "d823fffc5c3b2656080f91522ce3d44835072438412b2d811de5f9c7f7f57a32",
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "5af6d012e8173b24d9b02053171e559bfeb8aa112e6e94272212953254a05c84",
+    "services/core/policy-service/src/__tests__/CompanyOffboardingIdentity.test.js": "a03a55ef0d689bbb6b2c02a548d48bb3fc6f6bac162b9d2c44d7db18c7124319",
+    "services/core/policy-service/src/licenses/CompanyOffboardingIdentity.js": "b543dced672a6de7a5fd7ec78b99f73772eab00c594af07bd7028577035cb7cf"
+  },
+  "additionalLinuxValidation": {
+    "blueprintOriginsWithCurrentDraftScopeSource": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691222631",
+      "sourceCommit": "55b6522",
+      "status": "in-progress",
+      "purpose": "Recheck the actual case that timed out after 240 seconds on a2adb40, retaining the separate 240-second original-MFA journey assertion."
+    },
+    "registrationAndDurableBatches": {
+      "sourceCommit": "41db9e4",
+      "status": "ready-to-dispatch",
+      "matrixCases": 3
+    }
+  }
+}

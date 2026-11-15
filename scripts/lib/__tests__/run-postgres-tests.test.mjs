@@ -66,6 +66,15 @@ test('real failure stays nonzero even when another test passes', () => {
   assert.doesNotMatch(result.stderr, /No passing integration tests completed/);
 });
 
+test('an actual selected failure remains nonzero without a misleading empty-selection error', () => {
+  const result = run("require('node:test').test('actual failure', () => { throw new Error('deliberate selected failure'); });");
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /deliberate selected failure/);
+  assert.match(result.stdout, /^# fail 1$/m);
+  assert.match(result.stdout, /^# pass 0$/m);
+  assert.equal(result.stderr, '');
+});
+
 test('test output cannot forge a passing native summary', () => {
   const result = run("console.log('# pass 99'); require('node:test').test('not executed', { skip: true }, () => {});");
   assert.equal(result.status, 1);

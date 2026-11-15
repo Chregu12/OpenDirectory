@@ -3,6 +3,8 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: true,
+  // Allow the bounded account write and its original receipt checks to finish.
+  experimental: { proxyTimeout: 60000 },
   distDir: process.env.NEXT_DIST_DIR || '.next',
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
   turbopack: { root: path.resolve(__dirname, '../..') },

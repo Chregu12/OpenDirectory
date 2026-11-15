@@ -31,7 +31,7 @@ test('captures and retires a zero-app binding instead of falsely completing at z
   const current = await client(); const value = await current.get(id(80)); const intent = current.captureContinue(value);
   expect(intent.body).toEqual({ confirm: true, reason: 'Bewusster Mitarbeiteraustritt', userRevision: '99', assignments: [], bindings: [{ id: id(1), revision: '1' }] });
   const result = await current.write(intent); expect(result.workflow).toMatchObject({ phase: 'completed_local', totalLicenses: 0, completedLicenses: 0, totalBindings: 1, completedBindings: 1 });
-  expect(api.post).toHaveBeenCalledWith(jobs + '/' + id(80) + '/continue', intent.body, expect.objectContaining({ headers: { 'Idempotency-Key': intent.operationId, 'If-Match': companyOffboardingV2Etag(value.workflow) } }));
+  expect(api.post).toHaveBeenCalledWith(jobs + '/' + id(80) + '/continue', intent.body, expect.objectContaining({ headers: { 'Idempotency-Key': intent.operationId, 'If-Match': companyOffboardingV2Etag(value.workflow) }, timeout: 60000 }));
 });
 test('preserves all 26 pools and sources in one atomic captured continuation rather than paging offboarding at 25', async () => {
   job.workflow.totalLicenses = 26; job.workflow.nextAssignments = Array.from({ length: 26 }, (_, index) => ({ ...assignmentReturnRow(index + 20), sources: [{ ...assignmentDirect(), grantId: id(200 + index) }] }));
