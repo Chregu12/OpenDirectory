@@ -1710,6 +1710,48 @@ test('real company registration UI persists one disabled tenant and candidate th
     assert.equal((await inventoryFixture.db.query('SELECT count(*)::int AS count FROM device_inventory_assignments WHERE device_id=$1 AND released_at IS NOT NULL',[inventoryDevice.id])).rows[0].count,1);
     assert.equal((await identityDb.query('SELECT enabled FROM users WHERE id=$1',[employeeIds[0]])).rows[0].enabled,false);
     await page.screenshot({path:'/tmp/od-business10-company-device-released.png',fullPage:true});
+    const deviceOuPanel=inventoryDetails.getByRole('region',{name:'Geräte-Organisationseinheit',exact:true});
+    const deviceOuBefore=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM devices record WHERE id=$1',[inventoryDevice.id])).rows;
+    const deviceOuAssignmentsBefore=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_inventory_assignments record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows;
+    const deviceOuBase='/api/devices/'+inventoryDevice.id+'/organizational-unit', deviceOuReasons=[];
+    for(const [index,selectedId] of [unitIds[0],unitIds[1],null].entries()) {
+      if(selectedId) {
+        const deviceOuChoicesPending=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/devices/organizational-units');
+        await deviceOuPanel.getByRole('button',{name:'Zuordnung ändern',exact:true}).click();
+        const choicesResponse=await deviceOuChoicesPending;assert.equal(choicesResponse.status(),200,await choicesResponse.text());assert.ok((await choicesResponse.json()).units.some(value=>value.id===selectedId));
+        await deviceOuPanel.getByRole('combobox',{name:'Organisationseinheit auswählen',exact:true}).selectOption(selectedId);
+        await deviceOuPanel.getByRole('button',{name:'OU-Zuordnung prüfen',exact:true}).click();
+      } else await deviceOuPanel.getByRole('button',{name:'OU-Zuordnung aufheben',exact:true}).click();
+      const deviceOuDialog=page.getByRole('alertdialog'), explanation='Actual browser device OU decision '+index+' with original company owner';deviceOuReasons.push(explanation);
+      assert.equal(await deviceOuDialog.getByRole('button',{name:'Bestätigen',exact:true}).isDisabled(),true);
+      assert.equal((await inventoryFixture.db.query('SELECT count(*)::int AS count FROM device_ou_events WHERE device_id=$1',[inventoryDevice.id])).rows[0].count,index);
+      await deviceOuDialog.getByLabel('Begründung für OU-Zuordnung',{exact:true}).fill(explanation);
+      const deviceOuPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase&&response.request().method()==='PUT');
+      await deviceOuDialog.getByRole('button',{name:'Bestätigen',exact:true}).click();const response=await deviceOuPending;assert.equal(response.status(),200,await response.text());const saved=await response.json();
+      assert.equal(saved.revision,String(index+1));assert.equal(saved.ou?.id||null,selectedId);assert.equal(saved.updatedBy,receipt.administratorId);assert.equal(saved.deliveryStatus,'pending');
+      assert.equal(response.request().headers()['if-match'],`"device-ou-${inventoryDevice.id}-${saved.deviceRevision}-${index}"`);
+      assert.deepEqual(response.request().postDataJSON(),{ou:saved.ou?{id:saved.ou.id,generation:saved.ou.generation,revision:saved.ou.revision}:null,reason:explanation,confirm:true});
+      await deviceOuDialog.waitFor({state:'hidden'});await deviceOuPanel.getByText(selectedId?saved.ou.name:'Keine Organisationseinheit zugeordnet.',{exact:true}).waitFor();
+      const event=(await inventoryFixture.db.query('SELECT event.*,outbox.status AS delivery_status FROM device_ou_events event JOIN device_ou_outbox outbox USING(id) WHERE event.id=$1',[saved.operationId])).rows[0];
+      assert.equal(event.actor_user_id,receipt.administratorId);assert.equal(event.tenant_id,receipt.tenantId);assert.equal(event.reason,explanation);assert.equal(event.delivery_status,'pending');assert.equal(event.source.ou?.id||null,selectedId);
+      const originalClaims=JSON.parse(Buffer.from(response.request().headers().authorization.slice(7).split('.')[1],'base64url'));assert.equal(event.source.inventory.tokenId,originalClaims.jti);
+      assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM devices record WHERE id=$1',[inventoryDevice.id])).rows,deviceOuBefore);
+      assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_inventory_assignments record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows,deviceOuAssignmentsBefore);
+      if(index===0) {
+        const currentOuRegion=deviceOuPanel.getByRole('region',{name:'Aktueller OU-Stand',exact:true});await currentOuRegion.getByText('OU aktuell bestätigt.',{exact:true}).waitFor();
+        const beforeStatus=(await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_ou_events record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows;
+        const rename=await page.request.put(origin+'/api/ous/'+selectedId,{headers:{Authorization:'Bearer '+ownerSession.body.access_token,'If-Match':`"ou-${selectedId}-${saved.ou.revision}"`},data:{name:'Current browser engineering device unit'}});assert.equal(rename.status(),200,await rename.text());const renamed=await rename.json();
+        const currentOuPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase+'/status');await currentOuRegion.getByRole('button',{name:'OU-Stand prüfen',exact:true}).click();const currentOuResponse=await currentOuPending;assert.equal(currentOuResponse.status(),200,await currentOuResponse.text());const live=await currentOuResponse.json();
+        assert.equal(live.state,'changed');assert.equal(live.revision,saved.revision);assert.equal(live.currentOu.name,'Current browser engineering device unit');assert.equal(live.currentOu.id,selectedId);assert.equal(live.currentOu.generation,saved.ou.generation);
+        assert.equal(currentOuResponse.request().headers()['if-match'],`"device-ou-${inventoryDevice.id}-${saved.deviceRevision}-${saved.revision}"`);assert.ok(!Object.hasOwn(live,'inventory'));assert.ok(!Object.hasOwn(live,'directoryGrant'));
+        await currentOuRegion.getByText('Die OU wurde seit der Zuordnung geändert.',{exact:true}).waitFor();await deviceOuPanel.getByText(saved.ou.name,{exact:true}).waitFor();
+        assert.deepEqual((await inventoryFixture.db.query('SELECT to_jsonb(record) AS row FROM device_ou_events record WHERE device_id=$1 ORDER BY id',[inventoryDevice.id])).rows,beforeStatus);
+        const restored=await page.request.put(origin+'/api/ous/'+selectedId,{headers:{Authorization:'Bearer '+ownerSession.body.access_token,'If-Match':`"ou-${selectedId}-${renamed.revision}"`},data:{name:saved.ou.name}});assert.equal(restored.status(),200,await restored.text());
+      }
+    }
+    const deviceOuHistoryPending=page.waitForResponse(response=>new URL(response.url()).pathname===deviceOuBase+'/history');await deviceOuPanel.getByRole('button',{name:'OU-Verlauf',exact:true}).click();const deviceOuHistoryResponse=await deviceOuHistoryPending;assert.equal(deviceOuHistoryResponse.status(),200);const deviceOuHistory=await deviceOuHistoryResponse.json();assert.equal(deviceOuHistory.total,3);assert.deepEqual(deviceOuHistory.events.map(event=>event.reason),[...deviceOuReasons].reverse());assert.ok(!JSON.stringify(deviceOuHistory).includes('tokenId'));
+    await deviceOuPanel.getByLabel('OU-Zuordnungsverlauf').getByText(deviceOuReasons[0],{exact:true}).waitFor();
+    await page.screenshot({path:path.join(os.tmpdir(),'od-business10-company-device-ou-history.png'),fullPage:true});
     await page.goto(origin + '/users');
     await page.getByRole('region', { name: 'Kanonische Benutzerliste', exact: true }).getByLabel('Suche', { exact: true }).fill('browser-company-employee-one');
     await page.getByRole('button', { name: 'Benutzer browser-company-employee-one', exact: true }).click();

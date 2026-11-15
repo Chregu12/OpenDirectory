@@ -1,0 +1,113 @@
+{
+  "checkedAt": "2026-11-15T13:04:55.667321+00:00",
+  "baseCommit": "02270eb2b9eae312a06a606006995d7d2dd5f198",
+  "status": "scoped-return-boundaries-verified-targeted-complete-native-regression-running",
+  "productionTouched": false,
+  "standardScopedModeEnabled": false,
+  "canonicalApiVersion": "1.45.0",
+  "implementation": {
+    "migration": "016_device_scope_returns.sql",
+    "originalInventoryAndControlManifestCounts": [
+      14,
+      14
+    ],
+    "newReturnManifestCount": 15,
+    "sqlReceiver": "device_returns_receiving(2)",
+    "retainsExistingAuthority": [
+      "device_return_requests",
+      "device_return_events.proof.source",
+      "device_return_outbox",
+      "actual composed device_inventory_events and pending outbox"
+    ],
+    "newAuditOrCommandTableAdded": false,
+    "nestedSource2NeverCoercedToGlobalSource1": true,
+    "perChildSource": "Exact original targeted scoped inventory source plus retained negative account checkpoint; each child binds its actual device and OU association versions.",
+    "physicalCommit": "Requested/cancelled bind the actual current inventory version. Returned binds before/after versions of the one actual composed release and the original OU association.",
+    "publicProtocol2Coverage": [
+      "scope: original permitted area only",
+      "tenant: independent tenant-wide original duties"
+    ],
+    "negativeManifest": "Intersection of current read and assign duties; counts and recovery never certify complete company offboarding.",
+    "ordinaryReads": "Independent read duties remain effective; task scope is checked before integrity, state or ETag disclosure.",
+    "history": "Original expired source shapes and receipts remain verifiable without requiring old grants or OUs to still be current.",
+    "recovery": "No duplicate effect and no release of a later assignment; current local scope checked even for effect-free recovery.",
+    "timeoutsAndProductionMfaPolicyChanged": false
+  },
+  "verification": {
+    "newNativeCases": 36,
+    "completeRolesNative": {
+      "expectedTests": 160,
+      "status": "running",
+      "notClaimedPassed": true
+    },
+    "currentMarkerCoreSubset": {
+      "tests": 160,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 156,
+      "cancelled": 0,
+      "milliseconds": 29212.293666,
+      "covers": [
+        "actual scoped request/cancel/release/history/recovery",
+        "after-row-guard source poisoning reaches final checkpoint and fails physical P0412",
+        "previous SQL receiver remains available but cannot advertise protocol two",
+        "legacy delegated original offboarding handback"
+      ]
+    },
+    "deviceNativeWithActualRust": {
+      "tests": 138,
+      "pass": 138,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "milliseconds": 44544.216709,
+      "binaryVersion": "od-agent-service 1.5.0",
+      "binarySha256": "a484c535e84cc7b79fedf9ce73a9494fee1636885419f26fc84f2b0e7d9f0eda",
+      "rustSourceUnchangedSinceCiGate2056c9b": true
+    },
+    "deviceUnits": {
+      "suites": 26,
+      "pass": 742,
+      "fail": 0,
+      "seconds": 4.733
+    },
+    "identityUnits": {
+      "suites": 68,
+      "pass": 1304,
+      "fail": 0,
+      "seconds": 8.103
+    },
+    "finalApiContract": {
+      "pass": 33,
+      "fail": 0,
+      "seconds": 1.262
+    },
+    "policyApi": {
+      "pass": 7,
+      "fail": 0,
+      "seconds": 1.066
+    },
+    "canonicalApiMatchesGenerator": true,
+    "node": "20.20.2",
+    "postgres": "16.15 actual disposable Identity and Device schemas"
+  },
+  "testPreparationCorrections": [
+    "Independent tenant read/assign duties correctly suppress redundant scoped read/assign sources into a genuine legacy source. The mixed-source fixture now adds an actual unrelated scoped create duty.",
+    "A table ALTER with pending deferred trigger events stopped the first corruption fixture before poisoning. A z-prefixed BEFORE INSERT trigger now poisons after the original row guard and demonstrably reaches the final checkpoint.",
+    "Obsolete full run89973 was deliberately interrupted after fixture changes, terminal exit1, and is not verification evidence."
+  ],
+  "limits": [
+    "The complete current-source 160-case native regression is running; complete Linux CI is not yet claimed.",
+    "OU writes, hierarchy/delete dependencies, overall device capabilities and role/PIM/device scope UI remain open.",
+    "Actual signed scoped OAuth/browser acceptance and verified Harbor/image/migration rollout remain open; defaults scoped:false.",
+    "Separate Identity and Device databases cannot supply instantaneous distributed revocation or an atomic cross-database commit.",
+    "No personal production login, external provider acceptance or deployment was performed.",
+    "The full original BR/WF objective remains open."
+  ],
+  "sourceSha256": {
+    "packages/device-return-scope-contract.js": "37278f54f408af1941cd81cd39e847d6981df5bfe3841078974ed9150e04d1b7",
+    "services/core/device-service/migrations/016_device_scope_returns.sql": "d2501a6c8faed0f246e9931b9bc7b987d84242266ade4d8e367978437cc92223",
+    "services/core/device-service/src/DeviceReturns.js": "1be344a4cfe57b15b6e881d846d3e3f9db5522cab05ac0fcc529c472e08a33f8",
+    "services/core/identity-service/src/__tests__/companyRoles.postgres.cjs": "f56074497e371768ab3031508b0d2d33a5e1c2637ff879b1aa86f3286eedc131"
+  }
+}

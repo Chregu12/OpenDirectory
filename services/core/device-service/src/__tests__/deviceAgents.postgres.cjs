@@ -16,6 +16,7 @@ const administration = new Pool({ connectionString: process.env.DEVICE_TEST_DATA
 let pool, schema, db, source, inventory, agents, unit, revoked, compliance, canManage;
 const report = { hostname: 'actual-fixture', platform: 'linux', architecture: 'x86_64', osVersion: 'Linux', agentVersion: '1.1.0' };
 const decision = { reason: 'Native explicit enrollment decision', confirm: true };
+async function replayCurrentMigrations(){for(const file of fs.readdirSync(path.join(__dirname,'../../migrations')).filter(file=>file.endsWith('.sql')).sort())await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations',file),'utf8'));}
 beforeEach(async () => {
  schema = 'agent_' + randomUUID().replaceAll('-', ''); await administration.query(`CREATE SCHEMA ${schema}`);
  const url = new URL(process.env.DEVICE_TEST_DATABASE_URL); url.searchParams.set('options', `-c search_path=${schema}`); pool = new Pool({ connectionString: url.toString(), max: 5 });
@@ -136,12 +137,14 @@ test('missing hardware receiver or late report drift prevents successful writes 
  await assert.rejects(pool.query("UPDATE device_agent_connections SET inventory_report='{}'::jsonb"));
  await pool.query('ALTER TABLE device_agent_connections DROP CONSTRAINT device_agent_inventory_shape'); await assert.rejects(systemReport()); await assert.rejects(hardwareHeartbeat(registered.deviceToken));
  await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations/009_agent_inventory.sql'), 'utf8'));
+ await assert.rejects(systemReport(),{code:'42501'});await replayCurrentMigrations();
  await pool.query(`CREATE FUNCTION poison_hardware() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.inventory_report=jsonb_set(NEW.inventory_report,'{facts,memory,availableBytes}','"0"');RETURN NEW;END; $$; CREATE TRIGGER z_poison_hardware BEFORE UPDATE ON device_agent_connections FOR EACH ROW EXECUTE FUNCTION poison_hardware()`);
  await assert.rejects(hardwareHeartbeat(registered.deviceToken), { code: '42501' }); assert.equal((await systemReport()).status, 'missing');
 });
 test('hardware receipts survive migration replay and stale contact never presents live system data', async () => {
  const registered = await enroll((await manage()).enrollmentToken); await hardwareHeartbeat(registered.deviceToken); const original = (await systemReport()).inventory;
  for (const file of ['008_device_agents.sql','009_agent_inventory.sql']) await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations', file), 'utf8'));
+ await assert.rejects(systemReport(),{code:'42501'});await replayCurrentMigrations();
  assert.deepEqual((await systemReport()).inventory, original);
  // Only this disposable fixture moves the clock-bound rows; production guards stay active.
  await pool.query('ALTER TABLE device_agent_connections DISABLE TRIGGER USER');
@@ -318,6 +321,7 @@ test('clearing the command context before physical commit rolls back connection 
 test('reapplying the additive agent migration preserves existing credentials and audit history', async () => {
  const issued = await manage(); const current = await enroll(issued.enrollmentToken);
  await pool.query(fs.readFileSync(path.join(__dirname, '../../migrations/008_device_agents.sql'), 'utf8'));
+ await assert.rejects(heartbeat(current.deviceToken),{code:'42501'});await replayCurrentMigrations();
  await heartbeat(current.deviceToken); assert.equal((await get()).history.total, 2);
 });
 
@@ -333,7 +337,7 @@ test('policy source expiry during physical commit rolls back policy, retained ev
 
 test('compliance migration replay retains the actual policy, assessments and exact large policy history revisions', async () => {
  await savePolicy();const registered=await enroll((await manage()).enrollmentToken);await securityHeartbeat(registered.deviceToken);const retained=(await assessment()).assessment;
- await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/010_device_compliance.sql'),'utf8'));assert.deepEqual((await assessment()).assessment,retained);assert.equal((await compliance.history(unit.id,{}, {},'Bearer original')).total,1);
+ await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/010_device_compliance.sql'),'utf8'));await assert.rejects(assessment(),{code:'42501'});await replayCurrentMigrations();assert.deepEqual((await assessment()).assessment,retained);assert.equal((await compliance.history(unit.id,{}, {},'Bearer original')).total,1);
  await pool.query('ALTER TABLE device_compliance_policies DISABLE TRIGGER USER');try{await pool.query("UPDATE device_compliance_policies SET revision=9007199254740993 WHERE tenant_id=$1 AND platform='linux'",[source.tenant.id]);}finally{await pool.query('ALTER TABLE device_compliance_policies ENABLE TRIGGER USER');}
  const saved=await savePolicy(baseline({minimumOsVersion:'24.04'}),'9007199254740993');assert.equal(saved.policy.revision,'9007199254740994');const history=await compliance.history('linux',{}, {},'Bearer original',true);assert.equal(history.events[0].before.revision,'9007199254740993');assert.equal(history.events[0].after.revision,'9007199254740994');
  await securityHeartbeat(registered.deviceToken);assert.equal((await assessment()).policyRevision,'9007199254740994');
@@ -387,5 +391,5 @@ test('sync raw writes, missing event receipts, source withdrawal and physical de
  const original=db.transaction;db.transaction=(operation,options={})=>original(operation,{...options,beforeCommit:async client=>{if(options.beforeCommit)await options.beforeCommit(client);const proof=(await client.query("SELECT current_setting('opendirectory.device_sync',true) AS proof")).rows[0].proof;if(proof)await client.query("SELECT set_config('opendirectory.device_sync',jsonb_set($1::jsonb,'{validUntil}',to_jsonb(extract(epoch FROM clock_timestamp())-1))::text,true)",[proof]);}});
  await assert.rejects(finishSync(registered.deviceToken,offered.command),{code:'42501'});assert.equal((await get()).revision,before);db.transaction=original;
  revoked=true;await assert.rejects(agents.sync.write(unit.id,decision,`"device-sync-${queued.request.id}-2"`,{},'Bearer original',randomUUID(),queued.request.id),{status:401});revoked=false;
- await finishSync(registered.deviceToken,offered.command);const retained=(await syncPage()).requests;await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/011_device_sync.sql'),'utf8'));assert.deepEqual((await syncPage()).requests,retained);
+ await finishSync(registered.deviceToken,offered.command);const retained=(await syncPage()).requests;await pool.query(fs.readFileSync(path.join(__dirname,'../../migrations/011_device_sync.sql'),'utf8'));await assert.rejects(syncPage(),{code:'42501'});await replayCurrentMigrations();assert.deepEqual((await syncPage()).requests,retained);
 });

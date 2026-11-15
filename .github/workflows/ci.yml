@@ -1,14 +1,14 @@
 # Diagnostic branch only: do not merge this workflow replacement into main.
-name: Automation lease regression diagnostic
+name: Scoped device return regression diagnostic
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   automation:
-    name: Actual automation lease recovery (${{ matrix.attempt }})
+    name: Actual scoped device return group (${{ matrix.attempt }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -33,10 +33,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install actual Identity dependencies
-        run: npm install --prefix services/core/identity-service --package-lock=false --ignore-scripts --no-audit --no-fund
-      - name: Test the complete native automation group
+      - name: Install actual Identity and Device dependencies
+        run: |
+          npm install --prefix services/core/identity-service --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm ci --prefix services/core/device-service --ignore-scripts --no-audit --no-fund
+      - name: Test actual scoped return boundaries and legacy handback
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          services/core/identity-service/src/__tests__/companyAutomation.postgres.cjs
+          --test-concurrency=1
+          --test-name-pattern='^(device OU returns|delegated device assignment roles execute real offboarding)'
+          services/core/identity-service/src/__tests__/companyRoles.postgres.cjs
