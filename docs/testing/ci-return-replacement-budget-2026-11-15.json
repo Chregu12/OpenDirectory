@@ -1,0 +1,110 @@
+{
+  "checkedAt": "2026-11-15T15:30:02.499365+00:00",
+  "baseCommit": "24d77f4df670239939dca618e511cbf26b7ff69f",
+  "status": "original-signed-registration-case-verified-natively-and-in-three-linux-runs",
+  "productionTouched": false,
+  "productionCodeChanged": false,
+  "failure": {
+    "run": 43720396157,
+    "job": 132830917313,
+    "commit": "28b351cdf96e1aea112b4d437edab46e4eeae316",
+    "case": "production gateway does not treat a real credential-bound pending company registration as an access grant",
+    "caseMilliseconds": 740071.921049,
+    "line": 3962,
+    "operation": "Replacement POST to deviceOffboardingRoute after cancelled/returned/assignment_changed history checks",
+    "actual": "AbortSignal.timeout(10000) from the default request helper",
+    "otherSameBatchRequests": "Initial creation and both recoveries explicitly use timeout60000",
+    "fineOriginalSocketTimingCaptured": false
+  },
+  "correction": {
+    "replacementRequestTimeoutMilliseconds": 60000,
+    "ordinaryRequestDefaultMilliseconds": 10000,
+    "productionCodeChanged": false,
+    "mfaOrTokenTtlChanged": false,
+    "retriesAdded": false,
+    "assertionsWeakened": false,
+    "numericDurationMarker": "Independent replacement return request duration_ms=",
+    "testSha256": "9028266f7609e10ebf542efab3b43fe02cc00fb18cd2250e5c4f115f107d3989"
+  },
+  "finding": "The replacement return request uses the same batch endpoint and original checkpoint chain as initial creation and recovery, but alone omitted their explicit 60-second harness budget and inherited the ten-second ordinary helper default. The original Linux request timed out; its exact completed response duration was not captured.",
+  "verification": {
+    "native": {
+      "expectedTotalCases": 191,
+      "expectedSelected": 1,
+      "expectedSkipped": 190,
+      "lastVerifiedLive": false,
+      "terminal": true,
+      "terminalExit": 0,
+      "tests": 191,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 190,
+      "cancelled": 0,
+      "caseMilliseconds": 409939.17575,
+      "totalMilliseconds": 420342.253125,
+      "replacementRequestMilliseconds": 5395,
+      "allOriginalSlice17_18_19MarkersPresent": true
+    },
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43728421762",
+      "head": "dd9c8d21659c973d483bb2f582f3cf7c2596fcc4",
+      "conclusion": "success",
+      "treeDifferenceFromBase": [
+        ".github/workflows/ci.yml",
+        "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs"
+      ],
+      "testSourceDifference": "Only the four-line test correction shown in correction; all other product/test sources match main24d77f4.",
+      "jobs": [
+        {
+          "job_id": 132855318735,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 190,
+          "cancelled": 0,
+          "caseMilliseconds": 480039.44807,
+          "totalMilliseconds": 486740.772202,
+          "replacementRequestMilliseconds": 6290,
+          "originalSlice17_18_19Markers": 3
+        },
+        {
+          "job_id": 132855319005,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 190,
+          "cancelled": 0,
+          "caseMilliseconds": 474727.244572,
+          "totalMilliseconds": 482198.250599,
+          "replacementRequestMilliseconds": 6148,
+          "originalSlice17_18_19Markers": 3
+        },
+        {
+          "job_id": 132855319157,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 190,
+          "cancelled": 0,
+          "caseMilliseconds": 672676.881565,
+          "totalMilliseconds": 682598.519079,
+          "replacementRequestMilliseconds": 8800,
+          "originalSlice17_18_19Markers": 3
+        }
+      ]
+    },
+    "nodeSyntax": "pass",
+    "diffCheck": "pass",
+    "workflowValidation": "actionlint1.7.12 pass"
+  },
+  "limits": [
+    "These are exact-case runs: one selected of191 and190 deliberately skipped in each. They are not the complete cross-service or browser CI.",
+    "New request durations were5.395seconds natively and6.148–8.8seconds in Linux. No new successful request exceeding ten seconds was measured; the original CI timeout is the evidence of the shorter budget being exceeded.",
+    "Production MFA, token, API and SQL deadlines and ordinary ten-second test requests remain unchanged.",
+    "No request retry, bypassed receipt, removed assertion or deployment.",
+    "Complete newest-source CI and the original full BR/WF objective remain open."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "9028266f7609e10ebf542efab3b43fe02cc00fb18cd2250e5c4f115f107d3989"
+  }
+}
