@@ -4124,7 +4124,7 @@ test('production gateway registers an actual roleless company blueprint Owner an
   }
 });
 
-// Registration/review precede the separately timed 240-second original-MFA journey.
+// Registration/review precede the actual original-token MFA deadline checked below.
 test('production gateway applies actual roleless company blueprint license origins atomically and retires original offboarding captures', { timeout: 360000 }, async () => {
   const previousRegistration = process.env.COMPANY_REGISTRATION_ENABLED; const previousActivation = process.env.COMPANY_ACTIVATION_ENABLED;
   const registration = { registrationId: randomUUID(), username: 'company-assignment-owner', password: 'disposable-password', mfaCode: '', confirm: true, profile: { ...organizationProfileFixture(), name: 'Actual Signed Assignment Company' } };
@@ -4141,7 +4141,7 @@ test('production gateway applies actual roleless company blueprint license origi
       const pending = await request(base, reviewPath, { token: reviewer.access_token }); assert.equal(pending.status, 200, JSON.stringify(pending.body));
       const approved = await request(base, reviewPath + '/review', { method: 'POST', token: reviewer.access_token, headers: { 'If-Match': pending.body.etag }, body: { decision: 'approved', reason: 'Independently approve the company without granting global roles', confirm: true } }); assert.equal(approved.status, 200, JSON.stringify(approved.body));
       const activated = await request(issuerBase, '/oauth/company-registration/activate', { method: 'POST', body: { registrationId: registration.registrationId, username: registration.username, password: registration.password, mfaCode: '', confirm: true } }); assert.equal(activated.status, 200, JSON.stringify(activated.body));
-      const owner = await firstRoleFactor(registration.username); const token = owner.access_token; const claims = payload(token); const startedAt = Date.now();
+      const owner = await firstRoleFactor(registration.username); const token = owner.access_token; const claims = payload(token);
       assert.deepEqual(claims.roles, []); assert.equal(provenMfa(claims), true); assert.equal(claims.identity_authorization.userId, activated.body.administratorId);
       const call = (route, options = {}) => request(base, route, { ...options, token });
       const success = async (route, options = {}, status = 200) => { const response = await call(route, options); assert.equal(response.status, status, JSON.stringify({ route, response: response.body })); return response; };
@@ -4243,7 +4243,7 @@ test('production gateway applies actual roleless company blueprint license origi
         assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM identity_role_assignments WHERE user_id=$1', [activated.body.administratorId])).rows[0].count, 0);
         for (const table of ['mdm_commands', 'policy_device_operations']) assert.deepEqual((await issuerDb.query('SELECT id FROM '+table+' ORDER BY id')).rows,originalDeviceEvidence[table]);
         assert.equal((await policyDb.query('SELECT count(*)::integer AS count FROM license_provider_products WHERE license_id=ANY($1::uuid[])', [[sharedPool.id, emptyPool.id, scarcePool.id]])).rows[0].count, 0);
-        assert.ok(Date.now() - startedAt < 240000, 'Actual independent journey stays comfortably within the unchanged 300-second original MFA proof');
+        assert.ok(Math.floor(Date.now() / 1000) < claims.auth_time + 300, 'The entire journey retains the original unextended 300-second MFA proof');
         process.stdout.write('Slice22 signed: actual independently activated roleless Owner; source12 original bearer; manual+A+B one seat; source-only removal; all-app shortage and configuration conflict atomic; pinned immutable version; original-key recovery; original045 all-source plus zero-app retirement; reactivation fences old workflow and preserves new grants.\n');
       } finally { identityServer.removeListener('request', observeSource); }
     });
