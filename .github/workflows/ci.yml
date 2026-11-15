@@ -1,46 +1,68 @@
-# Diagnostic branch only: do not merge this workflow replacement into main.
-name: Device OU retirement source diagnostic
+# Diagnostic branch only: never merge this workflow replacement into main.
+name: Offboarding request phase diagnostic
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  automation:
-    name: Actual original OU retirement source (${{ matrix.attempt }})
+  offboarding:
+    name: Original offboarding request (${{ matrix.database }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3]
+        database: [fresh, history]
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: automation_test
+          POSTGRES_USER: diagnostic_test
           POSTGRES_PASSWORD: disposable_test_password
-          POSTGRES_DB: automation_test
+          POSTGRES_DB: diagnostic_test
           POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U automation_test -d automation_test"
+          --health-cmd "pg_isready -U diagnostic_test -d diagnostic_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      IDENTITY_TEST_DATABASE_URL: postgres://automation_test:disposable_test_password@127.0.0.1:5432/automation_test
+      LICENSE_TEST_DATABASE_URL: postgres://diagnostic_test:disposable_test_password@127.0.0.1:5432/diagnostic_test
+      IDENTITY_TEST_DATABASE_URL: postgres://diagnostic_test:disposable_test_password@127.0.0.1:5432/diagnostic_test
+      OAUTH_TEST_DATABASE_URL: postgres://diagnostic_test:disposable_test_password@127.0.0.1:5432/diagnostic_test
+      OD_DIAGNOSTIC_SOURCE_ROOT: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install actual Identity and Device dependencies
+      - name: Install the actual test service dependencies
         run: |
+          npm ci --prefix services/core/policy-service --ignore-scripts --no-audit --no-fund
+          npm ci --prefix services/core/api-gateway --ignore-scripts --no-audit --no-fund
+          npm ci --prefix services/core/license-management --ignore-scripts --no-audit --no-fund
           npm install --prefix services/core/identity-service --package-lock=false --ignore-scripts --no-audit --no-fund
           npm ci --prefix services/core/device-service --ignore-scripts --no-audit --no-fund
-      - name: Test original retirement source and lock ordering
+          npm install --prefix services/core/oauth-provider --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm install --prefix services/platform/quick-actions --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: Run the original preceding license suite
+        if: matrix.database == 'history'
+        working-directory: services/core/policy-service
+        run: npm run test:licenses:integration
+      - name: Run the original preceding Identity suite
+        if: matrix.database == 'history'
+        working-directory: services/core/identity-service
+        run: npm run test:groups:integration
+      - name: Run the original OAuth partitions with their original budgets
+        if: matrix.database == 'history'
+        working-directory: services/core/oauth-provider
+        run: npm run test:revocations:integration
+      - name: Observe the original case against a fresh database
+        if: matrix.database == 'fresh'
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
           --test-concurrency=1
-          --test-name-pattern='^device OU retirement source'
-          services/core/identity-service/src/__tests__/companyRoles.postgres.cjs
+          --require=./scripts/lib/offboarding-request-diagnostic.cjs
+          --test-name-pattern='^production gateway does not treat a real credential-bound pending company registration'
+          services/core/oauth-provider/src/__tests__/revocations.postgres.cjs

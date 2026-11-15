@@ -24,7 +24,6 @@ import {
 import {
   api,
   lldapApi,
-  deviceApi,
   securityApi,
   prometheusApi,
   healthApi,
@@ -32,6 +31,8 @@ import {
   configApi,
   policyApi,
 } from '@/lib/api';
+import { DeviceInventoryClient, deviceInventoryError } from '@/lib/deviceInventory';
+import { complianceAccess, readComplianceFleet, complianceStates, complianceLabels, complianceError, type ComplianceFleet } from '@/lib/deviceCompliance';
 import PIMGroupsPanel from './PIMGroupsPanel';
 import BackupRecoveryWizard from '@/components/setup/BackupRecoveryWizard';
 import toast from 'react-hot-toast';
@@ -46,6 +47,7 @@ interface KpiData {
   totalUsers: number | null;
   totalGroups: number | null;
   onlineDevices: number | null;
+  offlineDevices: number | null;
   totalDevices: number | null;
   healthyServices: number | null;
   totalServices: number | null;
@@ -81,14 +83,6 @@ interface ResourceMetric {
   label: string;
   value: number | null;
   hasData: boolean;
-}
-
-interface DeviceCompliance {
-  compliant: number;
-  atRisk: number;
-  nonCompliant: number;
-  noData: number;
-  total: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +243,7 @@ interface KpiCardProps {
 function KpiCard({ icon, label, value, subtitle, footer, alert }: KpiCardProps) {
   return (
     <div
+      role="group" aria-label={label}
       className={`od-dashboard-kpi rounded-xl p-4 ${alert ? 'border-red-200' : ''}`}
       style={alert
         ? { background: 'var(--bg-surface)', border: '1px solid #f85149', boxShadow: 'var(--card-shadow)' }
@@ -302,6 +297,7 @@ export default function DashboardView() {
     totalUsers: null,
     totalGroups: null,
     onlineDevices: null,
+    offlineDevices: null,
     totalDevices: null,
     healthyServices: null,
     totalServices: null,
@@ -324,11 +320,14 @@ export default function DashboardView() {
     { label: 'Disk', value: null, hasData: false },
   ]);
 
-  const [deviceCompliance, setDeviceCompliance] = useState<DeviceCompliance | null>(null);
+  const [deviceCompliance, setDeviceCompliance] = useState<ComplianceFleet['counts'] | null>(null);
+  const [deviceError, setDeviceError] = useState('');
+  const [deviceComplianceError, setDeviceComplianceError] = useState('');
   const [platformBreakdown, setPlatformBreakdown] = useState<{label:string;count:number;color:string}[]>([]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal: AbortSignal) => {
     const configured: string[] | null = await api.get('/api/platform/capabilities').then(response => response.data.configuredServices ?? null).catch(() => null);
+    if (signal.aborted) return;
     const now = new Date();
 
     // -----------------------------------------------------------------------
@@ -338,6 +337,7 @@ export default function DashboardView() {
       lldapUsersRes,
       lldapGroupsRes,
       devicesRes,
+      complianceRes,
       gatewayServicesRes,
       securityAlertsRes,
       policiesRes,
@@ -353,7 +353,15 @@ export default function DashboardView() {
     ] = await Promise.allSettled([
       lldapApi.getUsers(),
       lldapApi.getGroups(),
-      deviceApi.getDevices(),
+      (async () => {
+        const inventory = new DeviceInventoryClient();
+        try { await inventory.reload(signal); return await inventory.fleet(1, '', signal); }
+        finally { inventory.dispose(); }
+      })(),
+      (async () => {
+        const context = await complianceAccess(signal);
+        return readComplianceFleet(context, { page: 1 }, signal);
+      })(),
       gatewayApi.getServices(),
       configured !== null && !configured.includes('security-scanner') ? Promise.reject(new Error('Security scanner not configured')) : securityApi.getSecurityAlerts(),
       policyApi.getPolicies(),
@@ -367,6 +375,7 @@ export default function DashboardView() {
       // Activity feed (may 404)
       api.get('/api/auth/audit/login-history?limit=8').then(response => { if (!Array.isArray(response.data?.history)) throw new Error('Unconfirmed login history'); return response.data.history; }),
     ]);
+    if (signal.aborted) return;
 
     // -----------------------------------------------------------------------
     // KPI Row 1: Users
@@ -388,17 +397,16 @@ export default function DashboardView() {
     // KPI Row 1: Devices
     // -----------------------------------------------------------------------
     let onlineDevices: number | null = null;
+    let offlineDevices: number | null = null;
     let totalDevices: number | null = null;
     let rawDevices: any[] = [];
     if (devicesRes.status === 'fulfilled') {
-      rawDevices = Array.isArray(devicesRes.value?.data)
-        ? devicesRes.value.data
-        : devicesRes.value?.data?.devices ?? [];
-      totalDevices = rawDevices.length;
-      onlineDevices = rawDevices.filter(
-        (d: any) => (d.status ?? d.online_status ?? '').toLowerCase() === 'online'
-      ).length;
+      rawDevices = devicesRes.value.devices;
+      totalDevices = devicesRes.value.fleet!.counts.total;
+      onlineDevices = devicesRes.value.fleet!.counts.connected;
+      offlineDevices = devicesRes.value.fleet!.counts.offline;
     }
+    setDeviceError(devicesRes.status === 'rejected' ? deviceInventoryError(devicesRes.reason) : '');
 
     // -----------------------------------------------------------------------
     // KPI Row 1: Dienstzustand
@@ -484,6 +492,7 @@ export default function DashboardView() {
       totalUsers,
       totalGroups,
       onlineDevices,
+      offlineDevices,
       totalDevices,
       healthyServices,
       totalServices,
@@ -600,18 +609,10 @@ export default function DashboardView() {
     // -----------------------------------------------------------------------
     // Device Compliance
     // -----------------------------------------------------------------------
+    setDeviceCompliance(complianceRes.status === 'fulfilled' ? complianceRes.value.counts : null);
+    setDeviceComplianceError(complianceRes.status === 'rejected' ? complianceError(complianceRes.reason) : '');
     if (rawDevices.length > 0) {
-      let compliant = 0, atRisk = 0, nonCompliant = 0, noData = 0;
-      for (const d of rawDevices) {
-        const score = safeNum(d.complianceScore ?? d.compliance_score ?? d.compliance);
-        if (score === null) { noData++; }
-        else if (score >= 80) { compliant++; }
-        else if (score >= 50) { atRisk++; }
-        else { nonCompliant++; }
-      }
-      setDeviceCompliance({ compliant, atRisk, nonCompliant, noData, total: rawDevices.length });
-
-      // Platform breakdown from real device data
+      // Platform rows describe this page; fleet totals above cover the complete inventory.
       const PLATFORM_COLORS: Record<string, string> = { windows: 'bg-blue-500', macos: 'bg-gray-700', linux: 'bg-orange-500', ios: 'bg-purple-500', android: 'bg-green-500' };
       const counts: Record<string, number> = {};
       for (const d of rawDevices) {
@@ -624,7 +625,6 @@ export default function DashboardView() {
           .map(([p, count]) => ({ label: p.charAt(0).toUpperCase() + p.slice(1), count, color: PLATFORM_COLORS[p] ?? 'bg-teal-500' }))
       );
     } else {
-      setDeviceCompliance(null);
       setPlatformBreakdown([]);
     }
 
@@ -633,9 +633,25 @@ export default function DashboardView() {
   }, []);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+    let controller = new AbortController();
+    const refresh = () => {
+      controller.abort();
+      controller = new AbortController();
+      void loadData(controller.signal);
+    };
+    const invalidate = () => {
+      controller.abort();
+      setKpi(value => ({ ...value, totalDevices: null, onlineDevices: null, offlineDevices: null }));
+      setDeviceCompliance(null);
+      setPlatformBreakdown([]);
+      setDeviceError('Die ursprüngliche Sitzung ist nicht mehr gültig. Bitte erneut anmelden.');
+      setDeviceComplianceError('Die ursprüngliche Sitzung ist nicht mehr gültig. Bitte erneut anmelden.');
+      setLoading(false);
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    window.addEventListener('od:session-error', invalidate);
+    return () => { clearInterval(interval); controller.abort(); window.removeEventListener('od:session-error', invalidate); };
   }, [loadData]);
 
   // ---------------------------------------------------------------------------
@@ -744,26 +760,27 @@ export default function DashboardView() {
           subtitle={
             kpi.onlineDevices !== null && kpi.totalDevices !== null
               ? `${kpi.onlineDevices} online`
-              : 'Status unavailable'
+              : 'Status nicht verfügbar'
           }
           footer={
             kpi.onlineDevices !== null && kpi.totalDevices !== null ? (
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
                 <span className="text-green-600 font-medium">
                   {kpi.onlineDevices} online
                 </span>
-                {kpi.totalDevices - kpi.onlineDevices > 0 && (
+                {kpi.offlineDevices !== null && kpi.offlineDevices > 0 && (
                   <>
                     <span className="inline-block w-2 h-2 rounded-full bg-gray-300" />
                     <span style={{ color: 'var(--text-muted)' }}>
-                      {kpi.totalDevices - kpi.onlineDevices} offline
+                      {kpi.offlineDevices} offline
                     </span>
                   </>
                 )}
+                {kpi.offlineDevices !== null && kpi.totalDevices - kpi.onlineDevices - kpi.offlineDevices > 0 && <span style={{ color: 'var(--text-muted)' }}>{kpi.totalDevices - kpi.onlineDevices - kpi.offlineDevices} ohne aktive Verbindung</span>}
               </div>
             ) : (
-              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>No device data</div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{deviceError} <a className="od-text-action" href="/devices">Geräteübersicht öffnen</a></div>
             )
           }
         />
@@ -1080,112 +1097,37 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* Device Compliance */}
-        <div className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+        <section aria-label="Geräte-Compliance" className="rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-            <div>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Device Compliance</h2>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Based on compliance score</p>
-            </div>
+            <div><h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Geräte-Compliance</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Aktuelle Richtlinien und bestätigte Agentmeldungen</p></div>
             <ShieldCheckIcon className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="p-4">
-            {deviceCompliance === null ? (
-              <div className="flex flex-col items-center justify-center h-40 text-center">
-                <ComputerDesktopIcon className="w-10 h-10 mb-3" style={{ color: 'var(--text-muted)' }} />
-                <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>No device data</p>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Enroll devices to see compliance status</p>
+            {deviceCompliance === null ? <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              <p>{deviceComplianceError}</p><a className="od-text-action" href="/devices">Geräteübersicht öffnen</a>
+            </div> : deviceCompliance.total === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Keine Geräte erfasst.</p> : <>
+              <div className="flex rounded-full overflow-hidden h-5 gap-0.5 mb-5" aria-hidden="true">
+                {complianceStates.map(status => deviceCompliance[status] > 0 && <div key={status}
+                  className={status === 'compliant' ? 'bg-green-500' : status === 'non-compliant' ? 'bg-red-500' : 'bg-gray-300'}
+                  style={{ width: `${deviceCompliance[status] / deviceCompliance.total * 100}%` }} title={`${complianceLabels[status]}: ${deviceCompliance[status]}`} />)}
               </div>
-            ) : (
-              <>
-                {/* Stacked bar */}
-                <div className="mb-5">
-                  <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
-                    {deviceCompliance.compliant > 0 && (
-                      <div
-                        className="bg-green-500 transition-all duration-500"
-                        style={{ width: `${(deviceCompliance.compliant / deviceCompliance.total) * 100}%` }}
-                        title={`Compliant: ${deviceCompliance.compliant}`}
-                      />
-                    )}
-                    {deviceCompliance.atRisk > 0 && (
-                      <div
-                        className="bg-yellow-400 transition-all duration-500"
-                        style={{ width: `${(deviceCompliance.atRisk / deviceCompliance.total) * 100}%` }}
-                        title={`At Risk: ${deviceCompliance.atRisk}`}
-                      />
-                    )}
-                    {deviceCompliance.nonCompliant > 0 && (
-                      <div
-                        className="bg-red-500 transition-all duration-500"
-                        style={{ width: `${(deviceCompliance.nonCompliant / deviceCompliance.total) * 100}%` }}
-                        title={`Non-Compliant: ${deviceCompliance.nonCompliant}`}
-                      />
-                    )}
-                    {deviceCompliance.noData > 0 && (
-                      <div
-                        className="bg-gray-200 transition-all duration-500"
-                        style={{ width: `${(deviceCompliance.noData / deviceCompliance.total) * 100}%` }}
-                        title={`No Data: ${deviceCompliance.noData}`}
-                      />
-                    )}
-                    {deviceCompliance.total === 0 && (
-                      <div className="bg-gray-200 w-full" />
-                    )}
-                  </div>
-                </div>
-                {/* Legend rows */}
-                <div className="space-y-2.5">
-                  {[
-                    {
-                      label: 'Compliant',
-                      count: deviceCompliance.compliant,
-                      color: 'bg-green-500',
-                      text: 'text-green-700',
-                      desc: 'Score ≥ 80',
-                    },
-                    {
-                      label: 'At Risk',
-                      count: deviceCompliance.atRisk,
-                      color: 'bg-yellow-400',
-                      text: 'text-yellow-700',
-                      desc: 'Score 50–79',
-                    },
-                    {
-                      label: 'Non-Compliant',
-                      count: deviceCompliance.nonCompliant,
-                      color: 'bg-red-500',
-                      text: 'text-red-700',
-                      desc: 'Score < 50',
-                    },
-                    {
-                      label: 'No Data',
-                      count: deviceCompliance.noData,
-                      color: 'bg-gray-300',
-                      text: '',
-                      desc: 'Score unavailable',
-                    },
-                  ].map((row) => (
-                    <div key={row.label} className="flex items-center gap-2.5">
-                      <span className={`w-3 h-3 rounded-sm shrink-0 ${row.color}`} />
-                      <span className="text-sm flex-1" style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{row.desc}</span>
-                      <span className={`text-sm font-semibold ml-2 min-w-[2rem] text-right ${row.text}`} style={row.text ? {} : { color: 'var(--text-muted)' }}>
-                        {row.count}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-                    <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Total devices</span>
-                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{deviceCompliance.total}</span>
-                  </div>
-                </div>
-              </>
-            )}
+              <dl className="space-y-2.5">{complianceStates.map(status => <div key={status} className="flex items-center justify-between gap-3 text-sm">
+                <dt style={{ color: 'var(--text-secondary)' }}>{complianceLabels[status]}</dt><dd className="font-semibold">{deviceCompliance[status]}</dd>
+              </div>)}</dl>
+              <div className="pt-2 mt-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Geräte gesamt</span><span className="text-sm font-semibold">{deviceCompliance.total}</span>
+              </div>
+            </>}
           </div>
-        </div>
+        </section>
       </div>
       <details className="od-advanced-section"><summary>Geräte nach Plattform</summary>
+        {kpi.totalDevices !== null && platformBreakdown.length > 0 && <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+          {platformBreakdown.reduce((sum, platform) => sum + platform.count, 0) < kpi.totalDevices
+            ? `Erste ${platformBreakdown.reduce((sum, platform) => sum + platform.count, 0)} von ${kpi.totalDevices} Geräten. ` : 'Alle erfassten Geräte. '}
+          <a className="od-text-action" href="/devices">Vollständiges Inventar nach Plattform filtern</a>
+        </p>}
         {platformBreakdown.length ? <table className="fluent-table w-full"><thead><tr><th>Plattform</th><th>Geräte</th></tr></thead><tbody>{platformBreakdown.map(platform => <tr key={platform.label}><td>{platform.label}</td><td>{platform.count}</td></tr>)}</tbody></table> : <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Keine Gerätedaten vorhanden.</p>}
       </details>
       {showBackupWizard && <BackupRecoveryWizard onClose={() => setShowBackupWizard(false)} />}

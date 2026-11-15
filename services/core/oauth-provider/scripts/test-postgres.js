@@ -14,7 +14,7 @@ async function main() {
   const filters = [`^(?!${registration}|${blueprints}|${assurance}|${duties})[A-Za-z]`, registration, blueprints, assurance, duties];
   for (let index = 0; index < filters.length; index++) {
     const companions = index === 0 ? ['companyLicenseActivations', 'clients', 'companyApps', 'mfa', 'policyDeviceQueue'] : [];
-    await runPostgresTests({ files: [`--test-name-pattern=${filters[index]}`, ...companions.map(name => path.join(tests, name + '.postgres.cjs')), path.join(tests, 'revocations.postgres.cjs')],
+    await runPostgresTests({ files: ['--require=' + path.resolve(__dirname, '../../../../scripts/lib/offboarding-request-diagnostic.cjs'), `--test-name-pattern=${filters[index]}`, ...companions.map(name => path.join(tests, name + '.postgres.cjs')), path.join(tests, 'revocations.postgres.cjs')],
       environmentVariable: 'OAUTH_TEST_DATABASE_URL', label: 'oauth' });
     if (process.exitCode) return;
   }

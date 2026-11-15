@@ -3,8 +3,6 @@
 const { validContext, sameContext, validRevision } = require('../../../../packages/identity-authorization-contract');
 const { validTenantContext } = require('../../../../packages/tenant-authorization-contract');
 const { INVENTORY_PERMISSIONS, inventoryPermissions, deviceOffboardingValues } = require('../../../../packages/device-inventory-contract');
-const ReturnScope = require('../../../../packages/device-return-scope-contract');
-const Scope = require('../../../../packages/device-scope-contract');
 const { validDelegation } = require('../../../../packages/device-delegation-contract');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -13,27 +11,25 @@ function exact(value, keys) { return !!value && typeof value === 'object' && !Ar
 function timestamp(value) { return typeof value === 'string' && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value; }
 
 class DeviceReturnAuthority {
-  constructor({ scoped = false, endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + '/api/identity/device-offboarding', fetchImpl = (...args) => global.fetch(...args) } = {}) {
-    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl; this.scoped = scoped;
+  constructor({ endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + '/api/identity/device-offboarding', fetchImpl = (...args) => global.fetch(...args) } = {}) {
+    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl;
     if (!['http:', 'https:'].includes(this.endpoint.protocol) || this.endpoint.username || this.endpoint.password || this.endpoint.search || this.endpoint.hash || this.endpoint.pathname !== '/api/identity/device-offboarding') throw new Error('Invalid device offboarding identity authority URL');
   }
 
-  async read(authorization, user, workflowId, userId, selected = null) {
+  async read(authorization, user, workflowId, userId) {
     const values = deviceOffboardingValues({ workflowId, userId });
-    if(!Scope.resource(selected) || selected!==null && !this.scoped)fail(400,'Exact scoped return resource required');
     if (typeof authorization !== 'string' || authorization.length > 16384 || !/^Bearer [A-Za-z0-9._~-]+$/.test(authorization)
       || user?.actor_type !== 'user' || !validContext(user.identity_authorization) || !uuid(user.identity_authorization.userId)
       || typeof user.jti !== 'string' || !user.jti || !Number.isSafeInteger(user.exp) || !Number.isSafeInteger(user.auth_time)) fail(401, 'Original offboarding inventory human required');
     if (userId === user.identity_authorization.userId) fail(403, 'Self offboarding is forbidden');
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), this.scoped ? 5000 : 2500);
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 2500);
     try {
-      const response = await this.fetchImpl(this.endpoint, { method: 'POST', headers: { Authorization: authorization, Accept: 'application/json', 'Content-Type': 'application/json', ...(this.scoped ? {'X-OD-Device-Scope-Protocol':'1'} : {}) }, body: JSON.stringify(selected===null?values:{...values,device:selected}), redirect: 'error', cache: 'no-store', signal: controller.signal });
+      const response = await this.fetchImpl(this.endpoint, { method: 'POST', headers: { Authorization: authorization, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(values), redirect: 'error', cache: 'no-store', signal: controller.signal });
       if ([400, 401, 403, 404, 409, 428].includes(response.status)) fail(response.status, 'Device offboarding authority rejected the original request');
       if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Device offboarding source unavailable');
       const chunks = []; let length = 0;
-      for await (const chunk of response.body) { length += chunk.length; if (length > (this.scoped ? 262144 : 12288)) throw new Error('Oversized device offboarding source'); chunks.push(Buffer.from(chunk)); }
+      for await (const chunk of response.body) { length += chunk.length; if (length > 12288) throw new Error('Oversized device offboarding source'); chunks.push(Buffer.from(chunk)); }
       const source = JSON.parse(Buffer.concat(chunks).toString('utf8')); const parent = source?.parent;
-      if(source?.schemaVersion===2){if(!this.scoped || !ReturnScope.validSource(source,user,workflowId,userId,selected))throw new Error('Mismatched scoped offboarding source');return source;}
       const delegated=Object.hasOwn(source,'delegation');
       if (!exact(source, ['schemaVersion', 'issuer', 'subject', 'tokenId', 'expiresAt', 'context', 'tenant', 'actorUserId', 'permissions', 'validUntil', 'target', 'deviceOffboardingReturnsProtocol', 'parent',...(delegated?['delegation']:[])])||delegated&&!validDelegation(source,user)
         || source.schemaVersion !== 1 || source.deviceOffboardingReturnsProtocol !== 1 || source.issuer !== user.iss || source.subject !== user.sub || source.tokenId !== user.jti || source.expiresAt !== user.exp

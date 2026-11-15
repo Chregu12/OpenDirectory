@@ -23,6 +23,14 @@ Es werden keine Inventarrevisionen, Zuweisungen oder Compliance-Werte aus Heartb
 
 Version 1.0.45 ergänzt außerdem die fehlenden Web-Weiterleitungen für Flottenexport und Lebenszyklus-Aktionen. Ihre echten HTTP-Wege durch das gebaute Next.js-Image werden mit Methode, Query, Body und Versionsheader geprüft.
 
+## Gerätekennzahlen auf dem Dashboard
+
+Das Dashboard verwendet denselben validierenden Inventar-Client und die tatsächlichen Flottenzähler wie `/devices`. Gesamtbestand, Online und Offline beziehen sich auf die vollständige erlaubte Auswahl, auch wenn nur 25 Geräte auf der ersten Seite stehen. Ausstehende, nicht registrierte, abgelaufene und widerrufene Verbindungen werden getrennt als **ohne aktive Verbindung** zusammengefasst; sie sind keine bestätigten Offlinegeräte.
+
+Compliance liest unabhängig davon die eigenen tatsächlichen Compliance-Zähler. Angezeigt werden die sieben bestätigten Zustände statt angenommener Punkteschwellen aus Inventarzeilen. Fehlende Compliance-Rechte verbergen diese Bewertung und lassen separat erlaubte Inventarzähler verfügbar. Bei fehlgeschlagenem Refresh werden alte Zähler entfernt; eine abgebrochene oder ungültig gewordene Sitzung kann verspätete Antworten nicht wieder sichtbar machen.
+
+Die aufklappbare Plattformtabelle beschreibt die geladene erste Inventarseite. Bei mehr als 25 Geräten nennt sie ausdrücklich Teil- und Gesamtbestand und verlinkt die vollständige filterbare Geräteübersicht. Sie wird nicht als vollständige Plattformverteilung ausgegeben.
+
 ## Prüfung und verbleibende Grenzen
 
 Die Abnahme enthält reale PostgreSQL-Operationen, einen tatsächlich kompilierten macOS-Rust-Agenten, signierte Original-OAuth-/MFA-/PIM-Aufrufe durch den Produktions-Gateway-Code sowie Browserprüfungen gegen das gebaute Produktionsimage. Produktive persönliche MFA-/PIM-Vergaben werden dafür nicht erzeugt. Der [Rolloutnachweis](../deployment/device-fleet-2026-11-14.json) hält Artefakte, Datenbestand und öffentliche TLS-/Zugriffsprüfungen fest.

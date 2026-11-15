@@ -1,0 +1,144 @@
+{
+  "checkedAt": "2026-11-15 16:35:13 UTC",
+  "status": "complete-earlier-main-ci-verified-and-dashboard-device-correction-verified-locally",
+  "runtimeSourceBaseCommit": "d0fb4c7725490c203c2eda15dddf2b29aba49f7d",
+  "currentScope": "Essential workflows in docs/implementation-worklist.md; explicit user scope change on 2026-11-15.",
+  "completeEarlierMainCi": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43726686192",
+    "sourceCommit": "24d77f4df670239939dca618e511cbf26b7ff69f",
+    "status": "completed",
+    "conclusion": "success",
+    "successfulJobs": 10,
+    "totalJobs": 10,
+    "jobs": [
+      {
+        "id": 132850041813,
+        "name": "Security Scan",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042045,
+        "name": "Workflow validation",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042067,
+        "name": "App Store and Kerberos image startup",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042080,
+        "name": "Docker build configuration (docker-compose.yml)",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042090,
+        "name": "Device PostgreSQL integration",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042120,
+        "name": "Credentials and employee invitation PostgreSQL / HTTP integration",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042136,
+        "name": "License and Identity PostgreSQL / Browser Integration",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850042138,
+        "name": "Docker build configuration (docker-compose.lite.yml)",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850339395,
+        "name": "Service manifest validation",
+        "conclusion": "success"
+      },
+      {
+        "id": 132850339441,
+        "name": "Service Tests",
+        "conclusion": "success"
+      }
+    ],
+    "counts": {
+      "licensePostgres": 557,
+      "identityPostgres": 816,
+      "oauthPostgres": 306,
+      "browserMediation": 67,
+      "actualCredentialBrowser": 60,
+      "devicePostgresWithActualRustAgent": 138,
+      "credentialPostgresHttp": 56,
+      "frontendJest": 3236,
+      "frontendPlaywright": 108
+    },
+    "partitionAudit": {
+      "method": "Inspect all native TAP ok records, including nested tests, within each complete npm script step; ignore SKIP records when counting executed passes. Compare every observed name across all partitions.",
+      "oauthUniqueNames": 306,
+      "oauthNamesNotExecutedExactlyOnce": [],
+      "browserUniqueNames": 60,
+      "browserNamesNotExecutedExactlyOnce": [],
+      "scope": "Evidence for this completed run; not a new automatic future partition-coverage gate."
+    }
+  },
+  "dashboardCorrection": {
+    "before": "Dashboard counted at most the first inventory page, inferred online from a missing legacy status and invented compliance score buckets.",
+    "after": "Reuse actual bound DeviceInventoryClient fleet counts and independent validated compliance fleet counts. Distinguish offline from absent/pending/expired/revoked connections. Clear stale device results on failed refresh/session invalidation; abort obsolete loads. Label first-page platform rows as a partial inventory view.",
+    "newRegressionCases": [
+      "40-device fleet with 25 visible inventory rows and independently confirmed status counts",
+      "independent compliance denial retains authorized inventory counters",
+      "failed refresh removes old fleet/compliance counters",
+      "late pending fleet response cannot restore device data after session invalidation"
+    ],
+    "newBrowserCases": 2,
+    "verification": {
+      "frontendJest": {
+        "tests": 3240,
+        "suites": 160,
+        "fail": 0,
+        "seconds": 128.771
+      },
+      "frontendPlaywright": {
+        "tests": 110,
+        "fail": 0,
+        "retries": 0,
+        "reportedDuration": "2.4m",
+        "server": "Actual Next.js dev server with local API fixtures and isolated Chrome"
+      },
+      "productionBuild": {
+        "result": "pass",
+        "typescript": "pass, completed in 14.2 seconds"
+      },
+      "desktopAndMobileScreenshots": "Inspected actual fleet cards and mobile compliance panel; 390px layout has no horizontal page overflow."
+    }
+  },
+  "liveReadOnlyChecks": {
+    "context": "default",
+    "namespace": "opendirectory",
+    "readyDeployments": 11,
+    "totalDeployments": 11,
+    "loginGet": 200,
+    "oidcDiscoveryGet": 200,
+    "issuer": "https://opendirectory.heusser.local",
+    "pkceS256": true,
+    "anonymousSessionPost": 401,
+    "anonymousFleetGet": 401,
+    "anonymousCompanyPimGet": 401,
+    "anonymousCompanyLicensePoolsGet": 401,
+    "tlsVerification": "Passed with macOS system curl; no insecure flag. Python's separate CA bundle initially lacked the local issuer.",
+    "productionChanged": false
+  },
+  "limits": [
+    "The complete Linux run belongs to source24d77f4. The later replacement-request budget correction and this Dashboard change need their own newest-source CI result.",
+    "New Dashboard browser cases use mocked API contracts; they do not claim new signed OAuth/SQL or personal production browser acceptance.",
+    "The Dashboard correction is not deployed in this report. Live checks cover the existing release1.0.53 and protected endpoints, not this source change.",
+    "The platform table remains explicitly limited to the first25 devices; complete platform filtering is available in the inventory.",
+    "Real provider-account acceptance and physical-device acceptance remain open. No provider credential, production user, grant or PIM activation was created."
+  ],
+  "sourceSha256": {
+    "frontend/web-app/src/components/views/DashboardView.tsx": "242f803d09dc44e1f2dd2ad2829fad2c2aa67162f50e88c028faf25371e60ee1",
+    "frontend/web-app/src/__tests__/views/DashboardDevices.test.tsx": "1d92b2be9e26b5c1e7f8c48296090df4b50d98192341770641cc3737ae63e587",
+    "frontend/web-app/e2e/dashboard-devices.spec.ts": "af034d5c4cca6ba734a94c4aa013244218de185ccf73059bbb6435caab58846f"
+  }
+}
