@@ -102,5 +102,16 @@
       "Reactivation epoch 409 after actual same-operator password/TOTP reauthentication"
     ],
     "notTheCompleteSuite": true
+  },
+  "followUp": {
+    "checkedAt": "2026-11-15T07:46:33.010053+00:00",
+    "report": "ci-offboarding-receipt-2026-11-15.json",
+    "finding": "The real reauthentication retains value for the old 428 reactivation failure, but did not explain or reliably fix the offboarding 401. Actual Linux source diagnostics found a late target lifecycle change with more than 200 seconds of MFA/source budget remaining, followed by a measured 6408ms account receipt exceeding the old 5000ms wait. The first correction is not evidence that current main CI is green.",
+    "mainD189CiRun": 43682533047,
+    "mainD189CiConclusion": "failure",
+    "deviceOu02020CiRun": 43682545693,
+    "deviceOu02020CiConclusion": "success",
+    "deviceOuStatusC588CiRun": 43682550993,
+    "deviceOuStatusC588CiConclusion": "failure"
   }
 }

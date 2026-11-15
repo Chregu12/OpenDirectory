@@ -38,7 +38,7 @@ test('creates one durable intent, preserves exact bigint strings and exposes par
   (api.post as jest.Mock).mockResolvedValue({ status: 201, data: record });
   const result = await client.create(snapshot, { reason: ' ' + reason + ' ', confirm: true });
   expect(result.workflow.phase).toBe('licenses'); expect(result.workflow.completedLicenses).toBe(25);
-  expect(api.post).toHaveBeenCalledWith(jobs, { workflowId, userId, userRevision: requestedRevision, eligibilityRevision: '7', reason, confirm: true }, { signal: expect.any(AbortSignal) });
+  expect(api.post).toHaveBeenCalledWith(jobs, { workflowId, userId, userRevision: requestedRevision, eligibilityRevision: '7', reason, confirm: true }, { signal: expect.any(AbortSignal), timeout: 60000 });
   expect(client.knownIdRecovery).toBeNull(); expect(window.localStorage.length).toBe(0);
   await expect(client.continue(result, { reason, confirm: true })).rejects.toThrow();
   expect(api.post).toHaveBeenCalledTimes(1);
@@ -49,7 +49,7 @@ test('GET with exact ETag authorizes one explicit batch, never an automatic cont
   const result = await client.continue(snapshot, { reason, confirm: true });
   expect(result.workflow.phase).toBe('completed_local');
   expect(api.post).toHaveBeenCalledWith(jobs + '/' + workflowId + '/continue', { confirm: true, reason, userRevision: requestedRevision,
-    assignments: [{ poolId, assignmentId, poolRevision: '9007199254740995' }] }, { headers: { 'If-Match': offboardingEtag(snapshot.workflow) }, signal: expect.any(AbortSignal) });
+    assignments: [{ poolId, assignmentId, poolRevision: '9007199254740995' }] }, { headers: { 'If-Match': offboardingEtag(snapshot.workflow) }, signal: expect.any(AbortSignal), timeout: 60000 });
   await expect(client.continue(snapshot, { reason, confirm: true })).rejects.toThrow(); expect(api.post).toHaveBeenCalledTimes(1);
 });
 test('continuation rejects an edited immutable intent reason without POST', async () => {

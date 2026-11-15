@@ -3592,27 +3592,7 @@ test('production gateway does not treat a real credential-bound pending company 
         const denied = await request(base, workflowRoute, { method: 'POST', token: rejectedToken, body: workflowInput }); assert.ok([401, 428].includes(denied.status), JSON.stringify(denied.body));
       }
       assert.deepEqual(await workflowState(), beforeWorkflow);
-      process.stdout.write('Offboarding source preflight: '+JSON.stringify({mfaAgeSeconds:Math.floor(Date.now()/1000)-payload(token).auth_time})+'\n');
-      const licensePrototype=require('../../../policy-service/src/licenses/CompanyLicenses').CompanyLicenses.prototype,originalUnchanged=licensePrototype.unchanged;
-      licensePrototype.unchanged=async function(source,user,authorization){
-        try{return await originalUnchanged.call(this,source,user,authorization);}catch(error){
-          if(error.message==='Original company license authority changed'){
-            const diagnostic={mfaAgeSeconds:Math.floor(Date.now()/1000)-user.auth_time,sourceRemainingSeconds:source.validUntil-Math.floor(Date.now()/1000)};
-            try{const current=await this.authority.read(authorization,user,source.target?.id||null),same=require('node:util').isDeepStrictEqual;diagnostic.changedFields=Object.keys(source).filter(key=>!same(source[key],current[key]));diagnostic.changedTargetFields=Object.keys(source.target||{}).filter(key=>!same(source.target[key],current.target?.[key]));diagnostic.currentRemainingSeconds=current.validUntil-Math.floor(Date.now()/1000);}catch(probe){diagnostic.probeStatus=probe.status||503;}
-            process.stdout.write('Original license source failure diagnostic: '+JSON.stringify(diagnostic)+'\n');
-          }
-          throw error;
-        }
-      };
-      const identityPrototype=require('../../../policy-service/src/licenses/CompanyOffboardingIdentity').CompanyOffboardingIdentity.prototype,originalRequest=identityPrototype.request;
-      identityPrototype.request=async function(path,authorization,body){
-        if(!path.endsWith('/company-offboarding'))return originalRequest.call(this,path,authorization,body);
-        const originalFetch=this.fetchImpl,started=Date.now();
-        this.fetchImpl=async(...args)=>{try{const response=await originalFetch(...args);process.stdout.write('Identity account response diagnostic: '+JSON.stringify({elapsedMilliseconds:Date.now()-started,status:response.status})+'\n');return response;}catch(error){process.stdout.write('Identity account response diagnostic: '+JSON.stringify({elapsedMilliseconds:Date.now()-started,errorName:error.name,aborted:args[1].signal.aborted})+'\n');throw error;}};
-        try{return await originalRequest.call(this,path,authorization,body);}finally{this.fetchImpl=originalFetch;}
-      };
-      let workflowCreated;try{workflowCreated=await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 });}finally{licensePrototype.unchanged=originalUnchanged;identityPrototype.request=originalRequest;}
-      assert.equal(workflowCreated.status, 201, JSON.stringify(workflowCreated.body));
+      const workflowCreated = await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 }); assert.equal(workflowCreated.status, 201, JSON.stringify(workflowCreated.body));
       const completedJob = workflowCreated.body; const workflow = completedJob.workflow;
       assert.deepEqual(Object.keys(completedJob).sort(), ['actorUserId', 'currentTarget', 'schemaVersion', 'tenantId', 'workflow']);
       assert.deepEqual([completedJob.schemaVersion, completedJob.actorUserId, completedJob.tenantId, workflow.id, workflow.userId, workflow.createdBy, workflow.reason, workflow.phase, workflow.totalLicenses, workflow.completedLicenses, workflow.failure],
@@ -4161,11 +4141,17 @@ test('production gateway applies actual roleless company blueprint license origi
       const pending = await request(base, reviewPath, { token: reviewer.access_token }); assert.equal(pending.status, 200, JSON.stringify(pending.body));
       const approved = await request(base, reviewPath + '/review', { method: 'POST', token: reviewer.access_token, headers: { 'If-Match': pending.body.etag }, body: { decision: 'approved', reason: 'Independently approve the company without granting global roles', confirm: true } }); assert.equal(approved.status, 200, JSON.stringify(approved.body));
       const activated = await request(issuerBase, '/oauth/company-registration/activate', { method: 'POST', body: { registrationId: registration.registrationId, username: registration.username, password: registration.password, mfaCode: '', confirm: true } }); assert.equal(activated.status, 200, JSON.stringify(activated.body));
-      const owner = await firstRoleFactor(registration.username); const token = owner.access_token; const claims = payload(token);
+      const owner = await firstRoleFactor(registration.username); let token = owner.access_token; let claims = payload(token); const assignmentClaims = claims;
       assert.deepEqual(claims.roles, []); assert.equal(provenMfa(claims), true); assert.equal(claims.identity_authorization.userId, activated.body.administratorId);
-      const call = (route, options = {}) => request(base, route, { ...options, token });
+      const sourceCalls = [];
+      const call = async (route, options = {}) => {
+        const originalToken = token; const firstSourceCall = sourceCalls.length;
+        const response = await request(base, route, { ...options, token: originalToken });
+        assert.ok(sourceCalls.slice(firstSourceCall).every(call => call.authorization === 'Bearer ' + originalToken), 'Every source checkpoint must retain the original bearer of its own request');
+        return response;
+      };
       const success = async (route, options = {}, status = 200) => { const response = await call(route, options); assert.equal(response.status, status, JSON.stringify({ route, response: response.body })); return response; };
-      const sourceCalls = []; const observeSource = incoming => { if (incoming.url.split('?')[0] === '/api/identity/company-blueprint-assignments') sourceCalls.push({ method: incoming.method, authorization: incoming.headers.authorization }); };
+      const observeSource = incoming => { if (['/api/identity/company-blueprint-assignments', '/api/identity/company-licenses'].includes(incoming.url.split('?')[0])) sourceCalls.push({ method: incoming.method, authorization: incoming.headers.authorization, expectedAuthorization: 'Bearer ' + token }); };
       identityServer.on('request', observeSource);
       try {
         const assignmentBase = '/api/company-blueprint-assignments'; const appBase = '/api/licenses/company'; const appV2 = appBase + '/v2'; const blueprintBase = '/api/company-blueprints';
@@ -4239,6 +4225,10 @@ test('production gateway applies actual roleless company blueprint license origi
         const manualRemoved = await success(appV2 + '/pools/' + sharedPool.id + '/assignments/' + manualPreview.assignment.id + '/revoke', { method: 'POST', headers: { 'Idempotency-Key': randomUUID(), 'If-Match': '"company-pool-' + sharedPool.id + '-' + manualPreview.poolRevision + '"' }, body: { userId, eligibilityRevision: manualPreview.target.eligibilityRevision, sources: manualPreview.assignment.sources, reason: 'Remove the manual origin without removing either actual blueprint source', confirm: true } });
         assert.equal(manualRemoved.body.sourceRemoved, true); assert.equal(manualRemoved.body.seatReleased, false); assert.equal(manualRemoved.body.effectiveAssignmentRetained, true);
         await manualAssign(sharedPool.id, userId);
+        const originalParents = new Set((await policyDb.query('SELECT id FROM company_blueprint_assignment_operations WHERE tenant_id=$1', [activated.body.tenantId])).rows.map(parent => parent.id));
+        // Offboarding is an independent journey and must start with actual fresh password/TOTP authority.
+        token = (await issue(registration.username)).access_token; claims = payload(token);
+        assert.notEqual(claims.jti, assignmentClaims.jti); assert.equal(claims.sub, assignmentClaims.sub); assert.deepEqual(claims.identity_authorization, assignmentClaims.identity_authorization); assert.deepEqual(claims.roles, []); assert.equal(provenMfa(claims), true);
         const beforeOffboardingSources = (await success(appV2 + '/pools/' + sharedPool.id + '/assignments')).body.assignments[0].sources; assert.equal(beforeOffboardingSources.length, 3);
         const offboardingPreview = (await success(appV2 + '/users/' + userId + '/offboarding-preview')).body; assert.equal(offboardingPreview.licenseCount, 1); assert.equal(offboardingPreview.bindingCount, 3);
         const workflowBody = { workflowId: randomUUID(), userId, userRevision: offboardingPreview.user.userRevision, eligibilityRevision: offboardingPreview.user.eligibilityRevision, reason: 'Original negative account workflow retires every origin and the zero-app binding', confirm: true };
@@ -4256,14 +4246,14 @@ test('production gateway applies actual roleless company blueprint license origi
         const beforeOldWorkflow = await ledger(); const oldWorkflow = await success(workflowRoute + '/' + workflow.id + '/continue', { method: 'POST', headers: { 'Idempotency-Key': randomUUID(), 'If-Match': '"company-offboarding-' + workflow.id + '-' + workflow.revision + '"' }, body: { confirm: true, reason: workflowBody.reason, userRevision: workflowBody.userRevision, assignments: [], bindings: [] } }); assert.equal(oldWorkflow.body.workflow.phase, 'completed_local'); assert.equal(oldWorkflow.body.currentTarget.enabled, true); assert.deepEqual(oldWorkflow.body.workflow.checkpoint, workflow.checkpoint); assert.deepEqual(await ledger(), beforeOldWorkflow);
         const originalCheckpoint = (await identityDb.query('SELECT operation_id,after_eligibility_revision FROM identity_company_offboarding_receipts WHERE workflow_id=$1', [workflow.id])).rows[0]; assert.equal(originalCheckpoint.operation_id, workflow.checkpoint.operationId); assert.equal(String(originalCheckpoint.after_eligibility_revision), workflow.checkpoint.afterEligibilityRevision);
         const parents = (await policyDb.query('SELECT * FROM company_blueprint_assignment_operations WHERE tenant_id=$1 ORDER BY created_at,id', [activated.body.tenantId])).rows; assert.equal(parents.length, 12);
-        for (const parent of parents) { assert.equal(parent.actor_user_id, activated.body.administratorId); if (parent.source) { assert.equal(parent.source.tokenId, claims.jti); assert.deepEqual(parent.source.context, claims.identity_authorization); } if (parent.application_source) assert.equal(parent.application_source.tokenId, claims.jti); }
+        for (const parent of parents) { const originalClaims = originalParents.has(parent.id) ? assignmentClaims : claims; assert.equal(parent.actor_user_id, activated.body.administratorId); if (parent.source) { assert.equal(parent.source.tokenId, originalClaims.jti); assert.deepEqual(parent.source.context, originalClaims.identity_authorization); } if (parent.application_source) assert.equal(parent.application_source.tokenId, originalClaims.jti); }
         const parentDeliveries = (await policyDb.query('SELECT events.id,outbox.status FROM company_blueprint_assignment_events events JOIN company_blueprint_assignment_outbox outbox USING(id,tenant_id) WHERE events.tenant_id=$1', [activated.body.tenantId])).rows; assert.equal(parentDeliveries.length, parents.length); assert.ok(parentDeliveries.every(event => event.status === 'pending'));
         const canonicalChildren = (await policyDb.query('SELECT command.protocol,command.parent_operation_id,event.id,outbox.status,license_company_event_valid(event) AS valid FROM license_company_commands command JOIN license_company_events event ON event.id=command.id JOIN license_company_outbox outbox ON outbox.id=event.id WHERE command.protocol=2 AND command.tenant_id=$1', [activated.body.tenantId])).rows; assert.equal(canonicalChildren.length, 11); assert.ok(canonicalChildren.every(child => parents.some(parent => parent.id === child.parent_operation_id) && child.status === 'pending' && child.valid));
-        assert.ok(sourceCalls.length > 10); assert.ok(sourceCalls.every(call => call.authorization === 'Bearer ' + token));
+        assert.ok(sourceCalls.length > 10); assert.ok(sourceCalls.every(call => call.authorization === call.expectedAuthorization));
         assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM identity_role_assignments WHERE user_id=$1', [activated.body.administratorId])).rows[0].count, 0);
         for (const table of ['mdm_commands', 'policy_device_operations']) assert.deepEqual((await issuerDb.query('SELECT id FROM '+table+' ORDER BY id')).rows,originalDeviceEvidence[table]);
         assert.equal((await policyDb.query('SELECT count(*)::integer AS count FROM license_provider_products WHERE license_id=ANY($1::uuid[])', [[sharedPool.id, emptyPool.id, scarcePool.id]])).rows[0].count, 0);
-        assert.ok(Math.floor(Date.now() / 1000) < claims.auth_time + 300, 'The entire journey retains the original unextended 300-second MFA proof');
+        assert.ok(Math.floor(Date.now() / 1000) < Math.min(claims.exp, claims.auth_time + 300), 'The offboarding journey retains its original unextended access-token and 300-second MFA deadlines');
         process.stdout.write('Slice22 signed: actual independently activated roleless Owner; source12 original bearer; manual+A+B one seat; source-only removal; all-app shortage and configuration conflict atomic; pinned immutable version; original-key recovery; original045 all-source plus zero-app retirement; reactivation fences old workflow and preserves new grants.\n');
       } finally { identityServer.removeListener('request', observeSource); }
     });

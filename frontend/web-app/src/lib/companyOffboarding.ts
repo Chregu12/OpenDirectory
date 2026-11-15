@@ -240,7 +240,7 @@ export class CompanyOffboardingClient {
       if (this.previews.get(preview.user.id) !== preview) throw unconfirmed();
       const id = uuid.parse(window.crypto.randomUUID()); this.retainRecovery(id);
       this.previews.delete(preview.user.id); this.snapshots.clear();
-      const response = await api.post(jobs, { workflowId: id, userId: preview.user.id, userRevision: preview.user.userRevision, eligibilityRevision: preview.user.eligibilityRevision, ...values }, { signal: requestSignal }); check();
+      const response = await api.post(jobs, { workflowId: id, userId: preview.user.id, userRevision: preview.user.userRevision, eligibilityRevision: preview.user.eligibilityRevision, ...values }, { signal: requestSignal, timeout: 60000 }); check();
       if (![200, 201].includes(response.status)) throw unconfirmed();
       const value = this.parseJob(response.data, id, preview.user.id);
       if (value.workflow.createdBy !== this.expected.actorUserId || value.workflow.reason !== values.reason || value.workflow.requestedRevision !== preview.user.userRevision
@@ -263,7 +263,7 @@ export class CompanyOffboardingClient {
       this.retainRecovery(workflow.id);
       this.snapshots.delete(workflow.id); this.previews.delete(workflow.userId);
       const response = await api.post(jobs + '/' + workflow.id + '/continue', { ...values, userRevision: needsPreview ? preview.user.userRevision : workflow.requestedRevision,
-        assignments: rows.map(row => ({ poolId: row.poolId, assignmentId: row.assignmentId, poolRevision: row.poolRevision })) }, { headers: { 'If-Match': offboardingEtag(workflow) }, signal: requestSignal }); check();
+        assignments: rows.map(row => ({ poolId: row.poolId, assignmentId: row.assignmentId, poolRevision: row.poolRevision })) }, { headers: { 'If-Match': offboardingEtag(workflow) }, signal: requestSignal, timeout: 60000 }); check();
       if (response.status !== 200) throw unconfirmed();
       const value = this.parseJob(response.data, workflow.id, workflow.userId);
       if (BigInt(value.workflow.revision) <= BigInt(workflow.revision) || value.workflow.requestedRevision !== (needsPreview ? preview.user.userRevision : workflow.requestedRevision)
