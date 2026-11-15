@@ -480,7 +480,7 @@ test('an actual wrong-state callback neither creates a family nor a browser sess
     assert.equal((await activeContext.cookies()).some(cookie => cookie.name === 'od_session'), false);
     assert.equal((await issuerDb.query('SELECT COUNT(*)::int AS count FROM oauth_sessions')).rows[0].count, families);
     await page.getByRole('heading', { name: 'Anmeldung neu starten', exact: true }).waitFor();
-    await page.screenshot({ path: '/private/tmp/opendirectory-login-recovery.png' });
+    await page.screenshot({ path: path.join(os.tmpdir(), 'opendirectory-login-recovery.png') });
     await page.getByRole('link', { name: 'Anmeldung neu starten', exact: true }).click();
     await page.waitForURL(url => url.origin === issuerBase && url.pathname === '/oauth/authorize');
     await page.locator('input[name=username]').fill('reader');

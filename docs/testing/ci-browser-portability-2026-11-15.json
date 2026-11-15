@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-11-15T01:22:26.417780+00:00",
+  "sourceBaseCommit": "ffe416d598e2bfcb4f1ae34156dd23e1cf5543b0",
+  "status": "portable-browser-artifact-fix-target-verified-complete-ci-pending",
+  "failedCi": {
+    "runId": 43656782943,
+    "jobId": 132636960930,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43656782943",
+    "successfulJobs": 8,
+    "failedJobs": 1,
+    "licensePostgresPassed": 557,
+    "identityPostgresPassed": 806,
+    "oauthPostgresDistinctPassed": 306,
+    "browserMediationPassed": 67,
+    "actualBrowserFirstGroupPassed": 34,
+    "actualBrowserFirstGroupFailed": 1,
+    "actualBrowserOtherGroupsNotReached": 24,
+    "failure": "ENOENT writing a screenshot to a macOS-specific absolute temporary path on Linux"
+  },
+  "fix": "Use path.join(os.tmpdir(), filename) for recovery screenshot evidence. Existing callback, original-state, session and real sign-in assertions remain.",
+  "localVerification": {
+    "node": "20.20.2",
+    "host": "macOS arm64",
+    "targetedActualBrowserPassed": 1,
+    "failed": 0,
+    "otherCasesSkipped": 58,
+    "productionNextBuild": true,
+    "actualOAuthIdentityAuthRedisAndPostgreSQLFixtures": true,
+    "recoveryScreenshotWritten": true,
+    "screenshotBytes": 30204,
+    "screenshotSha256": "52c06f67eda11a94d74e49ec2311c863c2b5c991644d6f863c20fbf7961038df"
+  },
+  "sourceSha256": "e17f4a9969f58055e448dca7eb77746c9ed01b834a71d13ee91651a1f572cc2f",
+  "limits": [
+    "The complete patched 59-case confidential browser driver and final Linux CI have not yet passed.",
+    "Release 1.0.52 remains prepared and undeployed; a fresh backup is required immediately before rollout.",
+    "This patch changes test evidence output only; existing prepared runtime image sources are unchanged."
+  ]
+}
