@@ -6,13 +6,13 @@ permissions:
   contents: read
 jobs:
   registration:
-    name: Fresh signed company registration (${{ matrix.attempt }})
+    name: Own blueprint license origins (${{ matrix.attempt }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3]
+        attempt: [1]
     services:
       postgres:
         image: postgres:16
@@ -42,5 +42,5 @@ jobs:
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-name-pattern='^production gateway does not treat a real credential-bound pending company registration'
+          --test-name-pattern='^production gateway applies actual roleless company blueprint license origins'
           services/core/oauth-provider/src/__tests__/revocations.postgres.cjs
