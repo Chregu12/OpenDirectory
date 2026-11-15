@@ -6,13 +6,13 @@ permissions:
   contents: read
 jobs:
   registration:
-    name: Own blueprint license origins (${{ matrix.attempt }})
+    name: Company license activation clock (${{ matrix.attempt }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1]
+        attempt: [1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -33,14 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install actual service dependencies
-        run: |
-          for service in services/core/policy-service services/core/api-gateway services/core/license-management services/core/identity-service services/core/device-service services/core/oauth-provider services/platform/quick-actions; do
-            npm install --prefix "$service" --ignore-scripts --no-audit --no-fund --package-lock=false
-          done
-      - name: Test original signed registration and offboarding with source diagnostics
+      - name: Install issuer integration dependencies
+        run: npm install --prefix services/core/oauth-provider --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Test actual activation timing, revocation and absolute session expiry
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-name-pattern='^production gateway applies actual roleless company blueprint license origins'
-          services/core/oauth-provider/src/__tests__/revocations.postgres.cjs
+          services/core/oauth-provider/src/__tests__/companyLicenseActivations.postgres.cjs
