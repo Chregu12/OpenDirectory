@@ -59,6 +59,8 @@ const nextConfig = {
       { source: '/api/devices/:deviceId/commands/:cmdId/cancel', destination: `${oauthProviderUrl}/api/devices/:deviceId/commands/:cmdId/cancel` },
       { source: '/api/devices',                              destination: `${deviceServiceUrl}/api/devices` },
       { source: '/api/devices/capabilities',                  destination: `${deviceServiceUrl}/api/devices/capabilities` },
+      { source: '/api/devices/organizational-units',          destination: `${deviceServiceUrl}/api/devices/organizational-units` },
+      { source: '/api/devices/:id/organizational-unit/:path*', destination: `${deviceServiceUrl}/api/devices/:id/organizational-unit/:path*` },
       { source: '/api/devices/fleet/:path*',                  destination: `${deviceServiceUrl}/api/devices/fleet/:path*` },
       { source: '/api/devices/returns/:path*',                destination: `${deviceServiceUrl}/api/devices/returns/:path*` },
       { source: '/api/devices/users/:userId/offboarding-returns/:path*', destination: `${deviceServiceUrl}/api/devices/users/:userId/offboarding-returns/:path*` },

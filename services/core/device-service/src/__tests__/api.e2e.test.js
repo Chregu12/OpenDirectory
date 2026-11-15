@@ -314,26 +314,27 @@ jest.mock('../clients/backupClient', () => ({
 // ─── Now require the app ───────────────────────────────────────────────────────
 const request = require('supertest');
 const EnterpriseDeviceManagementService = require('../index');
+const { listenLoopback, closeServer } = require('../../../../../scripts/lib/loopback-test-server.cjs');
 
 describe('Device Service - E2E API Tests', () => {
   let app;
   let service;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Instantiate service without starting it (no real DB/WebSocket server)
     service = new EnterpriseDeviceManagementService();
     expect(service.deviceApplicationService).toBe(mockDeviceApplicationService);
     expect(jest.isMockFunction(service.enrollmentService.initiateEnrollment)).toBe(true);
     expect(jest.isMockFunction(service.complianceScanner.getViolations)).toBe(true);
     expect(jest.isMockFunction(service.messageBus.connect)).toBe(true);
-    app = service.app;
+    app = await listenLoopback(service.server);
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     // Clean up setInterval timers in AnalyticsBridge etc.
     jest.clearAllTimers();
     if (service && service.server) {
-      service.server.close();
+      await closeServer(service.server);
     }
   });
 

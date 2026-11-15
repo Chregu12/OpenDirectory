@@ -14,7 +14,7 @@ beforeEach(() => {
     validUntil: 9999999999, target: { id: body.userId, enabled: false, revision: '2' } };
   parent = { workflow_id: body.workflowId, tenant_id: source.tenant.id, user_id: body.userId, action: 'disabled', operation_id: randomUUID(),
     after_revision: '9007199254740993', after_eligibility_revision: '9223372036854775807', current_eligibility_revision: '9223372036854775807', created_at: new Date('2026-10-19T12:00:00Z') };
-  read = jest.fn(async () => structuredClone(source)); DeviceInventoryAuthority.mockImplementation(() => ({ read }));
+  read = jest.fn(async () => structuredClone(source)); DeviceInventoryAuthority.mockImplementation(() => ({ read, readScoped: read }));
   query = jest.fn(async sql => ({ rows: sql.startsWith('SELECT parent.*') ? [parent] : [] }));
   database = { transaction: jest.fn(async (operation, options = {}) => { const client = { query }; const result = await operation(client); await options.beforeCommit?.(client); return result; }) };
   authority = new DeviceOffboardingAuthority(database, { issuer: source.issuer });
@@ -71,4 +71,38 @@ test('a missing retained receiving or outbox proof is unavailable, never a succe
 test('a new negative generation after the read-only snapshot withholds the final source', async () => {
   let calls = 0; query.mockImplementation(async sql => ({ rows: sql.startsWith('SELECT parent.*') ? [{ ...parent, current_eligibility_revision: ++calls > 2 ? '2' : parent.after_eligibility_revision }] : [] }));
   await expect(authority.read(user, 'Bearer original', body)).rejects.toMatchObject({ status: 409 });
+});
+test('the private scoped parent retains its complete original inventory source and separate revision domains', async () => {
+  source.schemaVersion = 2; source.scope = { protocol: 1, original: 'no normalization' };
+  const selected = { deviceId: randomUUID(), deviceRevision: '9007199254740993', revision: '1', ou: null };
+  const result = await authority.readScoped(user, 'Bearer original', { ...body, device: selected });
+  expect(Object.keys(result)).toHaveLength(5); expect(result.deviceOffboardingReturnsProtocol).toBe(2);
+  expect(result.inventory).toEqual(source); expect(result).not.toHaveProperty('permissions');
+  expect(result.inventory.target.revision).toBe('2'); expect(result.target.eligibilityRevision).toBe('9223372036854775807');
+  expect(result.parent.afterRevision).toBe('9007199254740993');
+  expect(read).toHaveBeenCalledTimes(4); expect(read).toHaveBeenCalledWith(user, 'Bearer original', { userId: body.userId, device: selected });
+});
+test('a pure tenant source remains a genuine legacy parent under the scoped protocol', async () => {
+  const result = await authority.readScoped(user, 'Bearer original', body);
+  expect(result.schemaVersion).toBe(1); expect(result.deviceOffboardingReturnsProtocol).toBe(1);
+  expect(result).not.toHaveProperty('inventory'); expect(result).not.toHaveProperty('scope');
+});
+test.each(['devices.inventory.read', 'devices.inventory.assign'])('a scoped negative checkpoint cannot add the missing %s duty', async missing => {
+  source.permissions = source.permissions.filter(permission => permission !== missing);
+  await expect(authority.readScoped(user, 'Bearer original', body)).rejects.toMatchObject({ status: 403 }); expect(query).not.toHaveBeenCalled();
+});
+test.each(['grant', 'PIM', 'unit', 'resource'])('the original scoped %s evidence cannot drift at the last readback', async field => {
+  source.schemaVersion = 2; source.scope = { protocol: 1, [field]: 'original' };
+  let calls = 0; read.mockImplementation(async () => {
+    const value = structuredClone(source); if (++calls === 4) value.scope[field] = 'replacement'; return value;
+  });
+  await expect(authority.readScoped(user, 'Bearer original', body)).rejects.toMatchObject({ status: 401 });
+});
+test.each([
+  { device: { deviceId: randomUUID() } }, { device: null, tenantId: randomUUID() }, { device: [], scope: {} },
+])('scoped caller-owned or malformed selectors are rejected before any authority %j', async fields => {
+  await expect(authority.readScoped(user, 'Bearer original', { ...body, ...fields })).rejects.toMatchObject({ status: 400 }); expect(read).not.toHaveBeenCalled();
+});
+test('a legacy request cannot select a scoped device', async () => {
+  await expect(authority.read(user, 'Bearer original', { ...body, device: null })).rejects.toMatchObject({ status: 400 }); expect(read).not.toHaveBeenCalled();
 });

@@ -56,3 +56,80 @@ test('transport failure, redirect, nonJSON and oversized source remain unavailab
   }
   fetchImpl.mockRejectedValueOnce(new Error('offline')); await expect(authority.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 });
 });
+
+describe('explicit scoped parent protocol', () => {
+  let scoped, selected;
+  beforeEach(() => {
+    user.amr = ['pwd', 'otp']; user.mfa_authorization = { schemaVersion: 1, userId: user.identity_authorization.userId, revision: '1', authTime: user.auth_time, methods: ['pwd', 'otp'] };
+    const root = randomUUID(), validUntil = String(source.validUntil);
+    const inventory = { ...source, schemaVersion: 2, target: { id: userId, enabled: false, revision: '9007199254740995' },
+      scope: { protocol: 1, inherent: [], units: [{ id: root, generation: '9007199254740994', roots: [root] }], resource: null,
+        grants: INVENTORY_PERMISSIONS.map(permission => ({ permission, source: { id: randomUUID(), roleId: randomUUID(), roleRevision: '1', scopeType: 'device-ou', ouId: root, ouGeneration: '9007199254740994', targetType: 'user', targetId: source.actorUserId, membershipId: null, validUntil } })) } };
+    delete inventory.deviceOffboardingReturnsProtocol; delete inventory.parent;
+    source = { schemaVersion: 2, deviceOffboardingReturnsProtocol: 2, inventory, target: source.target, parent: source.parent };
+    selected = { deviceId: randomUUID(), deviceRevision: '9223372036854775807', revision: '2', ou: { id: root, generation: '9007199254740994' } };
+    scoped = new DeviceReturnAuthority({ scoped: true, endpoint: 'https://identity.test/api/identity/device-offboarding', fetchImpl });
+  });
+  test('preserves the original nested source without global permission coercion or conflating revisions', async () => {
+    await expect(scoped.read('Bearer original', user, workflowId, userId)).resolves.toEqual(source);
+    expect(fetchImpl).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ headers: { Authorization: 'Bearer original', Accept: 'application/json', 'Content-Type': 'application/json', 'X-OD-Device-Scope-Protocol': '1' }, body: JSON.stringify({ workflowId, userId }), redirect: 'error', cache: 'no-store' }));
+    expect(source).not.toHaveProperty('permissions'); expect(source.inventory.target.revision).toBe('9007199254740995');
+    expect(source.target.eligibilityRevision).toBe('9007199254740993'); expect(source.parent.afterRevision).toBe('9007199254740994');
+    expect(fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+  test('binds the requested device and disabled recipient to the exact original source', async () => {
+    source.inventory.scope.resource = selected;
+    await expect(scoped.read('Bearer original', user, workflowId, userId, selected)).resolves.toEqual(source);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ workflowId, userId, device: selected });
+    await expect(scoped.read('Bearer original', user, workflowId, userId, { ...selected, revision: '3' })).rejects.toMatchObject({ status: 503 });
+  });
+  test('a retained already-disabled parent has no invented account operation', async () => {
+    source.parent.action = 'already_disabled'; source.parent.operationId = null;
+    await expect(scoped.read('Bearer original', user, workflowId, userId)).resolves.toEqual(source);
+    source.parent.operationId = randomUUID(); await expect(scoped.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 });
+  });
+  test('the default legacy receiver refuses a nested scoped source', async () => {
+    await expect(authority.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 });
+    expect(fetchImpl.mock.calls[0][1].headers).not.toHaveProperty('X-OD-Device-Scope-Protocol');
+  });
+  test.each([
+    ['top-level permission coercion', value => { value.permissions = [...INVENTORY_PERMISSIONS]; }],
+    ['schema coercion', value => { value.schemaVersion = 1; }],
+    ['legacy nested source', value => { value.inventory.schemaVersion = 1; delete value.inventory.scope; }],
+    ['foreign actor', value => { value.inventory.actorUserId = randomUUID(); }],
+    ['changed original token', value => { value.inventory.tokenId = randomUUID(); }],
+    ['changed context', value => { value.inventory.context.revision = '2'; }],
+    ['missing scope', value => { delete value.inventory.scope; }],
+    ['user OU source', value => { value.inventory.scope.grants[0].source.scopeType = 'ou'; }],
+    ['lost root generation', value => { value.inventory.scope.units[0].generation = '1'; }],
+    ['enabled inner recipient', value => { value.inventory.target.enabled = true; }],
+    ['foreign inner recipient', value => { value.inventory.target.id = randomUUID(); }],
+    ['eligibility in authorization domain', value => { value.inventory.target.eligibilityRevision = value.target.eligibilityRevision; delete value.inventory.target.revision; }],
+    ['missing assignment duty', value => { value.inventory.permissions.pop(); value.inventory.scope.grants.pop(); }],
+    ['foreign negative generation', value => { value.target.eligibilityRevision = '1'; }],
+    ['enabled outer recipient', value => { value.target.enabled = true; }],
+    ['foreign outer recipient', value => { value.target.id = randomUUID(); }],
+    ['foreign workflow', value => { value.parent.workflowId = randomUUID(); }],
+    ['foreign parent tenant', value => { value.parent.tenantId = randomUUID(); }],
+    ['foreign parent user', value => { value.parent.userId = randomUUID(); }],
+    ['noncanonical parent revision', value => { value.parent.afterRevision = 2; }],
+    ['invented parent operation', value => { value.parent.operationId = null; }],
+    ['nonpending parent outbox', value => { value.parent.deliveryStatus = 'delivered'; }],
+    ['future parent', value => { value.parent.createdAt = new Date(Date.now() + 60000).toISOString(); }],
+    ['expired original source', value => { value.inventory.validUntil = 1; }],
+    ['extended MFA cutoff', value => { value.inventory.validUntil += 1; }],
+  ])('rejects %s without a legacy fallback', async (_label, change) => {
+    change(source); await expect(scoped.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 }); expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  test('original proven MFA remains mandatory for a scoped source', async () => {
+    user.amr = ['pwd']; await expect(scoped.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 });
+  });
+  test('invalid selected resources are rejected before transport', async () => {
+    await expect(scoped.read('Bearer original', user, workflowId, userId, { ...selected, tenantId: randomUUID() })).rejects.toMatchObject({ status: 400 });
+    await expect(authority.read('Bearer original', user, workflowId, userId, selected)).rejects.toMatchObject({ status: 400 }); expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  test('an oversized scoped source never bypasses the bounded private response', async () => {
+    fetchImpl.mockResolvedValue(new Response(' '.repeat(262145), { headers: { 'content-type': 'application/json' } }));
+    await expect(scoped.read('Bearer original', user, workflowId, userId)).rejects.toMatchObject({ status: 503 });
+  });
+});
