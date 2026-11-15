@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { BoltIcon } from '@heroicons/react/24/outline';
 import React, { useEffect, useRef, useState } from 'react';
 import { directoryUsers } from '@/lib/directoryUsers';
+import { companyWorkflowError } from '@/lib/companyAssignmentProtocol';
 import { companyAutomation, automationActions, licenseAutomationAction, groupRuleAutomationAction, isReconciliationAction, AutomationGroupReport, AutomationEnrollment, AutomationGrant, AutomationJob, AutomationPrincipal, AutomationSchedule, AutomationHistory, AutomationLicenseReport } from '@/lib/companyAutomation';
 import { companyGroupRules } from '@/lib/companyGroupRules';
 import { companyLicenseGroups } from '@/lib/companyLicenseGroups';
@@ -46,7 +47,7 @@ export default function CompanyAutomationView() {
   async function perform(operation: () => Promise<unknown>, success: string, refresh = true) {
     if (busy || loading || !principal || error) return; const version = epoch.current; setBusy(true); setMessage('');
     try { await operation(); if (version !== epoch.current) return; setMessage(success); setConfirmation(null); if (refresh) setReload(value => value + 1); }
-    catch (failure) { if (version === epoch.current) setError(failure instanceof Error ? failure.message : 'Ausgang nicht bestätigt. Gespeicherten Stand vor Wiederholung prüfen.'); }
+    catch (failure) { if (version === epoch.current) setError((failure as { response?: { status?: number } })?.response?.status === 412 ? companyWorkflowError(failure) : failure instanceof Error ? failure.message : 'Ausgang nicht bestätigt. Gespeicherten Stand vor Wiederholung prüfen.'); }
     finally { if (version === epoch.current) setBusy(false); }
   }
   async function inspect() {
