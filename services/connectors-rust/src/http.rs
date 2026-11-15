@@ -11,12 +11,14 @@ pub const MAX_BODY: u64 = 262_144;
 pub struct Error {
     pub code: String,
     pub retry_after: Option<u64>,
+    pub uncertain: Option<bool>,
 }
 impl Error {
     pub fn new(code: &str) -> Self {
         Self {
             code: code.into(),
             retry_after: None,
+            uncertain: None,
         }
     }
 }
