@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T07:46:32.987605+00:00",
+  "checkedAt": "2026-11-15T07:52:05.558144+00:00",
   "baseCommit": "d189305bce42b16f5d91ba05f7c885c15efd654e",
-  "status": "durable-account-receipt-fix-verified-later-batch-fixture-and-full-source-ci-pending",
+  "status": "durable-receipt-fix-verified-original-mfa-test-boundary-corrected-full-linux-ci-pending",
   "productionTouched": false,
   "diagnosis": {
     "originalMfaOnlyExplanationInsufficient": true,
@@ -60,8 +60,8 @@
     "nonemptyReporter": "Keep native failures nonzero and report their actual cause; only reject an empty/entirely skipped selection when no native test has already failed.",
     "nativePositiveOffboardingBatchDeadlineMilliseconds": 60000,
     "blueprintOriginsCaseDeadlineMilliseconds": 360000,
-    "blueprintOriginsOriginalMfaJourneyMaximumMilliseconds": 240000,
-    "blueprintBudgetReason": "Independent registration/review/MFA bootstrap is outside the separately timed 240-second original-token journey. The previous 240-second total case deadline also charged bootstrap time. The original same-bearer assertions, 240-second journey assertion and 300-second MFA cutoff are retained."
+    "blueprintBudgetReason": "Registration/review/MFA bootstrap is separate from the original-token journey. The old total 240-second test cap and a second arbitrary 240-second post-login headroom assertion could reject fully successful, still-authorized business operations. The final assertion now checks the original claims.auth_time + 300 directly. Same-bearer evidence, all business assertions and the productive 300-second MFA cutoff remain enforced.",
+    "blueprintOriginsOriginalMfaCutoffSeconds": 300
   },
   "localChecks": {
     "completePolicyUnits": {
@@ -126,7 +126,7 @@
     "frontend/web-app/src/lib/companyOffboardingV2.ts": "edd4feb22934865614414c424aefd6540ddee3391bd31822039814288d08aba5",
     "scripts/lib/__tests__/run-postgres-tests.test.mjs": "e1936ab17c6ff5a79a3df0aa660925d952e98391d6bece5245d504ec635152cf",
     "scripts/lib/nonempty-test-reporter.cjs": "d823fffc5c3b2656080f91522ce3d44835072438412b2d811de5f9c7f7f57a32",
-    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "5af6d012e8173b24d9b02053171e559bfeb8aa112e6e94272212953254a05c84",
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "3ff53976217ec9a922721dbbcb6f097f2de30adb53303e5fd0196be6079d35fa",
     "services/core/policy-service/src/__tests__/CompanyOffboardingIdentity.test.js": "a03a55ef0d689bbb6b2c02a548d48bb3fc6f6bac162b9d2c44d7db18c7124319",
     "services/core/policy-service/src/licenses/CompanyOffboardingIdentity.js": "b543dced672a6de7a5fd7ec78b99f73772eab00c594af07bd7028577035cb7cf"
   },
@@ -134,13 +134,26 @@
     "blueprintOriginsWithCurrentDraftScopeSource": {
       "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691222631",
       "sourceCommit": "55b6522",
-      "status": "in-progress",
-      "purpose": "Recheck the actual case that timed out after 240 seconds on a2adb40, retaining the separate 240-second original-MFA journey assertion."
+      "status": "completed-all-business-checks-passed-final-arbitrary-240-second-headroom-assertion-failed",
+      "purpose": "Recheck the actual case that timed out after 240 seconds on a2adb40, retaining the separate 240-second original-MFA journey assertion.",
+      "jobId": 132742104664,
+      "durationMilliseconds": 247482.537549
     },
     "registrationAndDurableBatches": {
       "sourceCommit": "41db9e4",
-      "status": "ready-to-dispatch",
-      "matrixCases": 3
+      "status": "in-progress",
+      "matrixCases": 3,
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691452576"
+    },
+    "blueprintActualMfaCutoff": {
+      "sourceCommit": "2f7c26c",
+      "status": "dispatching",
+      "purpose": "Use the original auth_time + 300 cutoff, not a 240-second execution-speed assumption."
     }
+  },
+  "fullSourceCi": {
+    "supersededRun": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691442707",
+    "reason": "The updated source corrects the separately reproduced arbitrary blueprint headroom assertion; the production write fix is unchanged.",
+    "currentRun": "pending-after-push"
   }
 }
