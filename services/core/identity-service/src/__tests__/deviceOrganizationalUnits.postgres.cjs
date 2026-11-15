@@ -168,6 +168,9 @@ test('a late OU rename or reparenting invalidates the captured original selectio
 });
 test('additive migration replay preserves original assignment, audit, outbox and private receivers', async () => {
   await save(); const before = await state(); await devicePool.query(fs.readFileSync(path.join(__dirname, '../../../device-service/migrations/013_device_organizational_units.sql'), 'utf8'));
+  await assert.rejects(devicePool.query('SELECT device_ou_receiving()'), { code: '42501' });
+  const folder = path.join(__dirname, '../../../device-service/migrations');
+  for (const filename of fs.readdirSync(folder).filter(name => name.endsWith('.sql')).sort()) await devicePool.query(fs.readFileSync(path.join(folder, filename), 'utf8'));
   assert.deepEqual(await state(), before); await devicePool.query('SELECT device_ou_receiving()');
   assert.equal((await devicePool.query("SELECT count(*)::int AS count FROM device_ou_manifest")).rows[0].count, 5);
   assert.equal((await devicePool.query("SELECT has_function_privilege('public','device_ou_change(jsonb)','EXECUTE') AS allowed")).rows[0].allowed, false);

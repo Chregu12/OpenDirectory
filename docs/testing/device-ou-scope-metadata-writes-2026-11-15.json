@@ -1,0 +1,139 @@
+{
+  "checkedAt": "2026-11-15T15:01:07.733144+00:00",
+  "baseCommit": "05a8827877f9858e5a6226d3e01816a844c37bf5",
+  "status": "complete-local-regression-verified-linux-and-signed-scoped-acceptance-pending",
+  "apiVersion": "1.46.0",
+  "productionTouched": false,
+  "defaultScopedMode": false,
+  "implemented": {
+    "scope": "Original-device and selected-target read/stock intersection for organizational-unit metadata writes and paginated target choices",
+    "clearing": "Requires independent tenant-wide inventory read and create duties",
+    "directory": "ous.read remains independent; original selected directory grant and deadline retained and revalidated",
+    "deviceBinding": "Minimal owned-device lock before visibility/integrity; same original normal inventory Source2 binds inventory revision and BEFORE association; original source is never coerced into schema1",
+    "physicalCommit": "Actual after association, unchanged inventory revision, original before resource, both OU scopes, original expiry, immutable event and actual pending outbox checked at physical commit",
+    "history": "Historical source shape and original effect evidence, without requiring the old grant or deadline to remain current",
+    "newBusinessAuditOrCommandTable": false,
+    "manifestRoutineCounts": {
+      "existingOu": 5,
+      "newOuScope": 10,
+      "inventoryScope": 14,
+      "agentSyncScope": 14,
+      "returnsScope": 15
+    },
+    "explicitSqlProtocol": "device_ou_receiving(2); no old-probe fallback",
+    "publicProtocol2": [
+      "DeviceOuScopedReceipt",
+      "DeviceOuScopedChoices"
+    ],
+    "privateProtocol2": [
+      "DeviceOuScopedAuthority",
+      "DeviceOuScopedChoicesAuthority"
+    ],
+    "legacy": "Genuine source1 and legacy public response shapes retained"
+  },
+  "verification": {
+    "fullNativeRolesAndPim": {
+      "tests": 180,
+      "pass": 180,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "totalMilliseconds": 1048037.667834
+    },
+    "newMetadataNativeGroup": {
+      "tests": 180,
+      "pass": 20,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 160,
+      "totalMilliseconds": 132590.697042
+    },
+    "allLegacyOuAndCurrentStatusNative": {
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "totalMilliseconds": 81615.921666
+    },
+    "fullNativeDeviceWithActualRustAgent": {
+      "tests": 138,
+      "pass": 138,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "totalMilliseconds": 45292.165833,
+      "agentVersion": "1.5.0",
+      "agentBinarySha256": "a484c535e84cc7b79fedf9ce73a9494fee1636885419f26fc84f2b0e7d9f0eda"
+    },
+    "deviceUnits": {
+      "suites": 27,
+      "tests": 766,
+      "pass": 766,
+      "fail": 0,
+      "seconds": 4.595
+    },
+    "identityUnits": {
+      "suites": 69,
+      "tests": 1313,
+      "pass": 1313,
+      "fail": 0,
+      "seconds": 8.036
+    },
+    "rootTests": {
+      "tests": 59,
+      "pass": 59,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "totalMilliseconds": 1675.381917
+    },
+    "policyApi": {
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "seconds": 1.082
+    },
+    "canonicalOpenApi": "Semantic equality with actual generator; four new schemas and four changed OU paths only, plus version",
+    "workflowValidation": "actionlint 1.7.12 pass",
+    "diffCheck": "pass",
+    "runtime": "Node 20.20.2 and actual isolated native PostgreSQL 16.15 schemas"
+  },
+  "adversarialCases": [
+    "Outside and unassigned devices denied before target lookup, stale versions or business state",
+    "Independent global read does not widen scoped stock choices or pull an outside device into scope",
+    "Independent tenant stock and read can move outside and clear while another duty stays scoped",
+    "Read/stock target pagination, literal search, count, no duplicate or hidden target metadata",
+    "Replaced original stock grant, directory grant and ended PIM activation rejected at final checkpoint",
+    "Late inside and outside association changes and inventory revision changes rejected by physical SQL commit after the final successful Node checkpoint",
+    "Original MFA deadline expires after final Node reply and rolls back at physical commit",
+    "Direct SQL rejects mismatched original device, inventory revision, association revision, generation, null scoped binding and legacy wrapper around source2",
+    "Replaced change/commit receivers, disabled manifest guard and suppressed pending outbox fail closed",
+    "Partial old replay cannot advertise scoped readiness; full forward replay retains original scoped history and public EXECUTE remains revoked",
+    "Final target choices reject original directory-grant replacement and changed target metadata"
+  ],
+  "fixtureNotes": [
+    "The first new metadata run had one duplicate directory-role test fixture name; made each explicit fixture role name unique. That failed run is not completion evidence.",
+    "The historical old-013-only replay test now first proves fail-closed partial replay, then restores every current migration and verifies retained data.",
+    "Two independent unit runs observed a transient health401 and three socket hang ups. The IPv6 wildcard/IPv4 client port collision was reproduced, explicit loopback fixtures were applied from main24d77f4, and the complete final units above passed without request retries."
+  ],
+  "limits": [
+    "Native tests use actual canonical Identity/Device classes and actual SQL but an explicit fixture bearer; this is not actual signed scoped OAuth/browser acceptance.",
+    "Complete newest-source GitHub CI and three Linux metadata/legacy groups remain pending.",
+    "Hierarchy/deletion dependency controls, public scoped capabilities, GUI scope selection and default activation remain open.",
+    "Separate Identity and Device databases do not provide instantaneous atomic distributed revocation.",
+    "No deployment, personal production login or external provider acceptance performed.",
+    "The full original BR-001–012 / WF-001–005 objective remains open."
+  ],
+  "sourceSha256": {
+    "packages/device-ou-contract.js": "5e950969e5c317f85d850e58c24d7b9b6462cac085920fa0026279baf18136e8",
+    "services/core/device-service/migrations/017_device_scope_organizational_units.sql": "04b40892592c6283eefe53a71dddfac58a009ee220f3c2f262ae4e6bcd70b2da",
+    "services/core/device-service/src/DeviceOrganizationalUnits.js": "7786603c49635f9184b14492d1fff3adc08fd6bd0db548ef67e83df3ef851ceb",
+    "services/core/device-service/src/DeviceOuSource.js": "6758359eb648f4294dec8b3544916dee7d66d19f61843c7e5291be1b969e9e3a",
+    "services/core/identity-service/src/DeviceOuAuthority.js": "97d775c146cad1abecde9470d2a7a359a3c60b109b9c7973c31672db5c687b38",
+    "services/core/identity-service/src/__tests__/companyRoles.postgres.cjs": "474d112efa70901cf241e03de3f4ba7a31334f156ea257397dfdec4566de25ba",
+    "services/core/identity-service/src/__tests__/deviceOrganizationalUnits.postgres.cjs": "201a84e8c4374e954c0d86a77ad1ff06df7b3bf6d9a90fbdc02149ff169742be",
+    "services/core/device-service/src/__tests__/DeviceOuScopes.test.js": "78b2c6bdf85f2fb6685ae3517951fff6b66cebcd003b49c75b0b3dd7fb80ce25",
+    "services/core/identity-service/src/__tests__/DeviceOuRouting.test.js": "51e4a46b522d616de738f288a9e16e57478da8d2e2a3ccd2a4cfd0f76fded722"
+  }
+}

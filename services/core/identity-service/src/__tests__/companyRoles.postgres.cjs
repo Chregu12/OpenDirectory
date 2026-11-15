@@ -303,7 +303,12 @@ async function scopedDevices(operation,permissions=['devices.inventory.read','de
  const delegate=await person(),root=await creator.ou({name:'Scoped device reads'},owner.user,bearer),child=await creator.ou({name:'Scoped device child',parentId:root.id},owner.user,bearer),outside=await creator.ou({name:'Other device scope'},owner.user,bearer);
  const role=await createRole({name:'Scoped device fixture duties',permissions}),grant=(await assign(role,delegate.id,{scopeType:'device-ou',ouId:root.id})).grant;
  return withDevices(async({inventory,deviceDb,source})=>{
-  const originalOu=new(require('../DeviceOuAuthority').DeviceOuAuthority)(db,options),units=new(require('../../../device-service/src/DeviceOrganizationalUnits').DeviceOrganizationalUnits)(deviceDb,{inventory,authority:{read:(authorization,user,ouId)=>originalOu.resolve({ouId},user,authorization),status:(authorization,user,selection)=>originalOu.status({selection},user,authorization,true)}});
+  const originalOu=new(require('../DeviceOuAuthority').DeviceOuAuthority)(db,options);
+  const client=user=>new(require('../../../device-service/src/DeviceOuSource').DeviceOuSource)({scoped:true,endpoint:'https://identity.native/api/identity/device-organizational-units',fetchImpl:async(url,request)=>{
+   assert.equal(request.headers['X-OD-Device-Scope-Protocol'],'1');
+   return Response.json(await(request.method==='GET'?originalOu.unitsScoped(Object.fromEntries(url.searchParams),user,request.headers.Authorization):url.pathname.endsWith('/status')?originalOu.status(JSON.parse(request.body),user,request.headers.Authorization,true):originalOu.resolveScoped(JSON.parse(request.body),user,request.headers.Authorization)));
+  }});
+  const units=new(require('../../../device-service/src/DeviceOrganizationalUnits').DeviceOrganizationalUnits)(deviceDb,{inventory,authority:{scoped:true,read:(authorization,user,ouId,resource=null)=>client(user).read(authorization,user,ouId,resource),units:(authorization,user,tenant,query,source)=>client(user).units(authorization,user,tenant,query,source),status:(authorization,user,selection)=>client(user).status(authorization,user,selection)}});
   const setUnit=async(device,unit)=>{const old=await units.get(device.id,{},owner.user,bearer),selected=unit?(await originalOu.resolve({ouId:unit.id},owner.user,bearer)).ou:null;return units.write(device.id,{ou:selected?{id:selected.id,generation:selected.generation,revision:selected.revision}:null,reason,confirm:true},require('../../../../../packages/device-ou-contract').etag(device.id,old.deviceRevision,old.revision),owner.user,bearer,randomUUID());};
   const inside=await inventory.create({...deviceValues(),assetId:'SCOPED-IN'},owner.user,bearer),nested=await inventory.create({...deviceValues(),assetId:'SCOPED-CHILD'},owner.user,bearer),hidden=await inventory.create({...deviceValues(),assetId:'SECRET-OUT',platform:'windows'},owner.user,bearer),unassigned=await inventory.create({...deviceValues(),assetId:'SECRET-NONE'},owner.user,bearer);
   await setUnit(inside,root);await setUnit(nested,child);await setUnit(hidden,outside);
@@ -1263,4 +1268,152 @@ test('device OU controls reject a substituted cancellation source after its row 
   await fixture.deviceDb.query("CREATE FUNCTION poison_control_source() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='cancelled' THEN SELECT source INTO NEW.source FROM device_sync_requests WHERE id=NEW.request_id;END IF;RETURN NEW;END; $$;CREATE TRIGGER z_poison_control_source BEFORE INSERT ON device_sync_events FOR EACH ROW EXECUTE FUNCTION poison_control_source()");
   await assert.rejects(controlChange(fixture,'cancel',queued.request),{code:'42501'});assert.deepEqual(await controlState(fixture.deviceDb),before);
  },controlPermissions);
+});
+
+const ouStockPermissions=['devices.inventory.read','devices.inventory.create'];
+async function ouDirectory(fixture) { return (await assign(await createRole({name:'Independent OU metadata reader '+randomUUID(),permissions:['ous.read']}),fixture.delegate.id)).grant; }
+async function moveScopedOu(fixture,destination=fixture.child,user=fixture.delegate.user,previous=null) {
+ const OU=require('../../../../../packages/device-ou-contract');
+ const current=previous||await fixture.units.get(fixture.inside.id,{},user,bearer);
+ const selected=destination===null?null:(await pool.query("SELECT unit.id,unit.revision::text,ownership.generation::text FROM ous unit JOIN identity_tenant_ownership ownership ON ownership.resource_kind='ou' AND ownership.resource_id=unit.id WHERE unit.id=$1",[destination.id])).rows[0];
+ return fixture.units.write(fixture.inside.id,{ou:selected,reason,confirm:true},OU.etag(fixture.inside.id,current.deviceRevision,current.revision),user,bearer,randomUUID());
+}
+function afterOuCheckpoint(fixture,check) {
+ fixture.units.database={...fixture.deviceDb,transaction:(operation,settings={})=>fixture.deviceDb.transaction(operation,{...settings,beforeCommit:async client=>{
+  if(settings.beforeCommit)await settings.beforeCommit(client);if(!settings.readOnly)await check(client);
+ }})};
+}
+
+test('device OU metadata moves only within actual stock scope and retains original inventory and directory evidence',async()=>{
+ await scopedDevices(async fixture=>{
+  const directory=await ouDirectory(fixture),original=await fixture.inventory.get(fixture.inside.id,owner.user,bearer);
+  const result=await moveScopedOu(fixture);assert.equal(result.schemaVersion,2);assert.equal(result.deviceOuProtocol,2);assert.equal(result.coverage,'scope');assert.equal(result.revision,'2');assert.equal(result.ou.id,fixture.child.id);assert.equal(result.deliveryStatus,'pending');
+  assert.deepEqual(await fixture.inventory.get(fixture.inside.id,owner.user,bearer),original);
+  const retained=(await fixture.deviceDb.query('SELECT source FROM device_ou_events WHERE id=$1',[result.operationId])).rows[0].source;
+  assert.equal(retained.inventory.schemaVersion,2);assert.equal(retained.inventory.scope.resource.revision,'1');assert.equal(retained.inventory.scope.resource.ou.id,fixture.root.id);assert.equal(retained.inventory.scope.resource.deviceRevision,original.revision);assert.equal(retained.directoryGrant.id,directory.id);assert.equal(retained.inventory.target,null);
+  assert.equal((await moveScopedOu(fixture,fixture.root)).revision,'3');
+  const history=await fixture.units.history(fixture.inside.id,{},fixture.delegate.user,bearer);assert.equal(history.total,3);assert.equal(history.events[0].actorUserId,fixture.delegate.id);assert.ok(!JSON.stringify(result).includes('tokenId'));assert.ok(!JSON.stringify(history).includes('directoryGrant'));
+  await roles.revoke(fixture.grant.id,{reason,confirm:true},C.etag('grant',fixture.grant),owner.user,bearer);
+  assert.equal((await fixture.units.history(fixture.inside.id,{},owner.user,bearer)).total,3,'Historical scoped proofs survive actual grant withdrawal');
+ },ouStockPermissions);
+});
+test('device OU metadata choices apply the read and stock intersection to counts search and every page',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);
+  for(let index=0;index<25;index++)await creator.ou({name:'Scoped target '+String(index).padStart(2,'0'),parentId:fixture.root.id},owner.user,bearer);
+  const first=await fixture.units.units({},fixture.delegate.user,bearer),second=await fixture.units.units({page:'2'},fixture.delegate.user,bearer);
+  assert.equal(first.schemaVersion,2);assert.equal(first.coverage,'scope');assert.equal(first.total,27);assert.equal(first.units.length,25);assert.equal(second.units.length,2);assert.equal(new Set([...first.units,...second.units].map(unit=>unit.id)).size,27);
+  assert.ok(![...first.units,...second.units].some(unit=>unit.id===fixture.outside.id));assert.equal((await fixture.units.units({search:'Other device'},fixture.delegate.user,bearer)).total,0);assert.equal((await fixture.units.units({page:'9'},fixture.delegate.user,bearer)).units.length,0);
+  assert.ok(!JSON.stringify(first).includes('directoryGrant'));assert.ok(!JSON.stringify(first).includes('tokenId'));assert.ok(!Object.hasOwn(first,'inventory'));assert.ok(first.validUntil<=fixture.delegate.user.auth_time+300);
+ },ouStockPermissions);
+});
+test('device OU metadata keeps independent OU reading and denies out of scope devices before target lookup or versions',async()=>{
+ await scopedDevices(async fixture=>{
+  const before=await deviceState(fixture.deviceDb);
+  await assert.rejects(fixture.units.units({},fixture.delegate.user,bearer),{status:403});await assert.rejects(moveScopedOu(fixture),{status:403});
+  const OU=require('../../../../../packages/device-ou-contract');
+  for(const device of [fixture.hidden,fixture.unassigned])await assert.rejects(fixture.units.write(device.id,{ou:{id:randomUUID(),generation:'1',revision:'1'},reason,confirm:true},OU.etag(device.id,'99','99'),fixture.delegate.user,bearer),{status:404});
+  assert.deepEqual(await deviceState(fixture.deviceDb),before);await ouDirectory(fixture);
+  await assert.rejects(moveScopedOu(fixture,null),{status:403});await assert.rejects(moveScopedOu(fixture,fixture.outside),{status:404});await assert.rejects(moveScopedOu(fixture,fixture.root),{status:409});
+  const original=await fixture.units.get(fixture.inside.id,{},fixture.delegate.user,bearer);await moveScopedOu(fixture);await assert.rejects(moveScopedOu(fixture,fixture.root,fixture.delegate.user,original),{status:412});
+ },ouStockPermissions);
+});
+test('device OU metadata global reading cannot widen scoped stock choices or pull an outside device into scope',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);await assign(await createRole({name:'Independent global inventory reader',permissions:['devices.inventory.read']}),fixture.delegate.id);
+  assert.equal((await fixture.inventory.get(fixture.hidden.id,fixture.delegate.user,bearer)).id,fixture.hidden.id);
+  const choices=await fixture.units.units({},fixture.delegate.user,bearer);assert.equal(choices.coverage,'scope');assert.equal(choices.total,2);
+  const OU=require('../../../../../packages/device-ou-contract'),current=await fixture.units.get(fixture.hidden.id,{},fixture.delegate.user,bearer),target=(await fixture.units.units({},owner.user,bearer)).units.find(unit=>unit.id===fixture.root.id);
+  await assert.rejects(fixture.units.write(fixture.hidden.id,{ou:{id:target.id,generation:target.generation,revision:target.revision},reason,confirm:true},OU.etag(fixture.hidden.id,current.deviceRevision,current.revision),fixture.delegate.user,bearer),{status:404});
+ },ouStockPermissions);
+});
+test('device OU metadata independent tenant stock rights can move and clear while preserving an unrelated scoped source',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);await assign(await createRole({name:'Independent tenant stock operator',permissions:ouStockPermissions}),fixture.delegate.id);
+  const source=await fixture.source.readScoped(fixture.delegate.user,bearer);assert.equal(source.schemaVersion,2);assert.equal(source.scope.resource,null);
+  const choices=await fixture.units.units({},fixture.delegate.user,bearer);assert.equal(choices.coverage,'tenant');assert.equal(choices.total,3);
+  const moved=await moveScopedOu(fixture,fixture.outside);assert.equal(moved.coverage,'tenant');assert.equal((await moveScopedOu(fixture,null)).ou,null);
+  const proof=(await fixture.deviceDb.query('SELECT source FROM device_ou_events WHERE id=$1',[moved.operationId])).rows[0].source;assert.equal(proof.inventory.schemaVersion,2);assert.equal(proof.inventory.scope.resource,null);
+ },['devices.inventory.read','devices.inventory.create','devices.inventory.assign']);
+});
+for(const replace of ['stock grant','directory grant','PIM activation'])test('device OU metadata cannot acknowledge a replaced '+replace+' at its final original source checkpoint',async()=>{
+ await scopedDevices(async fixture=>{
+  const directory=await ouDirectory(fixture);let activation;
+  if(replace==='PIM activation'){
+   await roles.revoke(fixture.grant.id,{reason,confirm:true},C.etag('grant',fixture.grant),owner.user,bearer);
+   const eligible=(await makeEligible(fixture.role,fixture.delegate.id,{scopeType:'device-ou',ouId:fixture.root.id})).eligibility;activation=(await activate(eligible,fixture.delegate.user)).activation;
+  }
+  const before=await deviceState(fixture.deviceDb),read=fixture.units.authority.read.bind(fixture.units.authority);let calls=0;
+  fixture.units.authority.read=async(...args)=>{
+   if(++calls===3){
+    if(replace==='PIM activation')await pim().end(activation.id,{reason,confirm:true},C.etag('activation',activation),fixture.delegate.user,bearer);
+    else{const grant=replace==='stock grant'?fixture.grant:directory;await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);if(replace==='stock grant')await assign(fixture.role,fixture.delegate.id,{scopeType:'device-ou',ouId:fixture.root.id});else await ouDirectory(fixture);}
+   }
+   return read(...args);
+  };
+  await assert.rejects(moveScopedOu(fixture),error=>[401,403].includes(error.status));assert.equal(calls,3);assert.deepEqual(await deviceState(fixture.deviceDb),before);
+ },ouStockPermissions);
+});
+for(const corruption of ['inside association','outside association','inventory revision'])test('device OU metadata physically rejects late '+corruption+' after its final successful checkpoint',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);const before=await deviceState(fixture.deviceDb);let reached=false;
+  afterOuCheckpoint(fixture,async client=>{
+   reached=true;await client.query("SET LOCAL session_replication_role='replica'");
+   try{
+    if(corruption==='inventory revision')await client.query('UPDATE devices SET inventory_revision=inventory_revision+1 WHERE id=$1',[fixture.inside.id]);
+    else{const target=corruption==='inside association'?fixture.root:fixture.outside,unit=(await fixture.units.authority.read(bearer,owner.user,target.id)).ou;await client.query('UPDATE device_ou_assignments SET revision=revision+1,ou=$2::jsonb WHERE device_id=$1',[fixture.inside.id,JSON.stringify(unit)]);}
+   }finally{await client.query("SET LOCAL session_replication_role='origin'");}
+  });
+  await assert.rejects(moveScopedOu(fixture),{code:'P0412'});assert.equal(reached,true);assert.deepEqual(await deviceState(fixture.deviceDb),before);
+ },ouStockPermissions);
+});
+test('device OU metadata original deadline remains mandatory at physical commit after a successful final reply',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);const before=await deviceState(fixture.deviceDb);let reached=false;
+  const authTime=Math.floor(Date.now()/1000)-293;fixture.delegate.user.auth_time=authTime;fixture.delegate.user.mfa_authorization.authTime=authTime;
+  afterOuCheckpoint(fixture,async client=>{reached=true;const until=Number((await client.query("SELECT current_setting('opendirectory.device_ou')::jsonb#>>'{source,validUntil}' AS until")).rows[0].until);await client.query('SELECT pg_sleep($1)',[Math.max(0,until-Date.now()/1000)+0.15]);});
+  await assert.rejects(moveScopedOu(fixture),{code:'42501'});assert.equal(reached,true);assert.deepEqual(await deviceState(fixture.deviceDb),before);
+ },ouStockPermissions);
+});
+test('device OU metadata SQL refuses substituted original resources and legacy wrappers around scoped proofs',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);const current=await fixture.units.get(fixture.inside.id,{},fixture.delegate.user,bearer),resource={deviceId:fixture.inside.id,deviceRevision:current.deviceRevision,revision:current.revision,ou:{id:current.ou.id,generation:current.ou.generation}},source=await fixture.units.authority.read(bearer,fixture.delegate.user,fixture.child.id,resource),before=await deviceState(fixture.deviceDb);
+  const selectedOu={id:source.ou.id,generation:source.ou.generation,revision:source.ou.revision};
+  for(const change of [value=>value.inventory.scope.resource=null,value=>value.inventory.scope.resource.deviceId=randomUUID(),value=>value.inventory.scope.resource.deviceRevision='99',value=>value.inventory.scope.resource.revision='99',value=>value.inventory.scope.resource.ou.generation='99']){
+   const bad=structuredClone(source);change(bad);assert.equal((await fixture.deviceDb.query('SELECT device_scope_source_valid($1::jsonb) AS valid',[JSON.stringify(bad.inventory)])).rows[0].valid,true);
+   const command={id:randomUUID(),deviceId:fixture.inside.id,deviceRevision:current.deviceRevision,revision:current.revision,selectedOu,source:bad,reason,confirm:true,correlationId:randomUUID()};
+   await assert.rejects(fixture.deviceDb.transaction(client=>client.query('SELECT device_ou_change($1::jsonb)',[JSON.stringify(command)])),{code:bad.inventory.scope.resource===null?'42501':'P0412'});assert.deepEqual(await deviceState(fixture.deviceDb),before);
+  }
+  const downgraded={...source,schemaVersion:1,deviceOuProtocol:1};await assert.rejects(fixture.deviceDb.query('SELECT device_ou_source($1::jsonb)',[JSON.stringify(downgraded)]),{code:'42501'});
+ },ouStockPermissions);
+});
+for(const fault of ['change','commit','manifest guard','pending receipt'])test('device OU metadata fails closed on a replaced '+fault,async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);const before=await deviceState(fixture.deviceDb);
+  if(fault==='manifest guard')await fixture.deviceDb.query('ALTER TABLE device_ou_scope_manifest DISABLE TRIGGER device_ou_scope_manifest_guard');
+  else if(fault==='pending receipt')await fixture.deviceDb.query('CREATE FUNCTION omit_scoped_ou_pending() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL;END;$$;CREATE TRIGGER zz_omit_scoped_ou_pending BEFORE INSERT ON device_ou_outbox FOR EACH ROW EXECUTE FUNCTION omit_scoped_ou_pending()');
+  else await fixture.deviceDb.query('CREATE OR REPLACE FUNCTION device_ou_'+fault+'('+(fault==='change'?'command jsonb':'')+') RETURNS '+(fault==='change'?'uuid':'trigger')+' LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN '+(fault==='change'?'RETURN NULL;':'RETURN NEW;')+' END;$$;');
+  await assert.rejects(moveScopedOu(fixture),error=>error.status===503||error.code==='42501');assert.deepEqual(await deviceState(fixture.deviceDb),before);
+ },ouStockPermissions);
+});
+test('device OU metadata complete forward replay retains scoped history and a partial old receiver cannot advertise protocol two',async()=>{
+ await scopedDevices(async fixture=>{
+  await ouDirectory(fixture);await moveScopedOu(fixture);const before=await deviceState(fixture.deviceDb),folder=path.join(__dirname,'../../../device-service/migrations');
+  await fixture.deviceDb.query(fs.readFileSync(path.join(folder,'013_device_organizational_units.sql'),'utf8'));
+  await assert.rejects(fixture.units.units({},fixture.delegate.user,bearer),{status:503});
+  for(const name of fs.readdirSync(folder).filter(name=>name.endsWith('.sql')).sort())await fixture.deviceDb.query(fs.readFileSync(path.join(folder,name),'utf8'));
+  await fixture.deviceDb.query('SELECT device_ou_receiving(2)');assert.deepEqual(await deviceState(fixture.deviceDb),before);assert.equal((await fixture.units.history(fixture.inside.id,{},fixture.delegate.user,bearer)).total,2);
+  assert.equal((await fixture.deviceDb.query('SELECT count(*)::int AS count FROM device_ou_scope_manifest')).rows[0].count,10);
+  assert.equal((await fixture.deviceDb.query("SELECT has_function_privilege('public','device_ou_change(jsonb)','EXECUTE') AS allowed")).rows[0].allowed,false);
+ },ouStockPermissions);
+});
+for(const change of ['directory grant','target metadata'])test('device OU metadata choices cannot acknowledge changed '+change+' after the first Identity reply',async()=>{
+ await scopedDevices(async fixture=>{
+  const directory=await ouDirectory(fixture),units=fixture.units.authority.units.bind(fixture.units.authority);let calls=0;
+  fixture.units.authority.units=async(...args)=>{
+   if(++calls===2){if(change==='directory grant'){await roles.revoke(directory.id,{reason,confirm:true},C.etag('grant',directory),owner.user,bearer);await ouDirectory(fixture);}else await new OuMutator(db,options).update(fixture.child.id,{name:'Changed after original choices'},ouEtag(fixture.child),owner.user,bearer);}
+   return units(...args);
+  };
+  await assert.rejects(fixture.units.units({},fixture.delegate.user,bearer),{status:401});assert.equal(calls,2);
+ },ouStockPermissions);
 });
