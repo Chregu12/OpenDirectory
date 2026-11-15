@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T11:26:05.286049+00:00",
+  "checkedAt": "2026-11-15T12:03:27.263943+00:00",
   "baseCommit": "3ac49480b69b55a1228225fcf47c05afff3d8ef2",
-  "status": "fresh-otp-fixture-window-deterministically-and-natively-verified-linux-pending",
+  "status": "fresh-otp-fixture-window-verified-deterministically-natively-and-in-three-linux-runs",
   "productionTouched": false,
   "productionMfaCodeChanged": false,
   "failure": {
@@ -53,11 +53,55 @@
       "case": "^production gateway does not treat a real credential-bound pending company registration",
       "actualLaterPasswordTotpLoginsAndAllOriginalWorkflowAssertionsRetained": true
     },
-    "diffCheck": "pass"
+    "diffCheck": "pass",
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43709100146",
+      "headCommit": "534adaf5fbb1a728f8058984498896f4f3c7cd6a",
+      "sourceCommit": "6819aa2f0fa3eb877ead74928bac790cb7e3d556",
+      "sourceTreeDifference": "Only .github/workflows/ci.yml: manual diagnostic workflow; no product or fixture changes.",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 132796587819,
+          "fixtureTestsPassed": 3,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 190,
+          "caseMilliseconds": 752840.551971,
+          "totalMilliseconds": 763035.717213
+        },
+        {
+          "id": 132796588008,
+          "fixtureTestsPassed": 3,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 190,
+          "caseMilliseconds": 383213.947564,
+          "totalMilliseconds": 390769.904026
+        },
+        {
+          "id": 132796588082,
+          "fixtureTestsPassed": 3,
+          "tests": 191,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 190,
+          "caseMilliseconds": 444769.250349,
+          "totalMilliseconds": 453164.060173
+        }
+      ],
+      "allOriginalWorkflowAssertionsRetained": true,
+      "wholeOauthSuiteClaimed": false
+    }
   },
   "limits": [
     "The actual native registration case is not the complete OAuth/browser suite.",
-    "Fresh-fixture Linux verification and full newest source CI remain pending.",
+    "Full newest-source CI remains pending; its Service Tests job and eight other jobs have passed, while the cross-service PostgreSQL/browser job is still running.",
     "No personal production login, provider acceptance or deployment was performed.",
     "The full original BR/WF objective remains open."
   ],
