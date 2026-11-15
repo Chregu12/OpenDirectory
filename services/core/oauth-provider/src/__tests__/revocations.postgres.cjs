@@ -3604,7 +3604,14 @@ test('production gateway does not treat a real credential-bound pending company 
           throw error;
         }
       };
-      let workflowCreated;try{workflowCreated=await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 });}finally{licensePrototype.unchanged=originalUnchanged;}
+      const identityPrototype=require('../../../policy-service/src/licenses/CompanyOffboardingIdentity').CompanyOffboardingIdentity.prototype,originalRequest=identityPrototype.request;
+      identityPrototype.request=async function(path,authorization,body){
+        if(!path.endsWith('/company-offboarding'))return originalRequest.call(this,path,authorization,body);
+        const originalFetch=this.fetchImpl,started=Date.now();
+        this.fetchImpl=async(...args)=>{try{const response=await originalFetch(...args);process.stdout.write('Identity account response diagnostic: '+JSON.stringify({elapsedMilliseconds:Date.now()-started,status:response.status})+'\n');return response;}catch(error){process.stdout.write('Identity account response diagnostic: '+JSON.stringify({elapsedMilliseconds:Date.now()-started,errorName:error.name,aborted:args[1].signal.aborted})+'\n');throw error;}};
+        try{return await originalRequest.call(this,path,authorization,body);}finally{this.fetchImpl=originalFetch;}
+      };
+      let workflowCreated;try{workflowCreated=await request(base, workflowRoute, { method: 'POST', token, body: workflowInput, timeout: 60000 });}finally{licensePrototype.unchanged=originalUnchanged;identityPrototype.request=originalRequest;}
       assert.equal(workflowCreated.status, 201, JSON.stringify(workflowCreated.body));
       const completedJob = workflowCreated.body; const workflow = completedJob.workflow;
       assert.deepEqual(Object.keys(completedJob).sort(), ['actorUserId', 'currentTarget', 'schemaVersion', 'tenantId', 'workflow']);
