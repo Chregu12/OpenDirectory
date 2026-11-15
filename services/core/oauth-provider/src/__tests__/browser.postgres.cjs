@@ -2370,7 +2370,9 @@ test('real company registration UI persists one disabled tenant and candidate th
     {
     await login(page, 'company-registration-owner'); const returnOwnerToken = (await mediated(page)).body.access_token;
     await page.goto(origin + '/applications'); await offboardingPanel.getByRole('button', { name: 'Mitarbeiter-Offboarding', exact: true }).click();
+    await offboardingPanel.getByRole('heading', { name: 'Gespeicherte Vorgänge', exact: true }).waitFor();
     await offboardingPanel.getByLabel('Bekannte Vorgangs-ID', { exact: true }).fill(offboardingJob.id);
+    assert.equal(await offboardingPanel.getByLabel('Bekannte Vorgangs-ID', { exact: true }).inputValue(), offboardingJob.id);
     const loadingReturnWorkflow = page.waitForResponse(response => new URL(response.url()).pathname === workflowRoute + '/' + offboardingJob.id && response.request().method() === 'GET');
     await offboardingPanel.getByRole('button', { name: 'Arbeitsstand neu laden', exact: true }).click(); const returnWorkflowResponse = await loadingReturnWorkflow; assert.equal(returnWorkflowResponse.status(), 200, await returnWorkflowResponse.text()); assert.equal((await returnWorkflowResponse.json()).workflow.checkpoint.operationId, offboardingJob.checkpoint.operationId);
     const deviceReturnBase = '/api/devices/returns'; const deviceOffboardingRoute = '/api/devices/users/' + employeeIds[0] + '/offboarding-returns';
