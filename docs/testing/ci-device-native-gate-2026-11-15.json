@@ -1,0 +1,73 @@
+{
+  "checkedAt": "2026-11-15T08:52:10.741013+00:00",
+  "baseCommit": "e7960b03becae77e6c7d90b197904e8f184634d2",
+  "status": "current-native-device-gate-locally-verified-with-actual-rust-client-linux-ci-pending",
+  "productionTouched": false,
+  "problem": {
+    "inventoryFixturePinnedMigrationFiles": 6,
+    "returnsFixturePinnedMigrationFiles": 7,
+    "mainMigrationFilesAvailable": 12,
+    "actualNativeDeviceSuitePreviouslyMissingFromCi": true,
+    "actualRustClientPreviouslySkippedWithoutBinary": true
+  },
+  "changes": {
+    "fixtures": "Read every current .sql migration in sorted order. Privileged BIGINT seed restores all actual row/commit guards before the tested command.",
+    "runner": "Run inventory, returns and agents/compliance/sync native files sequentially through the existing actual-native-event nonempty gate.",
+    "workflowJob": "Device PostgreSQL integration",
+    "node": "20",
+    "postgres": "16 with max_locks_per_transaction=256",
+    "rustCompilerInCi": "1.95.0",
+    "rustArtifactInCi": "Built from the checked-out source before tests; DEVICE_AGENT_BINARY is mandatory for this job.",
+    "timeoutMinutes": 20
+  },
+  "local": {
+    "platform": "macOS arm64",
+    "node": "20.20.2",
+    "rustCompiler": "1.99.0 Homebrew",
+    "rustAgentVersion": "1.5.0",
+    "lockedOfflineReleaseBuild": true,
+    "isolatedCargoTargetDirectory": true,
+    "completeNativeDeviceSuite": {
+      "tests": 138,
+      "pass": 138,
+      "fail": 0,
+      "skipped": 0,
+      "durationMilliseconds": 36630.662959
+    },
+    "sameNativeSuiteAgainstDraftDeviceScopeMigration014": {
+      "tests": 138,
+      "pass": 138,
+      "fail": 0,
+      "skipped": 0,
+      "durationMilliseconds": 43356.158083
+    },
+    "actualRustClient": [
+      "Enrollment through the actual HTTP Device Gateway proxy into PostgreSQL receivers",
+      "Actual private credential file mode and removal of the one-time enrollment token",
+      "Heartbeat, hardware/system and security reports from the actual host",
+      "Actual platform compliance policy evaluation and queued sync completion",
+      "A device credential cannot read human inventory APIs; revoked credentials stop working"
+    ],
+    "workflowValidation": {
+      "actionlint": "1.7.12 pass",
+      "prettier": "pass",
+      "diffCheck": "pass"
+    }
+  },
+  "limits": [
+    "The local Rust compiler is 1.99.0; Linux CI explicitly rebuilds with 1.95.0.",
+    "This Device job uses explicit disposable human-authority fixtures. Actual issuer-backed OAuth/MFA and browser acceptance remain separate gates.",
+    "No production user, physical target-device acceptance, SaaS provider or deployment was exercised.",
+    "Complete updated source CI is pending."
+  ],
+  "sourceSha256": {
+    ".github/workflows/ci.yml": "adabe11ecbcbc3e2efafc57be2595899d9edcfa369f3df68e2761382430f8728",
+    "services/core/device-service/scripts/test-inventory-postgres.js": "d28b4ad93ee3ce18635c86ef0ab22bc81c61f5d374de70f58a574eb5983b91a5",
+    "services/core/device-service/src/__tests__/inventory.postgres.cjs": "97b25e8965e9f305276b0506110f82bb69ead17c45d768ad7041a07962157ecc",
+    "services/core/device-service/src/__tests__/deviceReturns.postgres.cjs": "fd0bfba90fbb810bfb8b3d74901bdc8ba6292bb25f74ddb4e41a694293778e28",
+    "services/core/device-service/src/__tests__/deviceAgents.postgres.cjs": "8ec46fc974ea6ea3cd2212263d0619e0f094a8de54715602c8b122c5cc89a454",
+    "agent-rust/Cargo.toml": "a3b69caaef9c94abd24b1e7761b18aeb51009a32dc0d2ae582b1fe441cc6cd74",
+    "agent-rust/Cargo.lock": "cae180de7fc0805723afb9e6bf558fe30e4f0e64dea05d63003b769d048cdf78",
+    "docs/development/testing.md": "27f1c97340fd2d56e864aef1359706607fb23749a16b55209427264accd32746"
+  }
+}

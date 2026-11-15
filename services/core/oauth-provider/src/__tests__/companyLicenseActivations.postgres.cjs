@@ -21,7 +21,8 @@ test('company license activation uses real PostgreSQL authority, immutable audit
     const database = { pool, query: (...args) => pool.query(...args), isAvailable: () => true };
     await new ClientRegistry(database).initialize([{ clientId: 'web-app', name: 'Disposable console', publicClient: true, clientSecretHash: null, redirectUris: ['https://console.test/callback'], grantTypes: ['authorization_code', 'refresh_token'], scopes: ['openid'] }]);
     const tenant = { id: randomUUID(), version: '1', generation: '1' };
-    const userId = randomUUID(); const now = Math.floor(Date.now() / 1000);
+    // The original MFA login precedes activation; it is not the activation's clock.
+    const userId = randomUUID(); const now = Math.floor(Date.now() / 1000) - 2;
     await pool.query("INSERT INTO oauth_mfa_factors(user_id,revision,enabled,encrypted_seed) VALUES($1,1,true,'disposable-encrypted-fixture')", [userId]);
     async function actor(expiresAt = Date.now() + 86400000) {
       const user = { actor_type: 'user', iss: 'https://activation.test', sub: 'actual-owner', sid: randomUUID(), client_id: 'web-app', client_revision: '1',
@@ -38,7 +39,9 @@ test('company license activation uses real PostgreSQL authority, immutable audit
       for (const value of [{ ...input, confirm: false }, { ...input, durationSeconds: 36001 }, { ...input, tenant }, { ...input, reason: 'bad\nreason' }]) await assert.rejects(store.change(user, 'Bearer original', value), { status: 400 });
       await assert.rejects(store.change({ ...user, amr: ['pwd'] }, 'Bearer original', input), { status: 428 });
       const created = await store.change(user, 'Bearer original', input); assert.ok(contract.validClaim(created.activation));
-      assert.ok(created.activation.expiresAt - now <= 36000 && created.activation.expiresAt - now >= 35990);
+      const retained = (await pool.query(`SELECT duration_seconds,expires_at=created_at+duration_seconds*interval '1 second' AS full_duration,
+        floor(extract(epoch FROM expires_at))::bigint::text AS deadline FROM oauth_company_license_activations WHERE id=$1`, [created.activation.id])).rows[0];
+      assert.deepEqual(retained, { duration_seconds: input.durationSeconds, full_duration: true, deadline: String(created.activation.expiresAt) });
       assert.equal((await store.status(user, 'Bearer original')).activation.id, created.activation.id);
       await assert.rejects(store.change(user, 'Bearer original', input), { status: 409 });
       await assert.rejects(store.change(user, 'Bearer original', { activationId: randomUUID(), confirm: true }), { status: 409 });

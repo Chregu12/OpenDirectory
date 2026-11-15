@@ -119,6 +119,47 @@ jobs:
         working-directory: services/core/authentication-service
         run: npm run test:credentials:integration
 
+  device-integration:
+    name: Device PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: device_test
+          POSTGRES_PASSWORD: disposable_test_password
+          POSTGRES_DB: device_test
+          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U device_test -d device_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DEVICE_TEST_DATABASE_URL: postgres://device_test:disposable_test_password@127.0.0.1:5432/device_test
+      DEVICE_AGENT_BINARY: ${{ github.workspace }}/agent-rust/target/release/od-agent-service
+    defaults:
+      run:
+        working-directory: services/core/device-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install device integration dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install actual device Gateway dependencies
+        working-directory: services/core/api-gateway
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build the actual Rust device agent
+        working-directory: .
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          cargo +1.95.0 build --locked --release --manifest-path agent-rust/Cargo.toml
+      - name: Test actual inventory, returns, agents, compliance and sync receivers
+        run: npm run test:inventory:postgres
+
   license-integration:
     name: License and Identity PostgreSQL / Browser Integration
     runs-on: ubuntu-latest
