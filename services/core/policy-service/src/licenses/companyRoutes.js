@@ -8,6 +8,7 @@ const { poolEtag, offboardingEtag } = require('../../../../../packages/company-l
 function companyLicenseRoutes(allocator, options) {
   const router = Router(); const store = new CompanyLicenses(allocator, options);
   const offboarding = new CompanyOffboarding(store, options?.offboarding);
+  const provider = new (require('./CompanyLicenseProvider').CompanyLicenseProvider)(store, options?.provider);
   router.use('/groups', require('./companyGroupRoutes').companyGroupRoutes(store, options?.groups));
   router.use('/v2', require('./companyV2Routes').companyLicenseV2Routes(store.v2, offboarding.v2));
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); req.companyLicenseCorrelation = randomUUID(); res.set('X-Correlation-ID', req.companyLicenseCorrelation);
@@ -16,6 +17,15 @@ function companyLicenseRoutes(allocator, options) {
   const reply = (res, pool, status = 200) => res.status(status).set('ETag', poolEtag(pool)).json(pool);
   const workflow = (res, result, status = 200) => res.status(status).set('ETag', offboardingEtag(result.workflow)).json(result);
   const noSelectors = req => { if (Object.keys(req.query).length) throw Object.assign(new Error('Offboarding selectors unsupported'), { status: 400 }); };
+  router.get('/provider', route(async (req, res) => {
+    if (req.method !== 'GET') return res.status(404).json({ error: 'Company provider operation unsupported' });
+    if (Number(req.headers['content-length'] || 0) > 0 || req.headers['transfer-encoding'] !== undefined || req.headers['x-api-key'] !== undefined)
+      return res.status(400).json({ error: 'Exact company provider request required' });
+    noSelectors(req);
+    const controller = new AbortController(); const abort = () => controller.abort(); res.once('close', abort);
+    try { const result = await provider.inspect(req.user, req.headers.authorization, controller.signal); if (!controller.signal.aborted) res.json(result); }
+    finally { res.removeListener('close', abort); }
+  }));
   router.get('/offboarding-workflows/capabilities', route(async (req, res) => { noSelectors(req); res.json(await offboarding.capabilities(req.user, req.headers.authorization)); }));
   router.get('/offboarding-workflows', route(async (req, res) => res.json(await offboarding.list(req.query, req.user, req.headers.authorization))));
   router.post('/offboarding-workflows', route(async (req, res) => {

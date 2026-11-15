@@ -33,7 +33,7 @@
     "applicationRuntimeChanged": false
   },
   "nativeRegression": {
-    "command": "node -e runPostgresTests({files:[\"--test-name-pattern=^real company registration UI persists\",\"services/core/oauth-provider/src/__tests__/browser.postgres.cjs\"],environmentVariable:\"OAUTH_TEST_DATABASE_URL\",label:\"browser-observer\"})",
+    "command": "node -e 'require(\"./scripts/lib/run-postgres-tests\").runPostgresTests({files:[\"--test-name-pattern=^real company registration UI persists\",\"services/core/oauth-provider/src/__tests__/browser.postgres.cjs\"],environmentVariable:\"OAUTH_TEST_DATABASE_URL\",label:\"browser-observer\"}).catch(error=>{console.error(error.message);process.exitCode=1})'",
     "node": "v26.10.0",
     "status": "passed",
     "tests": 1,

@@ -7,12 +7,100 @@ The earlier SDK research is recorded in
 [the architecture evaluation](../../docs/architecture/rust-connector-evaluation.md).
 No SDK source was copied and no SDK dependency was added.
 
-The executable is included in policy-service `1.0.26`. The manual probe is a
+The original Google/GitHub readers are included in policy-service `1.0.26`.
+The Microsoft first-step probe below requires an image built from this revision.
+The manual probe is a
 connection test, not a scheduled sync. It does not write the database, change
 catalog entries, provision accounts, assign licenses or infer local user links.
 The existing provider registry/fulfillment worker is still Microsoft-specific;
 these new readers do not create entries in that registry or adopt company pools.
 The normal `/licenses` view is unchanged by this step.
+
+## Microsoft 365: test subscription access first
+
+Use a commercial Microsoft 365 tenant and a dedicated Entra application with
+the Microsoft Graph **application** permission `LicenseAssignment.Read.All`.
+Have an authorized administrator grant consent for this read permission.
+Microsoft documents it as the least privileged application permission for
+[`GET /subscribedSkus`](https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0).
+
+Put the reviewed values into the protected file described under **Run the probe**:
+
+```json
+{
+  "schemaVersion": 1,
+  "provider": "microsoft-365",
+  "consentReviewed": true,
+  "tenantId": "YOUR-DIRECTORY-TENANT-UUID",
+  "clientId": "YOUR-APPLICATION-CLIENT-UUID",
+  "clientSecret": "YOUR-CLIENT-SECRET-VALUE"
+}
+```
+
+Replace all placeholders. `clientSecret` is the secret's value, and `clientId`
+is the application client ID. Keep the file outside Git and chat, owned by the
+executing UID with mode `0600`. Set `consentReviewed` after reviewing the grant.
+
+Run the same `license-provider-probe.js` command shown below. This first check
+needs no database URL, local provider IDs or user mapping. Node obtains a token
+from the tenant-specific Microsoft endpoint; the existing Rust capacity reader
+fetches `subscribedSkus` from the fixed Microsoft Graph v1.0 endpoint. Only the
+access token crosses private stdin into Rust.
+
+Success contains `ok`, `provider`, the configured `tenantId` and `products`:
+normalized SKU IDs/names, subscription states, prepaid units and consumed units.
+Compare these observations with the selected tenant's Microsoft 365 license
+inventory. An empty `products` array means no subscriptions were returned.
+The [unit-state meanings](https://learn.microsoft.com/en-us/graph/api/resources/licenseunitsdetail?view=graph-rest-1.0)
+come from Microsoft's licensing contract.
+
+The command reads subscription metadata; it creates no local bindings and
+assigns or removes no licenses. Existing manufacturer fulfillment remains a
+separate platform-catalog workflow. Company-owned pools remain local, and this
+probe does not connect them to cloud assignments.
+
+### Show the selected company's Microsoft stock in the GUI
+
+In **Apps & Lizenzen** (`/applications`), open **Microsoft 365 · Anbieterbestand**
+and select **Verbindung prüfen**. The API uses the same current company-license
+authority as the local inventory, verifies it after the read, and returns the
+actor and OpenDirectory company binding with the observation. A provider failure
+clears old vendor rows and leaves the independent local inventory available.
+An expired or revoked company source clears the license view's access as well.
+
+This first GUI reader supports one explicitly selected OpenDirectory company
+per Policy-service deployment. The OpenDirectory company UUID is separate from
+the Microsoft tenant UUID inside the protected JSON. Other companies receive
+`not_configured` without reading the file or calling Microsoft. Configure both:
+
+```yaml
+apps:
+  policy-service:
+    mountFiles: true
+    mountFilesUID: 100
+    filesSecretName: opendirectory-company-microsoft
+    env:
+      LICENSE_COMPANY_PROVIDER_TENANT_ID: YOUR-OPENDIRECTORY-COMPANY-UUID
+      LICENSE_COMPANY_PROVIDER_CONFIG_FILE: /run/opendirectory/company-microsoft-read.json
+```
+
+Obtain the OpenDirectory company UUID from the authorized
+`GET /api/licenses/company/capabilities` response; do not substitute the Microsoft
+directory ID. Have the operator create the dedicated Kubernetes Secret
+`opendirectory-company-microsoft` with only the `company-microsoft-read.json`
+file described above. Keep the source file outside Git/chat. The existing init
+container copies it into an owner-only regular file for Policy's UID 100.
+The app-specific `filesSecretName` keeps this credential out of the shared OAuth
+and Web credential Secret. It defaults to the existing shared name for other
+deployments, so existing manifests are unchanged unless explicitly configured.
+
+Enable this only with Web and Policy images built from the GUI-reader revision;
+the earlier one-off probe image does not include this API. No provider connection
+has been configured in production by this change. There is no automatic polling
+or retry, local pool import, user mapping or cloud assignment. The display shows
+the returned SKU states, all four prepaid-unit counters and consumption without
+turning them into locally allocated seats. A configuration changed during the
+read invalidates that observation.
 
 ## Google Workspace
 

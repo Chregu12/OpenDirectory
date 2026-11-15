@@ -10,6 +10,7 @@ import CompanyOffboardingPanel from './CompanyOffboardingPanel';
 import CompanyApplicationAssignmentsPanel from './CompanyApplicationAssignmentsPanel';
 import CompanyLicenseActivationPanel from './CompanyLicenseActivationPanel';
 import CompanyOffboardingV2Panel from './CompanyOffboardingV2Panel';
+import CompanyLicenseProviderPanel from './CompanyLicenseProviderPanel';
 
 const initialValues: CompanyPoolInput = { name: '', vendor: '', description: '', totalSeats: 1, reason: '' };
 const eventLabels = { 'app.license.pool.created': 'Lizenzpool erstellt', 'app.license.pool.updated': 'App und Lizenzbestand aktualisiert', 'app.license.assigned': 'Lizenz zugewiesen', 'app.license.released': 'Lizenz freigegeben', 'app.license.source.assigned': 'Lizenzquelle zugewiesen', 'app.license.source.released': 'Lizenzquelle zurückgegeben' };
@@ -235,6 +236,7 @@ export default function CompanyApplicationsView() {
         </div>}
       </div> : !access ? <p role="status">Lizenzberechtigungen werden geprüft …</p> : !canRead ? <p role="status">Keine Berechtigung zum Lesen der Firmen-Lizenzpools.</p> : <>
         {notice && <p role="status">{notice}</p>}
+        <CompanyLicenseProviderPanel key={`${access.actorUserId}:${access.tenantId}:${reload}`} context={access} onAccessError={failure => fail(failure, generation.current)} />
         <nav aria-label="Lizenzverwaltungsmodus" className="flex flex-wrap gap-3">
           <button className="fluent-btn-secondary" aria-pressed={protocol === 'v2'} disabled={busy} onClick={() => {
             if (protocol === 'v2') return;

@@ -221,7 +221,8 @@ before(async () => {
   identityServer = require('../../../identity-service/src').listen(Number(new URL(identityBase).port), '127.0.0.1'); await serverBase(identityServer);
   inventoryFixture=await require('../../../../../scripts/lib/device-inventory-fixture.cjs').deviceInventoryFixture(process.env.OAUTH_TEST_DATABASE_URL,identityBase);
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
-  Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase });
+  Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase,
+    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'' });
   policyDb=require('../../../policy-service/src/db/postgres');
   for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|030)_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
@@ -289,6 +290,12 @@ before(async () => {
 }, { timeout: 180000 });
 
 after(async () => {
+  // A failed test can leave a SQL request open; cleanup must still fail finitely.
+  const cleanupDeadline = setTimeout(() => {
+    console.error('Browser fixture cleanup exceeded 60 seconds; terminating the failed test worker');
+    process.exit(1);
+  }, 60000);
+  cleanupDeadline.unref();
   process.stdout.write('Stopping browser clients before fixture services\n');
   if (browser) await browser.close(); await stop(nextProcess); await stop(quickProcess); await stop(issuerProcess);
   if(actualAuth)await actualAuth.stop();
@@ -297,10 +304,12 @@ after(async () => {
   for (const server of [quickReceiver, credentialServer?.authorityProxy, credentialServer, identityServer,policyServer]) {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
+  process.stdout.write('Closing browser fixture databases\n');
   if (issuerDb) await issuerDb.end();
   if (identityDb) await identityDb.pool.end();
   if (policyDb) await policyDb.shutdown();
   if(authDb)await authDb.end();
+  process.stdout.write('Dropping browser fixture schemas\n');
   await administration.query(`DROP SCHEMA IF EXISTS ${authSchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${policySchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${identitySchema} CASCADE`);
@@ -308,6 +317,7 @@ after(async () => {
   if (directory) fs.rmSync(directory, { recursive: true, force: true });
   if (buildDirectory) fs.rmSync(buildDirectory, { recursive: true, force: true });
   if (testTsconfig) fs.rmSync(testTsconfig, { force: true });
+  clearTimeout(cleanupDeadline);
 });
 
 async function context({ realQuick = false, onboarded = true } = {}) {
@@ -1739,6 +1749,13 @@ test('real company registration UI persists one disabled tenant and candidate th
     const companyLicenseAccessResponse = await checkingCompanyLicenseAccess; assert.equal(companyLicenseAccessResponse.status(), 200, await companyLicenseAccessResponse.text());
     assert.deepEqual(await companyLicenseAccessResponse.json(), { schemaVersion: 1, companyLicenseProtocol: 1, actorUserId: receipt.administratorId, tenantId: receipt.tenantId,
       permissions: ['company.apps.read', 'company.apps.create', 'company.apps.assign'], allocationMode: 'local-only', supportedTargets: ['user'] });
+    await page.getByText('Microsoft 365 · Anbieterbestand', { exact: true }).click();
+    const checkingCompanyProvider = page.waitForResponse(response => new URL(response.url()).pathname === companyRoute + '/provider' && response.request().method() === 'GET');
+    await page.getByRole('region', { name: 'Microsoft-365-Verbindung', exact: true }).getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
+    const companyProviderResponse = await checkingCompanyProvider; assert.equal(companyProviderResponse.status(), 200, await companyProviderResponse.text());
+    assert.deepEqual(await companyProviderResponse.json(), { schemaVersion: 1, companyLicenseProviderProtocol: 1, actorUserId: receipt.administratorId, tenantId: receipt.tenantId, provider: 'microsoft-365', state: 'not_configured' });
+    assert.equal(companyProviderResponse.headers()['cache-control'], 'no-store');
+    await page.getByText('Für diese Firma ist noch keine Microsoft-365-Verbindung eingerichtet.', { exact: true }).waitFor();
     await page.getByText('Lokaler Bestand und Wirkung von Zuweisungen', { exact: true }).click(); await page.getByText(/Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung/).waitFor();
     await page.getByRole('button', { name: 'Lizenzpool erstellen', exact: true }).click();
     const poolDialog = page.getByRole('alertdialog', { name: 'Lizenzpool erstellen', exact: true });
@@ -2824,7 +2841,9 @@ test('real recurring review UI separates configuration, independent MFA voting a
   }
 });
 
-test('real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding', { timeout: 240000 }, async () => {
+// Registration and two first-factor enrollments precede the four-minute
+// fresh-owner business-flow assertion below; include their setup in this budget.
+test('real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding', { timeout: 360000 }, async () => {
   const ownerUsername = 'company-assignment-owner'; const reviewerUsername = 'company-assignment-reviewer';
   const isolated = await context({ onboarded: false }); const page = await isolated.newPage();
   const savedEnvironment = Object.fromEntries(['NODE_ENV', 'CORS_ORIGIN', 'POLICY_SERVICE_URL', 'DEVICE_SERVICE_URL', 'DATABASE_URL'].map(name => [name, process.env[name]]));
