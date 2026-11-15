@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-15T10:36:50.410516+00:00",
+  "checkedAt": "2026-11-15T11:29:56.638268+00:00",
   "baseCommit": "64ea7298278818fee83234206c24db3fb967abf0",
   "classification": "progress",
   "status": "private-agent-and-sync-scope-boundaries-locally-verified-not-released",
@@ -90,7 +90,20 @@
       "Full current migration replay retains actual credentials, scoped issue/cancel receipts, inventory, OU associations and histories.",
       "The same device credential heartbeats again and a new scoped sync queues after full replay."
     ],
-    "diffCheck": "pass"
+    "diffCheck": "pass",
+    "linuxExistingDeviceRegression": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43704988033",
+      "commit": "0dc990b0c265eadc6d3824a5bb329e337072df82",
+      "job": 132784031133,
+      "tests": 138,
+      "pass": 138,
+      "fail": 0,
+      "skipped": 0,
+      "milliseconds": 41726.420095,
+      "compiler": "1.95.0",
+      "actualRustAgent": "1.5.0",
+      "scope": "Existing inventory/returns/agent regression under migrations 001-015; scoped original-human controls are separate Identity/OAuth acceptance."
+    }
   },
   "limits": [
     "These role/PIM cases use explicit disposable original-user/MFA fixtures and actual Identity authority; they are not signed personal production OAuth/browser acceptance.",
