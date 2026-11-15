@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T15:01:07.733144+00:00",
+  "checkedAt": "2026-11-15T15:09:45.998220+00:00",
   "baseCommit": "05a8827877f9858e5a6226d3e01816a844c37bf5",
-  "status": "complete-local-regression-verified-linux-and-signed-scoped-acceptance-pending",
+  "status": "complete-local-and-three-targeted-linux-groups-verified-full-ci-and-signed-scoped-acceptance-pending",
   "apiVersion": "1.46.0",
   "productionTouched": false,
   "defaultScopedMode": false,
@@ -97,7 +97,75 @@
     "canonicalOpenApi": "Semantic equality with actual generator; four new schemas and four changed OU paths only, plus version",
     "workflowValidation": "actionlint 1.7.12 pass",
     "diffCheck": "pass",
-    "runtime": "Node 20.20.2 and actual isolated native PostgreSQL 16.15 schemas"
+    "runtime": "Node 20.20.2 and actual isolated native PostgreSQL 16.15 schemas",
+    "linux": {
+      "run": 43727607032,
+      "sourceCommit": "c3aba45924b0fea6fcd3b2a183402f4fd3c582d8",
+      "headCommit": "4cc0a6681f87a3336df891249cafd46ba1759a5f",
+      "jobs": [
+        {
+          "id": 132852852993,
+          "metadata": {
+            "tests": 180,
+            "pass": 20,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 160,
+            "totalMilliseconds": 133783.409141
+          },
+          "legacy": {
+            "tests": 21,
+            "pass": 21,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "totalMilliseconds": 66395.479368
+          }
+        },
+        {
+          "id": 132852853165,
+          "metadata": {
+            "tests": 180,
+            "pass": 20,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 160,
+            "totalMilliseconds": 182250.132788
+          },
+          "legacy": {
+            "tests": 21,
+            "pass": 21,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "totalMilliseconds": 92974.637671
+          }
+        },
+        {
+          "id": 132852853181,
+          "metadata": {
+            "tests": 180,
+            "pass": 20,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 160,
+            "totalMilliseconds": 113511.239777
+          },
+          "legacy": {
+            "tests": 21,
+            "pass": 21,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "totalMilliseconds": 58641.824541
+          }
+        }
+      ],
+      "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43727607032",
+      "conclusion": "success",
+      "treeDifference": "Only .github/workflows/ci.yml; product and test sources exactly match source commit c3aba45",
+      "coverage": "Each attempt runs 20/180 scoped metadata cases with 160 skipped unrelated cases, followed by all 21/21 legacy OU/status cases with zero skip. Not full 180-case Linux acceptance."
+    }
   },
   "adversarialCases": [
     "Outside and unassigned devices denied before target lookup, stale versions or business state",
@@ -119,7 +187,7 @@
   ],
   "limits": [
     "Native tests use actual canonical Identity/Device classes and actual SQL but an explicit fixture bearer; this is not actual signed scoped OAuth/browser acceptance.",
-    "Complete newest-source GitHub CI and three Linux metadata/legacy groups remain pending.",
+    "Complete newest-source GitHub CI and actual signed scoped OAuth/browser acceptance remain pending; the three targeted Linux groups do not replace either gate.",
     "Hierarchy/deletion dependency controls, public scoped capabilities, GUI scope selection and default activation remain open.",
     "Separate Identity and Device databases do not provide instantaneous atomic distributed revocation.",
     "No deployment, personal production login or external provider acceptance performed.",

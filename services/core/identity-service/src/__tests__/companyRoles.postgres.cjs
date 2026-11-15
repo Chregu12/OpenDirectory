@@ -1417,3 +1417,71 @@ for(const change of ['directory grant','target metadata'])test('device OU metada
   await assert.rejects(fixture.units.units({},fixture.delegate.user,bearer),{status:401});assert.equal(calls,2);
  },ouStockPermissions);
 });
+
+async function deviceOuGovernor() {
+ const operator=await fixedOperator('ou-administrator');
+ await pool.query('INSERT INTO identity_role_assignments(user_id,role,reason) VALUES($1,$2,$3)',[operator.id,'role-administrator','Independent protected OU governance fixture']);
+ const state=await new AuthorizationState(db).state(issuer,operator.user.sub);operator.user.roles=state.roles;operator.user.identity_authorization=state.context;return operator;
+}
+async function ouGovernanceState() {
+ const result={};for(const table of ['ous','identity_directory_ou_events','identity_directory_ou_outbox','identity_company_role_uses'])result[table]=(await pool.query('SELECT to_jsonb(record)::text AS row FROM '+table+' record ORDER BY to_jsonb(record)::text')).rows;
+ return result;
+}
+test('device OU governance refuses ordinary and claimed administrators at both boundaries of the protected subtree',async()=>{
+ await scopedDevices(async fixture=>{
+  const operator=await fixedOperator('ou-administrator'),mutator=new OuMutator(db,options),before=await ouGovernanceState(),devices=await deviceState(fixture.deviceDb);
+  for(const user of [operator.user,{...operator.user,roles:['admin']}]){
+   await assert.rejects(mutator.update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),user,bearer),{status:403});
+   await assert.rejects(mutator.update(fixture.child.id,{parentId:null},ouEtag(fixture.child),user,bearer),{status:403});
+   await assert.rejects(mutator.update(fixture.root.id,{name:'An ordinary OU editor cannot control a device grant root'},ouEtag(fixture.root),user,bearer),{status:403});
+   await assert.rejects(mutator.remove(fixture.child.id,ouEtag(fixture.child),user,bearer),{status:403});
+  }
+  assert.deepEqual(await ouGovernanceState(),before);assert.deepEqual(await deviceState(fixture.deviceDb),devices);assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
+ },['devices.inventory.read']);
+});
+test('device OU governance an independent role and OU manager changes live scope only through an actual audited hierarchy mutation',async()=>{
+ await scopedDevices(async fixture=>{
+  const operator=await deviceOuGovernor(),devices=await deviceState(fixture.deviceDb),prior=await fixture.source.readScoped(fixture.delegate.user,bearer);
+  await assert.rejects(fixture.inventory.list({},operator.user,bearer),{status:403});
+  const changed=await new OuMutator(db,options).update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),operator.user,bearer);assert.equal(changed.parentId,fixture.root.id);
+  const current=await fixture.source.readScoped(fixture.delegate.user,bearer);assert.deepEqual(current.context,prior.context);assert.deepEqual(current.scope.grants,prior.scope.grants);assert.notDeepEqual(current.scope.units,prior.scope.units);
+  assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,3);assert.equal((await fixture.inventory.get(fixture.hidden.id,fixture.delegate.user,bearer)).id,fixture.hidden.id);assert.deepEqual(await deviceState(fixture.deviceDb),devices);
+  const events=(await pool.query("SELECT event.*,outbox.status FROM identity_directory_ou_events event JOIN identity_directory_ou_outbox outbox USING(id) WHERE event.ou_id=$1 AND event.action='update'",[fixture.outside.id])).rows;
+  assert.equal(events.length,1);assert.equal(events[0].status,'pending');assert.equal(events[0].actor.userId,operator.id);assert.equal(events[0].proof.companyGovernance.context.userId,operator.id);assert.equal(events[0].proof.companyGovernance.mfa.userId,operator.id);assert.equal(events[0].before_state.parent_id,null);assert.equal(events[0].after_state.parent_id,fixture.root.id);
+  await assert.rejects(fixture.inventory.checkpoint(prior,fixture.delegate.user,bearer),{status:401});
+ },['devices.inventory.read']);
+});
+test('device OU governance an eligible device PIM root is protected before activation and after eligibility withdrawal',async()=>{
+ await scopedDevices(async fixture=>{
+  const root=await creator.ou({name:'Device PIM-only protected root'},owner.user,bearer),role=await createRole({name:'PIM-only device root role',permissions:['devices.inventory.read']}),eligible=(await makeEligible(role,fixture.delegate.id,{scopeType:'device-ou',ouId:root.id})).eligibility,operator=await fixedOperator('ou-administrator'),mutator=new OuMutator(db,options);
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM identity_company_role_grants WHERE ou_id=$1',[root.id])).rows[0].count,0);
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM identity_company_role_activations WHERE eligibility_id=$1',[eligible.id])).rows[0].count,0);
+  await assert.rejects(mutator.update(fixture.outside.id,{parentId:root.id},ouEtag(fixture.outside),operator.user,bearer),{status:403});
+  await pim().revokeEligibility(eligible.id,{reason,confirm:true},C.etag('eligibility',eligible),owner.user,bearer);
+  await assert.rejects(mutator.update(fixture.outside.id,{parentId:root.id},ouEtag(fixture.outside),operator.user,bearer),{status:403});
+  assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
+ },['devices.inventory.read']);
+});
+test('device OU governance withdrawing the last grant does not silently release the protected namespace to OU administrators',async()=>{
+ await scopedDevices(async fixture=>{
+  const operator=await fixedOperator('ou-administrator');await roles.revoke(fixture.grant.id,{reason,confirm:true},C.etag('grant',fixture.grant),owner.user,bearer);
+  await assert.rejects(fixture.inventory.list({},fixture.delegate.user,bearer),{status:403});
+  await assert.rejects(new OuMutator(db,options).update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),operator.user,bearer),{status:403});
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM identity_company_role_ous WHERE ou_id=$1',[fixture.root.id])).rows[0].count,1);
+  const replacement=(await assign(fixture.role,fixture.delegate.id,{scopeType:'device-ou',ouId:fixture.root.id})).grant;assert.notEqual(replacement.id,fixture.grant.id);assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
+ },['devices.inventory.read']);
+});
+test('device OU governance an active directory PIM editor cannot substitute its lease for independent role governance',async()=>{
+ await scopedDevices(async fixture=>{
+  const operator=await person('PIM-directory-editor'),role=await createRole({name:'Activated directory metadata editor',permissions:['ous.read','ous.update','ous.delete']}),eligible=(await makeEligible(role,operator.id)).eligibility;
+  await activate(eligible,operator.user,3600);assert.deepEqual(operator.user.roles,[]);assert.ok((await reader.ous({},operator.user,bearer)).ous.some(unit=>unit.id===fixture.outside.id));
+  await assert.rejects(new OuMutator(db,options).update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),operator.user,bearer),{status:403});assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
+ },['devices.inventory.read']);
+});
+test('device OU governance physical commit retains the independent managers original fresh MFA deadline',async()=>{
+ await scopedDevices(async fixture=>{
+  const operator=await deviceOuGovernor(),before=await ouGovernanceState(),devices=await deviceState(fixture.deviceDb),authTime=Math.floor(Date.now()/1000)-292;operator.user.auth_time=authTime;operator.user.mfa_authorization.authTime=authTime;let reached=false;
+  beforeCommit=async client=>{reached=true;const until=Number((await client.query("SELECT current_setting('opendirectory.ou_mutation')::jsonb#>>'{proof,validUntil}' AS until")).rows[0].until);assert.ok(Number.isSafeInteger(until));await client.query('SELECT pg_sleep($1)',[Math.max(0,until-Date.now()/1000)+0.15]);};
+  await assert.rejects(new OuMutator(db,options).update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),operator.user,bearer),{code:'42501'});beforeCommit=null;assert.equal(reached,true);assert.deepEqual(await ouGovernanceState(),before);assert.deepEqual(await deviceState(fixture.deviceDb),devices);assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
+ },['devices.inventory.read']);
+});
