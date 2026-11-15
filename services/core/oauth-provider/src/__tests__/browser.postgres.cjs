@@ -3163,7 +3163,21 @@ test('real roleless Owner configures dynamic and nested groups in the UI and rec
 const completed=await waitForState(0);await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();
   const parentJob=completed.filter(job=>job.rule_id===parent.id).at(-1);const article=page.getByRole('article').filter({hasText:parentJob.id});await article.getByRole('button',{name:'Gruppenbericht anzeigen',exact:true}).click();
   const report=page.getByRole('complementary',{name:'Geprüfter Gruppenbericht',exact:true});await report.getByText(new RegExp(client.clientId)).waitFor();await report.getByText(/Regelmitglied entfernt/).waitFor();await report.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/od-company-group-rule-automation-browser.png',fullPage:true});
-  const stopButtons=page.getByRole('button',{name:'Zeitplan stoppen',exact:true});while(await stopButtons.count()){await stopButtons.first().click();await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.',{exact:true}).waitFor();}
+  // Complete in-flight worker observations before capturing the version used by each explicit UI stop.
+  await stop(worker);assert.equal(worker.exitCode,0,workerErrors);worker=null;
+  const loadingPlans=page.waitForResponse(response=>{const url=new URL(response.url());return url.pathname==='/api/identity/automation/schedules'&&url.searchParams.get('grantId')===permission.id&&response.request().method()==='GET';});
+  await page.getByRole('button',{name:'Automationen neu laden',exact:true}).click();const loadedPlans=await loadingPlans;assert.equal(loadedPlans.status(),200,await loadedPlans.text());
+  const pendingPlans=new Map((await loadedPlans.json()).schedules.map(row=>[row.id,row]));assert.deepEqual([...pendingPlans.keys()].sort(),[childSchedule.id,parentSchedule.id].sort());
+  const stopButtons=page.getByRole('button',{name:'Zeitplan stoppen',exact:true}),{expect}=webRequire('@playwright/test');await expect(stopButtons).toHaveCount(pendingPlans.size,{timeout:30000});
+  for(let remaining=pendingPlans.size;remaining>0;remaining--){
+   const stopping=page.waitForResponse(response=>/^\/api\/identity\/automation\/schedules\/[^/]+\/disable$/.test(new URL(response.url()).pathname)&&response.request().method()==='POST');
+   await stopButtons.first().click();const stopped=await stopping;assert.equal(stopped.status(),200,await stopped.text());const actual=(await stopped.json()).schedule,original=pendingPlans.get(actual.id);assert.ok(original);
+   assert.equal(stopped.request().headers()['if-match'],'"company-automation-schedule-'+actual.id+'-'+original.revision+'"');assert.equal(actual.enabled,false);assert.equal(BigInt(actual.revision),BigInt(original.revision)+1n);pendingPlans.delete(actual.id);
+   await page.getByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.',{exact:true}).waitFor();await expect(stopButtons).toHaveCount(remaining-1,{timeout:30000});
+  }
+  assert.equal(pendingPlans.size,0);
+  const stoppedPlans=(await identityDb.query("SELECT plan.enabled,event.actor,event.snapshot FROM identity_automation_schedules plan JOIN identity_automation_events event ON event.entity='schedule' AND event.entity_id=plan.id AND event.revision=plan.revision WHERE plan.id=ANY($1::uuid[])",[[childSchedule.id,parentSchedule.id]])).rows;
+  assert.equal(stoppedPlans.length,2);for(const plan of stoppedPlans){assert.equal(plan.enabled,false);assert.equal(plan.snapshot.enabled,false);assert.equal(plan.actor.kind,'owner');assert.equal(plan.actor.source.actorUserId,company.receipt.administratorId);}
   assert.equal(workerOutput.includes(client.clientSecret),false);assert.equal(workerOutput.includes(owner.body.access_token),false);
   await page.goto(origin+'/usergroups');await page.getByRole('button',{name:'Gruppe '+parent.name,exact:true}).click();await panel.getByRole('button',{name:'Gruppenregel-Historie',exact:true}).click();
   const appHistory=panel.getByRole('complementary',{name:'Gruppenregel-Historie',exact:true});await appHistory.getByText(new RegExp('App '+client.clientId)).first().waitFor();await appHistory.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/od-company-group-rule-app-history.png',fullPage:true});
