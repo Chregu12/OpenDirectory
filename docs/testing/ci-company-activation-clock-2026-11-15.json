@@ -1,0 +1,57 @@
+{
+  "checkedAt": "2026-11-15T09:09:23.565724+00:00",
+  "baseCommit": "2056c9bd4fcdf87e5d1e9f3228931bd41aa02714",
+  "status": "native-clock-oracle-fixed-and-locally-verified-linux-ci-pending",
+  "productionTouched": false,
+  "productionSourceChanged": false,
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691858502",
+    "jobId": 132743999988,
+    "successfulJobs": 8,
+    "failedJobs": 1,
+    "licenseCasesPassed": 557,
+    "identityCasesPassed": 815,
+    "oauthInitialGroup": {
+      "pass": 294,
+      "fail": 3
+    },
+    "firstFailure": "The ten-hour test compared the activation deadline with a previously captured MFA/fixture timestamp; a second boundary during awaited session setup invalidated its <=36000 expectation.",
+    "secondaryFailure": "The first assertion prevented the planned revocation; the later replay assertion consequently found no revoked lease."
+  },
+  "correction": {
+    "fixtureMfaPrecedesActivationSeconds": 2,
+    "oracle": "Read duration_seconds, created_at and expires_at from the retained activation and require the exact requested interval and the same returned deadline.",
+    "requestedDurationSeconds": 36000,
+    "originalFreshMfaMaxAgeSeconds": 300,
+    "sessionExpiryCapTestRetained": true,
+    "revocationAndImmutableAuditAssertionsRetained": true,
+    "operatorMaximumAndReplayedMigrationChecksRetained": true
+  },
+  "nativeLocal": {
+    "tests": 7,
+    "pass": 7,
+    "fail": 0,
+    "skipped": 0,
+    "durationMilliseconds": 2592.88125,
+    "node": "20.20.2",
+    "postgres": "16 native disposable schema"
+  },
+  "currentDeviceGateAlreadyVerifiedOnLinux": {
+    "sourceCommit": "2056c9b",
+    "run": 43696507132,
+    "jobId": 132758120431,
+    "tests": 138,
+    "pass": 138,
+    "fail": 0,
+    "skipped": 0,
+    "actualCompiledRustAgentVersion": "1.5.0",
+    "compiler": "1.95.0"
+  },
+  "limits": [
+    "The complete current source CI remains pending.",
+    "The dedicated activation suite uses disposable authority/session/factor fixtures; it is not a personal production login."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/companyLicenseActivations.postgres.cjs": "569040ecd6ed6d0b22ef157ec32377dca610b518580bba5a7ebe737f20b521c8"
+  }
+}
