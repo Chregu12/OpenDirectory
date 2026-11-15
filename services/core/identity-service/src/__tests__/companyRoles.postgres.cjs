@@ -760,3 +760,179 @@ test('protected PIM approver queues retain scoped history of disabled roles with
  const ownerQueue=await approvals().list({status:'all'},owner.user,bearer,true);assert.equal(ownerQueue.total,1);assert.equal(ownerQueue.items[0].id,otherRequest.id);assert.equal(ownerQueue.items[0].status,'stale');
  await assert.rejects(decision(pending,'approve',reviewer.user),{status:409});await assert.rejects(decision(otherRequest,'approve'),{status:409});
 });
+
+const controlReport = device => ({hostname:'native-scoped-device',platform:device.platform,architecture:'arm64',osVersion:'24.04',agentVersion:'1.5.0'});
+const controlDecision = {reason,confirm:true};
+const controlPermissions = ['devices.inventory.read','devices.inventory.create'];
+async function controlState(database) {
+ const state=await deviceState(database);
+ for(const table of ['device_agent_connections','device_agent_events','device_sync_requests','device_sync_events','device_compliance_events'])state[table]=(await database.query('SELECT to_jsonb(record)::text AS row FROM '+table+' record ORDER BY to_jsonb(record)::text')).rows;
+ return state;
+}
+async function enrollControl(fixture,user=owner.user) {
+ const {agents,inside}=fixture,etag=require('../../../device-service/src/DeviceAgents').agentEtag;
+ const state=await agents.get(inside.id,{},user,bearer);
+ const issued=await agents.manage(inside.id,'issue',controlDecision,etag(inside.id,state.revision),user,bearer,randomUUID());
+ const registered=await agents.register({token:issued.enrollmentToken,report:controlReport(inside)},randomUUID());
+ return {issued,registered};
+}
+async function queueControl(fixture,user=fixture.delegate.user) {
+ const current=await fixture.sync.list(fixture.inside.id,{},user,bearer);
+ return fixture.sync.write(fixture.inside.id,controlDecision,current.connectionEtag,user,bearer,randomUUID());
+}
+async function controlChange(fixture,kind,request=null) {
+ const {inside,agents,sync,delegate}=fixture;
+ if(kind==='agent')return agents.manage(inside.id,'issue',controlDecision,require('../../../device-service/src/DeviceAgents').agentEtag(inside.id,(await agents.get(inside.id,{},delegate.user,bearer)).revision),delegate.user,bearer,randomUUID());
+ if(kind==='queue')return queueControl(fixture);
+ return sync.write(inside.id,controlDecision,require('../../../device-service/src/DeviceSync').syncRequestEtag(request),delegate.user,bearer,randomUUID(),request.id);
+}
+function afterControlCheckpoint(fixture,check) {
+ const database={...fixture.deviceDb,transaction:(operation,settings={})=>fixture.deviceDb.transaction(operation,{...settings,beforeCommit:async client=>{
+  if(settings.beforeCommit)await settings.beforeCommit(client);
+  if(!settings.readOnly)await check(client);
+ }})};
+ fixture.agents.database=database;fixture.sync.database=database;
+}
+async function moveControlUnit(fixture,client,destination) {
+ const bound={...fixture.deviceDb,transaction:async(operation,settings={})=>{const result=await operation(client);if(settings.beforeCommit)await settings.beforeCommit(client);return result;}};
+ const inventory=new(require('../../../device-service/src/DeviceInventory').DeviceInventory)(bound,{authority:fixture.inventory.authority});
+ const units=new(require('../../../device-service/src/DeviceOrganizationalUnits').DeviceOrganizationalUnits)(bound,{inventory,authority:fixture.units.authority});
+ const current=await units.get(fixture.inside.id,{},owner.user,bearer),selected=(await fixture.units.authority.read(bearer,owner.user,destination.id)).ou;
+ return units.write(fixture.inside.id,{ou:{id:selected.id,generation:selected.generation,revision:selected.revision},reason,confirm:true},require('../../../../../packages/device-ou-contract').etag(fixture.inside.id,current.deviceRevision,current.revision),owner.user,bearer,randomUUID());
+}
+
+test('device OU controls enroll an actual scoped agent and complete a scoped sync with device credentials',async()=>{
+ await scopedDevices(async fixture=>{
+  const {inside,agents,sync,deviceDb,delegate}=fixture;
+  const {registered}=await enrollControl(fixture,delegate.user);
+  const queued=await queueControl(fixture);
+  const claim=await sync.claim({deviceId:inside.id},'Bearer '+registered.deviceToken,randomUUID());assert.equal(claim.command.id,queued.request.id);
+  const inventory={schemaVersion:1,cpu:{model:'Actual fixture CPU',logicalProcessors:4},memory:{totalBytes:'9007199254740993',availableBytes:'4000000000'},systemDisk:{totalBytes:'1000000000000',availableBytes:'200000000000'},uptimeSeconds:'86461'};
+  const security={schemaVersion:1,osVersion:'24.04',diskEncryption:{state:'enabled',reason:'checked'},firewall:{state:'enabled',reason:'checked'}};
+  await agents.heartbeat({deviceId:inside.id,report:controlReport(inside),inventory,security,sync:{id:claim.command.id,leaseToken:claim.command.leaseToken}},'Bearer '+registered.deviceToken,randomUUID());
+  const actual=(await sync.list(inside.id,{},delegate.user,bearer)).requests[0];assert.equal(actual.status,'completed');assert.equal(actual.result.inventory.facts.memory.totalBytes,'9007199254740993');
+  const agentEvent=(await deviceDb.query("SELECT * FROM device_agent_events WHERE device_id=$1 AND action='issue'",[inside.id])).rows[0];
+  const syncEvents=(await deviceDb.query('SELECT * FROM device_sync_events WHERE request_id=$1 ORDER BY created_at',[queued.request.id])).rows;assert.deepEqual(syncEvents.map(event=>event.action),['queued','claimed','completed']);
+  for(const source of [agentEvent.source,syncEvents[0].source]){assert.equal(source.schemaVersion,2);assert.equal(source.tokenId,delegate.user.jti);assert.deepEqual(source.context,delegate.user.identity_authorization);assert.equal(source.scope.resource.deviceId,inside.id);assert.equal(source.scope.resource.deviceRevision,inside.revision);assert.equal(source.scope.resource.ou.id,fixture.root.id);assert.equal(source.target,null);}
+  for(const event of syncEvents.slice(1)){assert.equal(event.actor_user_id,null);assert.equal(event.source,null);}
+  assert.equal((await deviceDb.query("SELECT source FROM device_agent_events WHERE device_id=$1 AND action='register'",[inside.id])).rows[0].source,null);
+  const current=await agents.get(inside.id,{},delegate.user,bearer);
+  await agents.manage(inside.id,'revoke',controlDecision,require('../../../device-service/src/DeviceAgents').agentEtag(inside.id,current.revision),delegate.user,bearer,randomUUID());
+  await assert.rejects(agents.heartbeat({deviceId:inside.id,report:controlReport(inside)},'Bearer '+registered.deviceToken,randomUUID()),{status:401});
+ },controlPermissions);
+});
+
+test('device OU controls retain a cancellation actors own source without replacing the original queue authority',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const queued=await queueControl(fixture),canceller=await person();await assign(fixture.role,canceller.id,{scopeType:'device-ou',ouId:fixture.root.id});
+  const cancelled=await fixture.sync.write(fixture.inside.id,controlDecision,require('../../../device-service/src/DeviceSync').syncRequestEtag(queued.request),canceller.user,bearer,randomUUID(),queued.request.id);assert.equal(cancelled.request.status,'cancelled');
+  const actual=(await fixture.deviceDb.query('SELECT source FROM device_sync_requests WHERE id=$1',[queued.request.id])).rows[0];assert.equal(actual.source.tokenId,fixture.delegate.user.jti);
+  const event=(await fixture.deviceDb.query("SELECT * FROM device_sync_events WHERE request_id=$1 AND action='cancelled'",[queued.request.id])).rows[0];assert.equal(event.actor_user_id,canceller.id);assert.equal(event.source.tokenId,canceller.user.jti);assert.deepEqual(event.source.context,canceller.user.identity_authorization);assert.equal(event.source.scope.resource.deviceId,fixture.inside.id);
+ },controlPermissions);
+});
+
+test('device OU controls conceal outside and unassigned devices before agent or sync state errors',async()=>{
+ await scopedDevices(async fixture=>{
+  const before=await controlState(fixture.deviceDb);
+  for(const device of [fixture.hidden,fixture.unassigned]){
+   for(const action of ['issue','revoke'])await assert.rejects(fixture.agents.manage(device.id,action,controlDecision,require('../../../device-service/src/DeviceAgents').agentEtag(device.id,'99'),fixture.delegate.user,bearer,randomUUID()),{status:404});
+   await assert.rejects(fixture.sync.write(device.id,controlDecision,'"unknown-connection"',fixture.delegate.user,bearer,randomUUID()),{status:404});
+   await assert.rejects(fixture.sync.write(device.id,controlDecision,'"unknown-request"',fixture.delegate.user,bearer,randomUUID(),randomUUID()),{status:404});
+  }
+  assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+for(const kind of ['agent','queue','cancel'])test('device OU controls reject a replaced original grant at the final '+kind+' checkpoint',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const queued=kind==='cancel'?await queueControl(fixture,owner.user):null,before=await controlState(fixture.deviceDb);
+  const expected=kind==='agent'?require('../../../device-service/src/DeviceAgents').agentEtag(fixture.inside.id,(await fixture.agents.get(fixture.inside.id,{},fixture.delegate.user,bearer)).revision):kind==='queue'?(await fixture.sync.list(fixture.inside.id,{},fixture.delegate.user,bearer)).connectionEtag:require('../../../device-service/src/DeviceSync').syncRequestEtag(queued.request);
+  const checkpoint=fixture.inventory.checkpoint.bind(fixture.inventory);let calls=0,replaced=false;
+  fixture.inventory.checkpoint=async(...args)=>{if(++calls===2){await roles.revoke(fixture.grant.id,{reason,confirm:true},C.etag('grant',fixture.grant),owner.user,bearer);await assign(fixture.role,fixture.delegate.id,{scopeType:'device-ou',ouId:fixture.root.id});replaced=true;}return checkpoint(...args);};
+  await assert.rejects(kind==='agent'?fixture.agents.manage(fixture.inside.id,'issue',controlDecision,expected,fixture.delegate.user,bearer,randomUUID()):fixture.sync.write(fixture.inside.id,controlDecision,expected,fixture.delegate.user,bearer,randomUUID(),queued?.request.id),{status:401});
+  assert.equal(replaced,true);assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+for(const kind of ['agent','queue','cancel'])for(const destination of ['inside','outside'])test('device OU controls physically fence a late '+destination+' OU move after the final '+kind+' reply',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const queued=kind==='cancel'?await queueControl(fixture,owner.user):null,before=await controlState(fixture.deviceDb);let moved=false;
+  afterControlCheckpoint(fixture,async client=>{await moveControlUnit(fixture,client,destination==='inside'?fixture.child:fixture.outside);moved=true;});
+  await assert.rejects(controlChange(fixture,kind,queued?.request),{code:'P0412'});assert.equal(moved,true);assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+for(const kind of ['agent','queue'])test('device OU controls keep the original inventory revision through physical '+kind+' commit',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const before=await controlState(fixture.deviceDb);let edited=false;
+  afterControlCheckpoint(fixture,async client=>{
+   const bound={...fixture.deviceDb,transaction:async(operation,settings={})=>{const result=await operation(client);if(settings.beforeCommit)await settings.beforeCommit(client);return result;}};
+   const inventory=new(require('../../../device-service/src/DeviceInventory').DeviceInventory)(bound,{authority:fixture.inventory.authority});
+   const current=await inventory.get(fixture.inside.id,owner.user,bearer);
+   await inventory.update(current.id,deviceUpdate(current,{model:'Late actual inventory edit'}),require('../../../../../packages/device-inventory-contract').deviceEtag(current),owner.user,bearer,randomUUID());edited=true;
+  });
+  await assert.rejects(controlChange(fixture,kind),{code:'P0412'});assert.equal(edited,true);assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+for(const kind of ['agent','queue'])test('device OU controls cannot commit an expired original '+kind+' source after the final checkpoint',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const before=await controlState(fixture.deviceDb),deadline=Math.floor(Date.now()/1000)+10,read=fixture.inventory.authority.read.bind(fixture.inventory.authority);let checked=false;
+  fixture.inventory.authority.read=async(...args)=>{const source=await read(...args);assert.ok(deadline<=source.validUntil);return{...source,validUntil:deadline};};
+  afterControlCheckpoint(fixture,async client=>{checked=true;await client.query('SELECT pg_sleep($1)',[Math.max(0,(deadline*1000-Date.now()+100)/1000)]);});
+  await assert.rejects(controlChange(fixture,kind),{code:'42501'});assert.equal(checked,true);assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+test('device OU controls reject direct SQL commands with a mismatched original device resource',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const current=await fixture.units.get(fixture.inside.id,{},fixture.delegate.user,bearer),resource={deviceId:fixture.inside.id,deviceRevision:fixture.inside.revision,revision:current.revision,ou:{id:current.ou.id,generation:current.ou.generation}};
+  const source=await fixture.inventory.authority.read(bearer,fixture.delegate.user,null,resource),connection=(await fixture.deviceDb.query('SELECT device_sync_generation(connection) AS generation FROM device_agent_connections connection WHERE device_id=$1',[fixture.inside.id])).rows[0],before=await controlState(fixture.deviceDb);
+  for(const alter of [value=>value.scope.resource=null,value=>value.scope.resource.deviceId=randomUUID(),value=>value.scope.resource.deviceRevision='99',value=>value.scope.resource.revision='99',value=>value.scope.resource.ou.id=randomUUID(),value=>value.scope.resource.ou.generation='99'])for(const kind of ['agent','queue']){
+   const changed=structuredClone(source);alter(changed);
+   const command={deviceId:fixture.inside.id,source:changed,reason,eventId:randomUUID(),correlationId:randomUUID(),...(kind==='agent'?{action:'issue',expectedRevision:'2',newHash:'a'.repeat(64)}:{action:'queued',id:randomUUID(),generation:connection.generation})};
+   await assert.rejects(fixture.deviceDb.transaction(client=>client.query('SELECT '+(kind==='agent'?'device_agent_change':'device_sync_change')+'($1::jsonb)',[JSON.stringify(command)])),{code:'P0412'});assert.deepEqual(await controlState(fixture.deviceDb),before);
+  }
+ },controlPermissions);
+});
+
+for(const fault of ['agent change','agent commit','sync change','sync commit','control manifest guard'])test('device OU controls refuse a missing or replaced '+fault,async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const before=await controlState(fixture.deviceDb);
+  if(fault==='control manifest guard')await fixture.deviceDb.query('ALTER TABLE device_control_manifest DISABLE TRIGGER device_control_manifest_guard');
+  else{
+   const name='device_'+fault.replace(' ','_'),type=fault.endsWith('commit')?'trigger':fault.startsWith('agent')?'void':'uuid',arguments_=fault.endsWith('commit')?'':'command jsonb';
+   await fixture.deviceDb.query('CREATE OR REPLACE FUNCTION '+name+'('+arguments_+') RETURNS '+type+' LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN '+(type==='trigger'?'RETURN NEW;':type==='uuid'?'RETURN NULL;':'RETURN;')+' END; $$;');
+  }
+  await assert.rejects(controlChange(fixture,fault.startsWith('sync')?'queue':'agent'),{code:'42501'});assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});
+
+test('device OU controls preserve original queue cancellation and agent receipts through every migration replay',async()=>{
+ await scopedDevices(async fixture=>{
+  const {registered}=await enrollControl(fixture,fixture.delegate.user),queued=await queueControl(fixture);await controlChange(fixture,'cancel',queued.request);const before=await controlState(fixture.deviceDb);
+  const directory=path.resolve(__dirname,'../../../device-service/migrations');for(const file of fs.readdirSync(directory).filter(file=>file.endsWith('.sql')).sort())await fixture.deviceDb.query(fs.readFileSync(path.join(directory,file),'utf8'));
+  assert.deepEqual(await controlState(fixture.deviceDb),before);await fixture.deviceDb.query('SELECT device_scope_receiving()');await fixture.deviceDb.query('SELECT device_sync_receiving()');
+  await fixture.agents.heartbeat({deviceId:fixture.inside.id,report:controlReport(fixture.inside)},'Bearer '+registered.deviceToken,randomUUID());assert.equal((await fixture.agents.get(fixture.inside.id,{},fixture.delegate.user,bearer)).status,'connected');
+  assert.equal((await queueControl(fixture)).request.status,'queued');
+ },controlPermissions);
+});
+
+test('device OU controls preserve independent tenant stock authority despite an unrelated limited duty',async()=>{
+ await scopedDevices(async fixture=>{
+  await assign(await createRole({name:'Independent tenant control operator',permissions:controlPermissions}),fixture.delegate.id);
+  await fixture.deviceDb.query('ALTER TABLE device_ou_assignments DISABLE TRIGGER device_ou_guard');
+  await enrollControl(fixture,fixture.delegate.user);const queued=await queueControl(fixture);
+  const agent=(await fixture.deviceDb.query("SELECT source FROM device_agent_events WHERE device_id=$1 AND action='issue'",[fixture.inside.id])).rows[0];
+  const request=(await fixture.deviceDb.query('SELECT source FROM device_sync_requests WHERE id=$1',[queued.request.id])).rows[0];
+  assert.equal(agent.source.scope.resource,null);assert.equal(request.source.scope.resource,null);assert.equal(agent.source.schemaVersion,2);assert.ok(agent.source.scope.grants.some(grant=>grant.source.scopeType==='device-ou'));
+ },['devices.inventory.read','devices.inventory.assign']);
+});
+
+test('device OU controls reject a substituted cancellation source after its row guard already ran',async()=>{
+ await scopedDevices(async fixture=>{
+  await enrollControl(fixture);const queued=await queueControl(fixture,owner.user),before=await controlState(fixture.deviceDb);
+  await fixture.deviceDb.query("CREATE FUNCTION poison_control_source() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='cancelled' THEN SELECT source INTO NEW.source FROM device_sync_requests WHERE id=NEW.request_id;END IF;RETURN NEW;END; $$;CREATE TRIGGER z_poison_control_source BEFORE INSERT ON device_sync_events FOR EACH ROW EXECUTE FUNCTION poison_control_source()");
+  await assert.rejects(controlChange(fixture,'cancel',queued.request),{code:'42501'});assert.deepEqual(await controlState(fixture.deviceDb),before);
+ },controlPermissions);
+});

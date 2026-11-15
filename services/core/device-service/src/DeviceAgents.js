@@ -124,11 +124,12 @@ class DeviceAgents {
     if (!expected) fail(428, 'Agent revision required');
     const match = typeof expected === 'string' && expected.match(/^"agent-([a-f0-9-]{36})-(0|[1-9][0-9]{0,18})"$/);
     if (!match || match[1] !== id || BigInt(match[2]) > 9223372036854775807n) fail(400, 'Exact agent revision required');
-    const source = await this.inventory.authorized(user, authorization, 'devices.inventory.create');
+    let source = await this.inventory.authorized(user, authorization, 'devices.inventory.create');
     const token = action === 'issue' ? 'odae_' + this.secret() : null;
     return this.database.transaction(async client => {
       await this.receiving(client);
       const current = await this.inventory.current(client, source.tenant.id, id, true);
+      source = await Scope.bind(client, this.inventory, source, 'devices.inventory.create', user, authorization, id, String(current.row.inventory_revision));
       if (action === 'issue' && (!['windows', 'macos', 'linux'].includes(current.row.platform) || !['available', 'assigned'].includes(current.row.inventory_lifecycle))) fail(409, 'Restore a supported desktop device before enrollment');
       const state = await this.state(client, id, source.tenant.id, source.actorUserId);
       if (etag(id, state.revision) !== expected) fail(412, 'Agent state changed; reload before retrying');

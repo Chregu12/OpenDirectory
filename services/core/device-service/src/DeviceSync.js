@@ -29,8 +29,8 @@ class DeviceSync {
  }
  async write(deviceId,input,expected,user,authorization,correlationId,requestId=null){
   id(deviceId);if(requestId)id(requestId);const reason=decision(input);if(!expected)fail(428,'Current sync connection or request version required');
-  const source=await this.inventory.authorized(user,authorization,'devices.inventory.create');
-  return this.database.transaction(async client=>{await this.receiving(client);await this.inventory.current(client,source.tenant.id,deviceId,true);await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 FOR UPDATE',[deviceId]);
+  let source=await this.inventory.authorized(user,authorization,'devices.inventory.create');
+  return this.database.transaction(async client=>{await this.receiving(client);const current=await this.inventory.current(client,source.tenant.id,deviceId,true);source=await Scope.bind(client,this.inventory,source,'devices.inventory.create',user,authorization,deviceId,String(current.row.inventory_revision));await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 FOR UPDATE',[deviceId]);
    let prior=null;
    if(requestId){prior=(await client.query('SELECT * FROM device_sync_requests WHERE id=$1 AND device_id=$2 AND tenant_id=$3 FOR UPDATE',[requestId,deviceId,source.tenant.id])).rows[0];if(!prior)fail(404,'Own sync request not found');if(expected!==requestEtag(prior))fail(412,'Sync request changed; reload');}
    const connection=await this.connection(client,deviceId,source.tenant.id);
