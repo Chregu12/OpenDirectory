@@ -91,5 +91,18 @@
     "services/core/device-service/scripts/test-inventory-postgres.js": "d28b4ad93ee3ce18635c86ef0ab22bc81c61f5d374de70f58a574eb5983b91a5",
     "services/core/device-service/src/__tests__/inventory.postgres.cjs": "97b25e8965e9f305276b0506110f82bb69ead17c45d768ad7041a07962157ecc",
     "services/core/device-service/src/__tests__/deviceReturns.postgres.cjs": "fd0bfba90fbb810bfb8b3d74901bdc8ba6292bb25f74ddb4e41a694293778e28"
+  },
+  "linuxDeviceRegression": {
+    "commit": "ffa94fe89ead3edbf95720e55070c3ca6e31d249",
+    "run": 43698681400,
+    "job": 132764758356,
+    "tests": 138,
+    "pass": 138,
+    "fail": 0,
+    "skipped": 0,
+    "durationMilliseconds": 40475.924861,
+    "compiler": "1.95.0",
+    "actualRustAgent": "1.5.0",
+    "notCompleteScopeWriteOrSourceCiAcceptance": true
   }
 }

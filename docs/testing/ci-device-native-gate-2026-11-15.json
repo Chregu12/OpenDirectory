@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T08:52:10.741013+00:00",
+  "checkedAt": "2026-11-15T09:48:36.663306+00:00",
   "baseCommit": "e7960b03becae77e6c7d90b197904e8f184634d2",
-  "status": "current-native-device-gate-locally-verified-with-actual-rust-client-linux-ci-pending",
+  "status": "current-native-device-gate-locally-and-on-linux-verified-full-source-ci-pending",
   "productionTouched": false,
   "problem": {
     "inventoryFixturePinnedMigrationFiles": 6,
@@ -69,5 +69,29 @@
     "agent-rust/Cargo.toml": "a3b69caaef9c94abd24b1e7761b18aeb51009a32dc0d2ae582b1fe441cc6cd74",
     "agent-rust/Cargo.lock": "cae180de7fc0805723afb9e6bf558fe30e4f0e64dea05d63003b769d048cdf78",
     "docs/development/testing.md": "27f1c97340fd2d56e864aef1359706607fb23749a16b55209427264accd32746"
+  },
+  "nativeLinux": {
+    "sourceCommit": "2056c9bd4fcdf87e5d1e9f3228931bd41aa02714",
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43696507132",
+    "jobId": 132758120431,
+    "tests": 138,
+    "pass": 138,
+    "fail": 0,
+    "skipped": 0,
+    "actualRustAgentVersion": "1.5.0",
+    "compiler": "1.95.0"
+  },
+  "draftMigration014LinuxRegression": {
+    "sourceCommit": "ffa94fe89ead3edbf95720e55070c3ca6e31d249",
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43698681400",
+    "jobId": 132764758356,
+    "tests": 138,
+    "pass": 138,
+    "fail": 0,
+    "skipped": 0,
+    "durationMilliseconds": 40475.924861,
+    "actualRustAgentVersion": "1.5.0",
+    "compiler": "1.95.0",
+    "scope": "Existing native inventory, returns and actual-agent regression with every Device migration through 014; scoped original-authority writes are separate Identity integration cases."
   }
 }
