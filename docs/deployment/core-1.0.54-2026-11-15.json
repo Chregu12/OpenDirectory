@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-15T22:01:58.116454+00:00",
+  "status": "deployed-and-verified",
+  "release": {
+    "version": "1.0.54",
+    "chartVersion": "0.1.57",
+    "helmRevisionBefore": 86,
+    "helmRevisionAfter": 87,
+    "namespace": "opendirectory",
+    "automaticRollbackEnabled": true,
+    "automaticRollbackUsed": false,
+    "noSqlMigrationDelta": true
+  },
+  "source": {
+    "applicationImages": "3079cfd999f73d893cf66feee1f1bcd84da840bf",
+    "testedCiHead": "7cffbe99a6c3e166d8b9cd8efee5862134e10dec",
+    "mergeCommit": "1fba42fd0d1f31a298a2c57b5226f183eb54ef9d",
+    "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/9",
+    "mergeTreeEqualsTestedTree": true,
+    "postImageChanges": [
+      ".github/workflows/ci.yml",
+      "docs/features/mfa.md",
+      "docs/implementation-worklist.md",
+      "docs/testing/ci-browser-lifecycle-2026-11-15.json",
+      "docs/testing/mfa-integration-2026-11-15.json",
+      "services/core/oauth-provider/src/__tests__/browser.postgres.cjs"
+    ],
+    "imageRuntimeSourcesAndDockerInputsUnchanged": true,
+    "checkpointChangesRuntimeSources": false
+  },
+  "ci": {
+    "run": 43761552811,
+    "headSha": "7cffbe99a6c3e166d8b9cd8efee5862134e10dec",
+    "status": "completed",
+    "conclusion": "success",
+    "successfulJobs": 14,
+    "totalJobs": 14,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43761552811",
+    "licenseCases": 557,
+    "identityCases": 816,
+    "oauthCasesIncludingSixNestedCases": 306,
+    "actualBrowserCases": 60,
+    "actualBrowserUniqueNames": 60,
+    "browserFixtureGroupsCleaned": 9,
+    "policyUnitTests": 1502,
+    "frontendUnitTests": 3256,
+    "frontendPlaywrightCases": 112
+  },
+  "images": {
+    "web-app": {
+      "reference": "harbor.heusser.local/opendirectory/web-app:1.0.54-core-3079cfd",
+      "digest": "sha256:8d549cb80d2992ba0796a615235205dbd409fb25ea82a917bdcce99f4179d5b9",
+      "configurationDigest": "sha256:efa674fb8b6b410e6a6e4d9bd09c44230abf752ef35d7d0fef8bf7919b861552",
+      "verifiedRuntimeSourceFiles": 290
+    },
+    "policy-service": {
+      "reference": "harbor.heusser.local/opendirectory/policy-service:1.0.54-core-3079cfd",
+      "digest": "sha256:c75c07e34e358b8a3720c11f9e361550b84e406d6c5f375479a9aa764904e650",
+      "configurationDigest": "sha256:55f7f91f5803de6377457e4dc20ca191d7eaa0f2e842510a4f8e1e77d8e6efe7",
+      "verifiedRuntimeSourceFiles": 172
+    }
+  },
+  "rollout": {
+    "changedDeployments": [
+      "opendirectory-policy-service",
+      "opendirectory-web-app"
+    ],
+    "otherDeploymentSpecsUnchanged": 9,
+    "allOtherResourceBodiesUnchanged": true,
+    "resourcesCompared": 49,
+    "preparedManifestSha256": "a1e38711f94cfb2f02ee67a55431e60d5b6e5da09e8fea445c38db03148267d1",
+    "liveManifestMatchesPrepared": true,
+    "readyDeployments": 11,
+    "matchedRunningImageDigests": 2,
+    "repositoryChartRendersExactDeployedManifest": true
+  },
+  "liveChecks": {
+    "certificateVerifiedHttps": {
+      "/login": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/.well-known/openid-configuration": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/api/identity/access": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/capabilities": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/fleet": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/identity/company-pim": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/pools": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/provider": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/auth/oidc/session (POST)": {
+        "status": 401,
+        "cacheControl": "no-store",
+        "certificateVerified": true
+      }
+    },
+    "internalHealth": {
+      "opendirectory-web-app": {
+        "status": 200
+      },
+      "opendirectory-policy-service": {
+        "status": 200
+      }
+    },
+    "identityReceivers": {
+      "identity_company_role_receiving": true,
+      "identity_company_group_rule_live_receiving": true,
+      "identity_company_activation_receiving": true,
+      "identity_company_pim_approval_receiving": true
+    },
+    "policyReceivers": {
+      "license_company_receiving": true,
+      "license_company_edit_receiving": true,
+      "company_offboarding_receiving": true,
+      "company_license_group_receiving": true,
+      "company_blueprint_receiving": true,
+      "company_blueprint_assignment_receiving": true,
+      "company_blueprint_assignment_automation_receiving": true,
+      "company_blueprint_assignment_retirement_receiving": true
+    },
+    "credentialValidator": {
+      "validShapeAccepted": true,
+      "invalidShapeRejected": true,
+      "pureReadOnlyInputs": true,
+      "noUserRecordsCreated": true
+    }
+  },
+  "backup": {
+    "capturedAt": "2026-11-15T21:59:18.437205+00:00",
+    "databaseArchives": {
+      "auth": {
+        "bytes": 83919,
+        "sha256": "0902e7594bf6db77efc7d746af03cdd04cd7239245e451aa36ced666525bb43b",
+        "tocEntries": 150
+      },
+      "oauth": {
+        "bytes": 176209,
+        "sha256": "bbeaf404a0da715e5a0c4f31d357b3297abf6cee280eb8a19e41ff4bc945ac8e",
+        "tocEntries": 270
+      },
+      "identity": {
+        "bytes": 3741834,
+        "sha256": "8cf089552da8773422258406498d3dbf7ca9661160e193ea603fc610010e4ca6",
+        "tocEntries": 6235
+      },
+      "devices": {
+        "bytes": 180853,
+        "sha256": "ba91cc11ae327dd03395c953ca35c2039519ade6580b5bb9b987566563c647aa",
+        "tocEntries": 209
+      },
+      "app_store": {
+        "bytes": 19950,
+        "sha256": "6e0ad02ab1a0f0d236fc66e16d2029fc833622ea1d4a0779a0e24c0dbdec75b6",
+        "tocEntries": 39
+      },
+      "policy": {
+        "bytes": 881975,
+        "sha256": "77e09eef7fabf2a1c883ea3655a712d8d147971eb789eb02f9b3d1243668a3c6",
+        "tocEntries": 1076
+      }
+    },
+    "uploads": {
+      "bytes": 173,
+      "sha256": "ed7b28fe437624aa4e51e23bd3adbe1c667015ff3f26fe2ff739f271f1a9e68d",
+      "members": 3
+    },
+    "consistentAcrossDatabases": false,
+    "validation": "Local PostgreSQL 16 pg_restore --list; production archives are PostgreSQL 15. This is TOC validation, not a restore rehearsal.",
+    "storedPrivately": true,
+    "priorIncompleteTransportAttemptNotUsed": true
+  },
+  "mfa": {
+    "integrated": true,
+    "guide": "../features/mfa.md",
+    "audit": "../testing/mfa-integration-2026-11-15.json",
+    "dedicatedUnitTests": 199,
+    "actualPostgresCases": 31,
+    "actualBrowserCases": 6,
+    "production": {
+      "enabledFactors": 0,
+      "pendingFactors": 0,
+      "recoveryCodes": 0,
+      "checkedAt": "2026-11-15T22:03:40.662864+00:00",
+      "readOnly": true,
+      "personalSignInPerformed": false
+    },
+    "noProductionFactorOrPrivilegeCreatedForTesting": true,
+    "smsPushOrPasskeysAdded": false
+  },
+  "supersededCandidate": {
+    "dashboardOnlySource": "4927ea67f10202bfd5b01a602eff7fb806ed4e70",
+    "applied": false,
+    "reason": "One combined Web/Policy release replaced the unapplied Web-only preparation."
+  },
+  "limits": [
+    "Live checks confirm readiness, exact images, HTTPS denials and SQL receivers; no personal authenticated production session was tested.",
+    "The user must enroll their own authenticator and privately retain recovery codes.",
+    "Real Microsoft tenant acceptance and company-pool cloud assignments remain open; this release adds a read-only connection/stock view.",
+    "Physical device acceptance remains open.",
+    "Database archives use separate consistent snapshots; TOC inspection is not a new full-platform restore rehearsal."
+  ]
+}
