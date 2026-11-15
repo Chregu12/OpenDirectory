@@ -4,6 +4,7 @@ const Scope = require('./device-scope-contract');
 const { validRevision } = require('./identity-authorization-contract');
 function exact(value,keys) { return !!value && typeof value==='object' && !Array.isArray(value) && Object.keys(value).length===keys.length && keys.every(key=>Object.hasOwn(value,key)); }
 function uuid(value) { return typeof value==='string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value); }
+function actorSource(source) { return source?.schemaVersion === 2 && source.deviceOffboardingReturnsProtocol === 2 ? source.inventory : source; }
 function validSource(value,user,workflowId,userId,selected=null,now=Date.now()) {
  try {
   if(!exact(value,['schemaVersion','deviceOffboardingReturnsProtocol','inventory','target','parent']) || value.schemaVersion!==2 || value.deviceOffboardingReturnsProtocol!==2
@@ -19,4 +20,4 @@ function validSource(value,user,workflowId,userId,selected=null,now=Date.now()) 
    && typeof parent.createdAt==='string' && Number.isFinite(Date.parse(parent.createdAt)) && new Date(parent.createdAt).toISOString()===parent.createdAt && Date.parse(parent.createdAt)<=now;
  } catch { return false; }
 }
-module.exports = { validSource };
+module.exports = { actorSource, validSource };

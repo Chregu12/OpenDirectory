@@ -65,3 +65,17 @@ test('OpenAPI keeps request, physical confirmation and original-account provenan
   expect(canonical.paths['/api/identity/device-offboarding']).toEqual(document.paths['/api/identity/device-offboarding']);
   expect(canonical.components.schemas.DeviceOffboardingScopedAuthoritySource).toEqual(scoped);
 });
+test('only explicitly scoped return responses advertise partial coverage and protocol two', () => {
+  const api = require('../../scripts/device-returns-openapi').deviceReturnsOpenApi();
+  for (const name of ['DeviceReturnCapabilities','DeviceOffboardingReturnCapabilities','DeviceReturnPage','DeviceReturnHistory','DeviceReturnDecisionResult','DeviceOffboardingReturnPreview','DeviceOffboardingReturnHistory','DeviceOffboardingReturnResult']) {
+    const legacy = api.components.schemas[name], scoped = api.components.schemas[name+'Scoped'];
+    expect(legacy.properties.schemaVersion).toEqual({ const: 1 }); expect(legacy.properties.coverage).toBeUndefined();
+    expect(scoped.properties.schemaVersion).toEqual({ const: 2 }); expect(scoped.required).toContain('coverage');
+    expect(scoped.properties.coverage.enum).toEqual(['scope','tenant']); expect(scoped.additionalProperties).toBe(false);
+  }
+  for (const path of ['/api/devices/returns/capabilities','/api/devices/returns','/api/devices/users/{userId}/offboarding-returns/capabilities','/api/devices/users/{userId}/offboarding-returns','/api/devices/users/{userId}/offboarding-returns/history']) {
+    expect(api.paths[path].get.responses[200].content['application/json'].schema.oneOf).toHaveLength(2);
+  }
+  const canonical = JSON.parse(require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../../../../docs/api/openapi.yaml'), 'utf8'));
+  for (const [name,schema] of Object.entries(api.components.schemas)) expect(canonical.components.schemas[name]).toEqual(schema);
+});

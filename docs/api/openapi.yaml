@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.44.0",
+    "version": "1.45.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -19182,14 +19182,21 @@
       "get": {
         "operationId": "readOwnDeviceReturnCapabilities",
         "summary": "Verify actual own local return-workflow receiver and bounded authority",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004.",
         "responses": {
           "200": {
-            "description": "Actual protocol 1 return receiver and unchanged three inventory permissions",
+            "description": "Actual original duties and receiver; scoped protocol 2 requires the corresponding SQL receiver",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceReturnCapabilities"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnCapabilities"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnCapabilitiesScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -19352,7 +19359,7 @@
       "get": {
         "operationId": "listOwnDeviceReturnRequests",
         "summary": "Read actual own device return tasks independently of current account state",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Operational status assignment_changed is derived from the original retained assignment and actual existing inventory release event. It never means physical return. Cancelled tasks permit a later explicitly created request for that same still-active assignment.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Operational status assignment_changed is derived from the original retained assignment and actual existing inventory release event. It never means physical return. Cancelled tasks permit a later explicitly created request for that same still-active assignment.",
         "parameters": [
           {
             "name": "page",
@@ -19391,7 +19398,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceReturnPage"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnPage"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnPageScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -19554,7 +19568,7 @@
       "get": {
         "operationId": "readOwnDeviceReturnRequest",
         "summary": "Read one actual retained return request and its two-version strong ETag",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004.",
         "parameters": [
           {
             "name": "id",
@@ -19742,7 +19756,7 @@
       "get": {
         "operationId": "readOwnDeviceReturnHistory",
         "summary": "Read actual return-request and manual-decision events with pending delivery",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Ordinary inventory reassignment is not fabricated as an extra return event; its real existing inventory-operation reference is visible in the derived request state.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Ordinary inventory reassignment is not fabricated as an extra return event; its real existing inventory-operation reference is visible in the derived request state.",
         "parameters": [
           {
             "name": "id",
@@ -19779,7 +19793,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceReturnHistory"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnHistory"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnHistoryScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -19942,7 +19963,7 @@
       "post": {
         "operationId": "decideOwnDeviceReturn",
         "summary": "Explicitly record manual physical handback or cancel an actual pending task",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Operational confirmation does not require the employee to remain disabled: the old task is an inventory handback, not a new offboarding action. The exact original still-active assignment, current device version and pending request must match. Returned composes the unchanged canonical DeviceInventory release; real inventory event/outbox and return event/state/outbox commit atomically. Cancelled changes only return metadata, never inventory. An independently reassigned/released original link permits no decision and cannot authorize touching its replacement. Lost ACK recovery requires the exact original old ETag/action/reason and valid original completion receipt, performs no effect and never releases a new assignment. Outcomes already_returned/already_cancelled are historical, not current device availability. No automatic POST retry or silent version refresh.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Operational confirmation does not require the employee to remain disabled: the old task is an inventory handback, not a new offboarding action. The exact original still-active assignment, current device version and pending request must match. Returned composes the unchanged canonical DeviceInventory release; real inventory event/outbox and return event/state/outbox commit atomically. Cancelled changes only return metadata, never inventory. An independently reassigned/released original link permits no decision and cannot authorize touching its replacement. Lost ACK recovery requires the exact original old ETag/action/reason and valid original completion receipt, performs no effect and never releases a new assignment. Outcomes already_returned/already_cancelled are historical, not current device availability. No automatic POST retry or silent version refresh.",
         "parameters": [
           {
             "name": "id",
@@ -20003,7 +20024,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceReturnDecisionResult"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnDecisionResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceReturnDecisionResultScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -20172,7 +20200,7 @@
       "get": {
         "operationId": "readEmployeeOffboardingDeviceReturnCapabilities",
         "summary": "Read actual return-request capability bound to an original negative account checkpoint",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation.",
         "parameters": [
           {
             "name": "userId",
@@ -20201,7 +20229,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingReturnCapabilities"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnCapabilities"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnCapabilitiesScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -20364,7 +20399,7 @@
       "get": {
         "operationId": "previewEmployeeOffboardingDeviceReturns",
         "summary": "Read a captured own employee page of current inventory assignments without releasing them",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Existing pending tasks remain visible through openRequestId and are not silently duplicated. A return request does not change an assignment or assert actual physical handback.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Existing pending tasks remain visible through openRequestId and are not silently duplicated. A return request does not change an assignment or assert actual physical handback.",
         "parameters": [
           {
             "name": "userId",
@@ -20411,7 +20446,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingReturnPreview"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnPreview"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnPreviewScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -20572,7 +20614,7 @@
       "post": {
         "operationId": "requestEmployeeOffboardingDeviceReturns",
         "summary": "Explicitly request handback for exactly the captured original assignments",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Full read-only repeatable-read manifest preflight precedes the first insertion. Each requested task has its own atomic original source/event/pending-outbox transaction; a later unconfirmed child stops later work without undoing earlier commits. Client request UUIDs are immutable idempotency selectors, not authority. Effect-free already_requested recovery requires exactly the original workflow/user/device/version/assignment/request UUID/reason receipt; it does not create a task for a new assignment. Devices remain assigned. No automatic POST retry or unattended service continuation.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Full read-only repeatable-read manifest preflight precedes the first insertion. Each requested task has its own atomic original source/event/pending-outbox transaction; a later unconfirmed child stops later work without undoing earlier commits. Client request UUIDs are immutable idempotency selectors, not authority. Effect-free already_requested recovery requires exactly the original workflow/user/device/version/assignment/request UUID/reason receipt; it does not create a task for a new assignment. Devices remain assigned. No automatic POST retry or unattended service continuation.",
         "parameters": [
           {
             "name": "userId",
@@ -20668,7 +20710,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingReturnResult"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnResultScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -20685,7 +20734,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingReturnResult"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnResultScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -20848,7 +20904,7 @@
       "get": {
         "operationId": "readEmployeeOffboardingDeviceReturnHistory",
         "summary": "Read retained return tasks linked to the original still-negative account checkpoint",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Operational generic return history remains separately available to actual inventory authority after a later account reactivation; this endpoint does not reuse an old negative parent.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Operational generic return history remains separately available to actual inventory authority after a later account reactivation; this endpoint does not reuse an old negative parent.",
         "parameters": [
           {
             "name": "userId",
@@ -20895,7 +20951,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOffboardingReturnHistory"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnHistory"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeviceOffboardingReturnHistoryScoped"
+                    }
+                  ]
                 }
               }
             },
@@ -21058,7 +21121,7 @@
       "post": {
         "operationId": "readOriginalOffboardingDeviceAuthority",
         "summary": "Resolve the original human inventory authority and actual retained negative account checkpoint",
-        "description": "Original current human inventory Owner or canonical home-tenant admin, existing bounded inventory permissions and independently verified fresh MFA within 300 seconds are mandatory. No new role, Company-App permission, service credential or claimed token permission grants access. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Thirteen legacy source fields, or fourteen including exact delegated role/PIM provenance. Current own read and assignment duties are required; the original five-minute MFA boundary remains unchanged. Target contains only canonical id, disabled status and exact negative eligibility; target authorization revision is not frozen. Parent provenance is validated in Identity, not inferred from a caller-owned JSON snapshot.",
+        "description": "The original live human context, current own-company devices.inventory.read duty and independently verified fresh MFA within 300 seconds are mandatory. Requests and decisions additionally require devices.inventory.assign. Validated tenant or device-ou role/PIM sources retain their exact original provenance; unrelated app/service credentials or claimed token permissions do not grant these duties. Device-service remains the only device/assignment/return data authority. Identity is separate: no cross-database FK, distributed atomic commit or instantaneous post-checkpoint user-revocation guarantee is claimed. Pending means actual local outstanding delivery, never MDM, wipe, lock, enrollment, compliance, license or provider success. This is not complete WF-004. Creation and creation recovery additionally require the actual retained Identity 045 account checkpoint for the exact tenant/workflow/user, still disabled in its original negative eligibility generation. Self, deleted, foreign, reactivated or redisabled-generation targets are rejected. Legitimate target authorization-revision changes from role cleanup are not a new account eligibility generation. Thirteen legacy source fields, or fourteen including exact delegated role/PIM provenance. Current own read and assignment duties are required; the original five-minute MFA boundary remains unchanged. Target contains only canonical id, disabled status and exact negative eligibility; target authorization revision is not frozen. Parent provenance is validated in Identity, not inferred from a caller-owned JSON snapshot.",
         "requestBody": {
           "required": true,
           "content": {
@@ -73969,6 +74032,747 @@
                 "const": "pending"
               }
             }
+          }
+        }
+      },
+      "DeviceReturnCapabilitiesScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "deviceReturnsProtocol",
+          "permissions",
+          "managementMode",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "deviceReturnsProtocol": {
+            "const": 2
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "devices.inventory.read",
+                "devices.inventory.create",
+                "devices.inventory.assign"
+              ]
+            },
+            "contains": {
+              "const": "devices.inventory.read"
+            },
+            "description": "Canonical ordered own duties; requesting or deciding returns additionally requires devices.inventory.assign."
+          },
+          "managementMode": {
+            "const": "inventory-only"
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceOffboardingReturnCapabilitiesScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "deviceOffboardingReturnsProtocol",
+          "workflowId",
+          "userId",
+          "target",
+          "permissions",
+          "managementMode",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "deviceOffboardingReturnsProtocol": {
+            "const": 2
+          },
+          "workflowId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "eligibilityRevision"
+            ],
+            "properties": {
+              "enabled": {
+                "const": false
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "devices.inventory.read",
+                "devices.inventory.create",
+                "devices.inventory.assign"
+              ]
+            },
+            "contains": {
+              "const": "devices.inventory.read"
+            },
+            "description": "Canonical ordered own duties; requesting or deciding returns additionally requires devices.inventory.assign."
+          },
+          "managementMode": {
+            "const": "inventory-only"
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceReturnPageScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "requests",
+          "total",
+          "page",
+          "limit",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "requests": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/DeviceReturnRequest"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceReturnHistoryScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "requestId",
+          "events",
+          "total",
+          "page",
+          "limit",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/DeviceReturnEvent"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceReturnDecisionResultScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "deviceReturnsProtocol",
+          "request",
+          "outcome",
+          "operationId",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "deviceReturnsProtocol": {
+            "const": 2
+          },
+          "request": {
+            "$ref": "#/components/schemas/DeviceReturnRequest"
+          },
+          "outcome": {
+            "enum": [
+              "returned",
+              "already_returned",
+              "cancelled",
+              "already_cancelled"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceOffboardingReturnPreviewScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "deviceOffboardingReturnsProtocol",
+          "workflowId",
+          "userId",
+          "target",
+          "permissions",
+          "managementMode",
+          "devices",
+          "total",
+          "page",
+          "limit",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "deviceOffboardingReturnsProtocol": {
+            "const": 2
+          },
+          "workflowId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "eligibilityRevision"
+            ],
+            "properties": {
+              "enabled": {
+                "const": false
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "devices.inventory.read",
+                "devices.inventory.create",
+                "devices.inventory.assign"
+              ]
+            },
+            "contains": {
+              "const": "devices.inventory.read"
+            },
+            "description": "Canonical ordered own duties; requesting or deciding returns additionally requires devices.inventory.assign."
+          },
+          "managementMode": {
+            "const": "inventory-only"
+          },
+          "devices": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "deviceId",
+                "assetId",
+                "serialNumber",
+                "deviceRevision",
+                "assignmentId",
+                "openRequestId"
+              ],
+              "properties": {
+                "deviceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "assetId": {
+                  "type": "string"
+                },
+                "serialNumber": {
+                  "type": "string"
+                },
+                "deviceRevision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+                },
+                "assignmentId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                },
+                "openRequestId": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceOffboardingReturnHistoryScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "workflowId",
+          "userId",
+          "target",
+          "requests",
+          "total",
+          "page",
+          "limit",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "workflowId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "eligibilityRevision"
+            ],
+            "properties": {
+              "enabled": {
+                "const": false
+              },
+              "eligibilityRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Exact positive PostgreSQL BIGINT string, at most 9223372036854775807."
+              }
+            }
+          },
+          "requests": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/DeviceReturnRequest"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "limit": {
+            "const": 25
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
+          }
+        }
+      },
+      "DeviceOffboardingReturnResultScoped": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "actorUserId",
+          "tenantId",
+          "workflowId",
+          "userId",
+          "correlationId",
+          "results",
+          "coverage"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "workflowId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "results": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 25,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "deviceId",
+                    "assignmentId",
+                    "requestId",
+                    "status",
+                    "code",
+                    "operationId"
+                  ],
+                  "properties": {
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "assignmentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "enum": [
+                        "requested",
+                        "already_requested"
+                      ]
+                    },
+                    "code": {
+                      "const": 200
+                    },
+                    "operationId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "deviceId",
+                    "assignmentId",
+                    "requestId",
+                    "status",
+                    "code",
+                    "operationId"
+                  ],
+                  "properties": {
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "assignmentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "const": "unconfirmed"
+                    },
+                    "code": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "operationId": {
+                      "type": "null"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "deviceId",
+                    "assignmentId",
+                    "requestId",
+                    "status",
+                    "code",
+                    "operationId"
+                  ],
+                  "properties": {
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "assignmentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                    },
+                    "status": {
+                      "const": "not_attempted"
+                    },
+                    "code": {
+                      "type": "null"
+                    },
+                    "operationId": {
+                      "type": "null"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "coverage": {
+            "enum": [
+              "scope",
+              "tenant"
+            ],
+            "description": "scope means only the original permitted device area is covered. Negative-parent previews, histories and requests require the intersection of read and assignment duties; generic pages cover read-visible tasks. No scoped response certifies complete company offboarding."
           }
         }
       }

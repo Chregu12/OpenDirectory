@@ -510,6 +510,277 @@ async function deviceOuSources(actor,permission='devices.inventory.read',unit=nu
  await pool.query('SELECT identity_company_role_receiving()');
  return (await pool.query('SELECT identity_company_role_sources($1,$2,$3,$4,$5) AS sources',[actor.id,owner.receipt.tenantId,permission,kind,unit])).rows[0].sources;
 }
+async function scopedReturns(operation) {
+ return scopedDevices(async state => {
+  const target = await person('scoped-return-target'), assigned = {};
+  const { deviceEtag } = require('../../../../../packages/device-inventory-contract');
+  for (const key of ['inside','nested','hidden','unassigned']) assigned[key] = await state.inventory.assign(state[key].id, { userId: target.id }, deviceEtag(state[key]), owner.user, bearer);
+  const profile = await reader.user(target.id, {}, owner.user, bearer), workflowId = randomUUID();
+  const parent = await new (require('../CompanyOffboarding').CompanyOffboarding)(db, options).receive(target.id, { workflowId, expectedRevision: profile.revision, confirm: true }, owner.user, bearer);
+  const negative = new (require('../DeviceOffboardingAuthority').DeviceOffboardingAuthority)(db, options);
+  const authority = new (require('../../../device-service/src/DeviceReturnAuthority').DeviceReturnAuthority)({ scoped: true, endpoint: 'https://native.identity.test/api/identity/device-offboarding', fetchImpl: async (_url, request) => {
+   assert.equal(request.headers['X-OD-Device-Scope-Protocol'], '1');
+   return Response.json(await negative.readScoped(state.delegate.user, bearer, JSON.parse(request.body)));
+  } });
+  const returns = new (require('../../../device-service/src/DeviceReturns').DeviceReturns)(state.deviceDb, { inventory: state.inventory, authority });
+  const requestBody = keys => ({ workflowId, eligibilityRevision: parent.afterEligibilityRevision, reason, confirm: true, items: keys.map(key => ({ deviceId: assigned[key].id, deviceRevision: assigned[key].revision, assignmentId: assigned[key].assignmentId, requestId: randomUUID() })) });
+  return operation({ ...state, target, assigned, workflowId, parent, negative, authority, returns, requestBody });
+ }, ['devices.inventory.read','devices.inventory.assign']);
+}
+test('device OU returns preserve scoped parent requests and real cancellation release history and recovery', async () => {
+ await scopedReturns(async ({ inventory, deviceDb, delegate, assigned, workflowId, target, returns, requestBody }) => {
+  const { deviceEtag, deviceReturnEtag } = require('../../../../../packages/device-inventory-contract');
+  const preview = await returns.offboardingList(target.id, { workflowId }, delegate.user, bearer);
+  assert.equal(preview.schemaVersion, 2); assert.equal(preview.deviceOffboardingReturnsProtocol, 2); assert.equal(preview.coverage, 'scope'); assert.equal(preview.total, 2);
+  assert.deepEqual(preview.devices.map(row => row.deviceId).sort(), [assigned.inside.id, assigned.nested.id].sort());
+  const body = requestBody(['inside','nested']), created = await returns.request(target.id, body, delegate.user, bearer, randomUUID());
+  assert.equal(created.coverage, 'scope'); assert.ok(created.results.every(row => row.status === 'requested'));
+  const proofs = (await deviceDb.query("SELECT proof FROM device_return_events WHERE type='device.return.requested'")).rows;
+  for (const { proof } of proofs) { assert.equal(proof.source.schemaVersion, 2); assert.equal(proof.source.deviceOffboardingReturnsProtocol, 2); assert.equal(proof.source.inventory.scope.resource.deviceId, proof.item.deviceId); assert.equal(Object.hasOwn(proof.source, 'permissions'), false); }
+  assert.equal((await returns.request(target.id, body, delegate.user, bearer, randomUUID())).results[0].status, 'already_requested');
+  await inventory.update(assigned.inside.id, deviceUpdate(assigned.inside, { model: 'Updated before cancellation' }), deviceEtag(assigned.inside), owner.user, bearer, randomUUID());
+  const cancelledTask = await returns.get(body.items[0].requestId, delegate.user, bearer);
+  assert.notEqual(cancelledTask.deviceRevision, cancelledTask.currentDeviceRevision);
+  const cancelled = await returns.decide(cancelledTask.id, { action: 'cancelled', reason, confirm: true }, deviceReturnEtag(cancelledTask), delegate.user, bearer, randomUUID());
+  assert.equal(cancelled.request.status, 'cancelled'); assert.equal(cancelled.deviceReturnsProtocol, 2); assert.equal((await inventory.get(assigned.inside.id, delegate.user, bearer)).assignedUserId, target.id);
+  const task = await returns.get(body.items[1].requestId, delegate.user, bearer), expected = deviceReturnEtag(task);
+  const returned = await returns.decide(task.id, { action: 'returned', reason, confirm: true }, expected, delegate.user, bearer, randomUUID());
+  assert.equal(returned.request.status, 'returned'); assert.equal(returned.coverage, 'scope'); assert.equal((await inventory.get(task.deviceId, delegate.user, bearer)).assignedUserId, null);
+  const decision = (await deviceDb.query('SELECT proof FROM device_return_events WHERE id=$1', [returned.operationId])).rows[0].proof;
+  const release = (await deviceDb.query('SELECT proof FROM device_inventory_events WHERE id=$1', [returned.request.inventoryOperationId])).rows[0].proof;
+  assert.deepEqual(decision.source, release.source); assert.equal(decision.source.schemaVersion, 2); assert.equal(decision.source.scope.resource.deviceRevision, task.currentDeviceRevision);
+  const other = await person(); const current = await inventory.get(task.deviceId, owner.user, bearer); const later = await inventory.assign(task.deviceId, { userId: other.id }, deviceEtag(current), owner.user, bearer, randomUUID());
+  assert.equal((await returns.decide(task.id, { action: 'returned', reason, confirm: true }, expected, delegate.user, bearer, randomUUID())).outcome, 'already_returned');
+  assert.equal((await inventory.get(task.deviceId, delegate.user, bearer)).assignmentId, later.assignmentId);
+  assert.equal((await returns.list({}, delegate.user, bearer)).total, 2); assert.equal((await returns.offboardingHistory(target.id, { workflowId }, delegate.user, bearer)).total, 2);
+  assert.equal((await returns.history(task.id, {}, delegate.user, bearer)).events.length, 2);
+ });
+});
+async function returnState(database) {
+ const state = await deviceState(database);
+ for (const table of ['device_return_requests','device_return_events','device_return_outbox']) state[table] = (await database.query('SELECT to_jsonb(record)::text AS row FROM '+table+' record ORDER BY to_jsonb(record)::text')).rows;
+ return state;
+}
+async function prepareReturn(fixture, kind) {
+ const body = fixture.requestBody(['inside']);
+ if (kind === 'requested') return { body };
+ const result = await fixture.returns.request(fixture.target.id, body, fixture.delegate.user, bearer, randomUUID());
+ assert.equal(result.results[0].status, 'requested');
+ const task = await fixture.returns.get(body.items[0].requestId, fixture.delegate.user, bearer);
+ return { body, task, expected: require('../../../../../packages/device-inventory-contract').deviceReturnEtag(task) };
+}
+async function changeReturn(fixture, kind, prepared, errorCode) {
+ if (kind === 'requested') {
+  const result = await fixture.returns.request(fixture.target.id, prepared.body, fixture.delegate.user, bearer, randomUUID());
+  if (errorCode) { assert.equal(result.results[0].status, 'unconfirmed'); assert.ok([].concat(errorCode).includes(result.results[0].code), JSON.stringify(result)); }
+  return result;
+ }
+ const operation = fixture.returns.decide(prepared.task.id, { action: kind, reason, confirm: true }, prepared.expected, fixture.delegate.user, bearer, randomUUID());
+ if (errorCode) return assert.rejects(operation, error => [].concat(errorCode).includes(error.status || ({ P0412: 412, '42501': 503, '23514': 409 }[error.code])), 'Original return boundary must reject the effect');
+ return operation;
+}
+function ownerReturns(fixture) {
+ return new (require('../../../device-service/src/DeviceReturns').DeviceReturns)(fixture.deviceDb, { inventory: fixture.inventory,
+  authority: { read: (authorization, user, workflowId, userId, selected = null) => fixture.negative.readScoped(user, authorization, { workflowId, userId, ...(selected ? { device: selected } : {}) }) } });
+}
+test('device OU returns hide outside corrupted tasks before state ETag recovery and history disclosure', async () => {
+ await scopedReturns(async fixture => {
+  const body = fixture.requestBody(['hidden','unassigned']), ownerService = ownerReturns(fixture);
+  assert.ok((await ownerService.request(fixture.target.id, body, owner.user, bearer, randomUUID())).results.every(row => row.status === 'requested'));
+  await fixture.deviceDb.query('ALTER TABLE device_return_outbox DISABLE TRIGGER USER');
+  await fixture.deviceDb.query('DELETE FROM device_return_outbox');
+  await fixture.deviceDb.query('ALTER TABLE device_return_outbox ENABLE TRIGGER USER');
+  for (const item of body.items) {
+   await assert.rejects(fixture.returns.get(item.requestId, fixture.delegate.user, bearer), { status: 404 });
+   await assert.rejects(fixture.returns.history(item.requestId, {}, fixture.delegate.user, bearer), { status: 404 });
+   await assert.rejects(fixture.returns.decide(item.requestId, { action: 'cancelled', reason, confirm: true }, `"device-return-${item.requestId}-99-99"`, fixture.delegate.user, bearer), { status: 404 });
+   await assert.rejects(fixture.returns.request(fixture.target.id, { ...body, items: [{ ...item, deviceRevision: '99' }] }, fixture.delegate.user, bearer), { status: 404 });
+  }
+  assert.equal((await fixture.returns.list({}, fixture.delegate.user, bearer)).total, 0);
+  assert.equal((await fixture.returns.offboardingHistory(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer)).total, 0);
+ });
+});
+test('device OU returns intersect global read authority with the actual scoped assignment duty', async () => {
+ await scopedReturns(async fixture => {
+  await assign(await createRole({ name: 'Tenant return history reader', permissions: ['devices.inventory.read'] }), fixture.delegate.id);
+  const ownerService = ownerReturns(fixture), body = fixture.requestBody(['inside','hidden']);
+  assert.ok((await ownerService.request(fixture.target.id, body, owner.user, bearer, randomUUID())).results.every(row => row.status === 'requested'));
+  const listing = await fixture.returns.list({}, fixture.delegate.user, bearer); assert.equal(listing.coverage, 'tenant'); assert.equal(listing.total, 2);
+  const preview = await fixture.returns.offboardingList(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer);
+  assert.equal(preview.coverage, 'scope'); assert.equal(preview.total, 2); assert.ok(!preview.devices.some(row => row.deviceId === fixture.assigned.hidden.id));
+  const history = await fixture.returns.offboardingHistory(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer); assert.equal(history.total, 1); assert.equal(history.coverage, 'scope');
+  const hidden = await fixture.returns.get(body.items[1].requestId, fixture.delegate.user, bearer);
+  await assert.rejects(fixture.returns.decide(hidden.id, { action: 'cancelled', reason, confirm: true }, require('../../../../../packages/device-inventory-contract').deviceReturnEtag(hidden), fixture.delegate.user, bearer), { status: 404 });
+ });
+});
+for (const kind of ['requested','cancelled','returned']) for (const destination of ['inside','outside']) test(`device OU returns physically reject a late ${destination} move after the final ${kind} checkpoint`, async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, kind), before = await returnState(fixture.deviceDb); let moved = false;
+  afterControlCheckpoint(fixture, async client => { await moveControlUnit(fixture, client, destination === 'inside' ? fixture.child : fixture.outside); moved = true; });
+  await changeReturn(fixture, kind, prepared, 412); assert.equal(moved, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+for (const kind of ['requested','cancelled']) test(`device OU returns bind the actual inventory version through physical ${kind} commit`, async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, kind), before = await returnState(fixture.deviceDb); let edited = false;
+  afterControlCheckpoint(fixture, async client => {
+   // Privileged disposable corruption fixture; every guard is restored before physical commit.
+   await client.query('ALTER TABLE devices DISABLE TRIGGER USER');
+   await client.query('UPDATE devices SET inventory_revision=inventory_revision+1 WHERE id=$1', [fixture.assigned.inside.id]);
+   await client.query('ALTER TABLE devices ENABLE TRIGGER USER'); edited = true;
+  });
+  await changeReturn(fixture, kind, prepared, 412); assert.equal(edited, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+for (const kind of ['requested','cancelled','returned']) for (const mode of ['grant','PIM']) test(`device OU returns reject a changed original ${mode} at the final ${kind} checkpoint`, async () => {
+ await scopedReturns(async fixture => {
+  let active;
+  if (mode === 'PIM') { await roles.revoke(fixture.grant.id, { reason, confirm: true }, C.etag('grant', fixture.grant), owner.user, bearer); active = (await activate((await makeEligible(fixture.role, fixture.delegate.id, { scopeType: 'device-ou', ouId: fixture.root.id })).eligibility, fixture.delegate.user)).activation; }
+  const prepared = await prepareReturn(fixture, kind), before = await returnState(fixture.deviceDb), checkpoint = fixture.returns.checkpoint.bind(fixture.returns); let calls = 0, changed = false;
+  fixture.returns.checkpoint = async (...args) => {
+   const actor = require('../../../../../packages/device-return-scope-contract').actorSource(args[0]);
+   if (actor.scope?.resource && ++calls === (kind === 'requested' ? 1 : 2)) {
+    if (mode === 'PIM') await pim().end(active.id, { reason, confirm: true }, C.etag('activation', active), fixture.delegate.user, bearer);
+    else { await roles.revoke(fixture.grant.id, { reason, confirm: true }, C.etag('grant', fixture.grant), owner.user, bearer); await assign(fixture.role, fixture.delegate.id, { scopeType: 'device-ou', ouId: fixture.root.id }); }
+    changed = true;
+   }
+   return checkpoint(...args);
+  };
+  await changeReturn(fixture, kind, prepared, [401,403]); assert.equal(changed, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+for (const again of [false,true]) test(`device OU returns reject an account ${again ? 'disabled again' : 'reactivated'} before request commit`, async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, 'requested'), before = await returnState(fixture.deviceDb), checkpoint = fixture.returns.checkpoint.bind(fixture.returns); let changed = false;
+  fixture.returns.checkpoint = async (...args) => {
+   if (args[0].inventory?.scope.resource && !changed) {
+    let profile = await reader.user(fixture.target.id, {}, owner.user, bearer);
+    await new UserMutator(db, options).update(fixture.target.id, { enabled: true }, userEtag(profile), owner.user, bearer);
+    if (again) { profile = await reader.user(fixture.target.id, {}, owner.user, bearer); await new UserMutator(db, options).update(fixture.target.id, { enabled: false }, userEtag(profile), owner.user, bearer); }
+    changed = true;
+   }
+   return checkpoint(...args);
+  };
+  await changeReturn(fixture, 'requested', prepared, 409); assert.equal(changed, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+for (const kind of ['requested','cancelled']) test(`device OU returns cannot commit an expired original ${kind} source after final revalidation`, async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, kind), before = await returnState(fixture.deviceDb), deadline = Math.floor(Date.now()/1000)+10;
+  const read = fixture.inventory.authority.read.bind(fixture.inventory.authority), transport = fixture.authority.fetchImpl;
+  fixture.inventory.authority.read = async (...args) => ({ ...await read(...args), validUntil: deadline });
+  fixture.authority.fetchImpl = async (...args) => { const response = await transport(...args), value = await response.json(); value.inventory.validUntil = deadline; return Response.json(value); };
+  let checked = false;
+  afterControlCheckpoint(fixture, async client => { checked = true; await client.query('SELECT pg_sleep($1)', [Math.max(0, (deadline*1000-Date.now()+100)/1000)]); });
+  await changeReturn(fixture, kind, prepared, 503); assert.equal(checked, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+test('device OU returns reject unbound or substituted original resources at the SQL admission boundary', async () => {
+ await scopedReturns(async fixture => {
+  const body = fixture.requestBody(['inside']);
+  const source = await fixture.returns.initial(fixture.delegate.user, bearer, fixture.workflowId, fixture.target.id);
+  const bound = await fixture.deviceDb.transaction(client => fixture.returns.bind(client, source, fixture.delegate.user, bearer, fixture.assigned.inside.id, fixture.assigned.inside.revision));
+  const before = await returnState(fixture.deviceDb);
+  for (const alter of [value => value.inventory.scope.resource = null, value => value.inventory.scope.resource.deviceId = randomUUID(), value => value.inventory.scope.resource.deviceRevision = '99', value => value.inventory.scope.resource.revision = '99', value => value.inventory.scope.resource.ou.generation = '99']) {
+   const changed = structuredClone(bound); alter(changed);
+   const proof = { id: randomUUID(), action: 'requested', requestId: body.items[0].requestId, correlationId: randomUUID(), source: changed, item: body.items[0], reason, eligibilityRevision: body.eligibilityRevision };
+   await assert.rejects(fixture.deviceDb.transaction(client => client.query('SELECT device_returns_change($1::jsonb)', [JSON.stringify(proof)])), { code: 'P0412' });
+   assert.deepEqual(await returnState(fixture.deviceDb), before);
+  }
+ });
+});
+for (const fault of ['change','commit','source','actor','manifest guard']) test(`device OU returns refuse a replaced ${fault} receiver`, async () => {
+ await scopedReturns(async fixture => {
+  if (fault === 'manifest guard') await fixture.deviceDb.query('ALTER TABLE device_return_scope_manifest DISABLE TRIGGER device_return_scope_manifest_guard');
+  else {
+   const name = 'device_returns_'+fault;
+   const signature = fault === 'change' ? 'proof jsonb' : fault === 'source' ? 'source jsonb,offboarding boolean,live boolean DEFAULT true' : fault === 'actor' ? 'source jsonb' : '';
+   const type = fault === 'change' ? 'uuid' : fault === 'source' ? 'void' : fault === 'actor' ? 'jsonb' : 'trigger';
+   const result = type === 'trigger' ? 'RETURN NEW;' : type === 'void' ? 'RETURN;' : 'RETURN NULL;';
+   await fixture.deviceDb.query(`CREATE OR REPLACE FUNCTION ${name}(${signature}) RETURNS ${type} LANGUAGE plpgsql AS $$ BEGIN ${result} END; $$`);
+  }
+  await assert.rejects(fixture.returns.capabilities(fixture.delegate.user, bearer), { status: 503 });
+ });
+});
+for (const kind of ['requested','returned']) test(`device OU returns roll back ${kind} when a required pending receipt is suppressed`, async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, kind), before = await returnState(fixture.deviceDb);
+  const table = kind === 'requested' ? 'device_return_outbox' : 'device_inventory_outbox';
+  await fixture.deviceDb.query('CREATE FUNCTION suppress_scoped_return_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END; $$');
+  await fixture.deviceDb.query('CREATE TRIGGER aaa_suppress_scoped_return_receipt BEFORE INSERT ON '+table+' FOR EACH ROW EXECUTE FUNCTION suppress_scoped_return_receipt()');
+  await changeReturn(fixture, kind, prepared, [409,503]); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+test('device OU returns retain independent tenant duties without requiring an unrelated OU association receiver', async () => {
+ await scopedReturns(async fixture => {
+  await assign(await createRole({ name: 'Independent tenant handback', permissions: ['devices.inventory.read','devices.inventory.assign'] }), fixture.delegate.id);
+  await assign(await createRole({ name: 'Unrelated limited stock duty', permissions: ['devices.inventory.read','devices.inventory.create'] }), fixture.delegate.id, { scopeType: 'device-ou', ouId: fixture.root.id });
+  await fixture.deviceDb.query('ALTER TABLE device_ou_assignments DISABLE TRIGGER device_ou_guard');
+  const preview = await fixture.returns.offboardingList(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer);
+  assert.equal(preview.schemaVersion, 2); assert.equal(preview.coverage, 'tenant'); assert.equal(preview.total, 4);
+  const result = await fixture.returns.request(fixture.target.id, fixture.requestBody(['hidden','unassigned']), fixture.delegate.user, bearer, randomUUID());
+  assert.equal(result.coverage, 'tenant'); assert.ok(result.results.every(row => row.status === 'requested'));
+  await fixture.deviceDb.query('ALTER TABLE device_ou_assignments ENABLE TRIGGER device_ou_guard');
+ });
+});
+test('device OU returns preserve original scoped receipts through complete forward replay and reject a partial old receiver', async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, 'cancelled'); await changeReturn(fixture, 'cancelled', prepared);
+  const before = await returnState(fixture.deviceDb), migrations = path.resolve(__dirname, '../../../device-service/migrations');
+  await fixture.deviceDb.query(fs.readFileSync(path.join(migrations, '006_device_returns.sql'), 'utf8'));
+  await assert.rejects(fixture.returns.capabilities(fixture.delegate.user, bearer), { status: 503 });
+  for (const file of fs.readdirSync(migrations).filter(file => file.endsWith('.sql')).sort()) await fixture.deviceDb.query(fs.readFileSync(path.join(migrations, file), 'utf8'));
+  assert.deepEqual(await returnState(fixture.deviceDb), before);
+  assert.equal((await fixture.returns.history(prepared.task.id, {}, fixture.delegate.user, bearer)).events.length, 2);
+  assert.equal((await fixture.returns.offboardingCapabilities(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer)).deviceOffboardingReturnsProtocol, 2);
+ });
+});
+for (const mode of ['preview','history']) test(`device OU returns withhold a mixed-duty ${mode} after the final local assignment changes`, async () => {
+ await scopedReturns(async fixture => {
+  await assign(await createRole({ name: 'Independent tenant return reader', permissions: ['devices.inventory.read'] }), fixture.delegate.id);
+  if (mode === 'history') await prepareReturn(fixture, 'cancelled');
+  const checkpoint = fixture.returns.checkpoint.bind(fixture.returns); let moved = false;
+  fixture.returns.checkpoint = async (...args) => {
+   await checkpoint(...args);
+   if (!moved) { await fixture.setUnit(fixture.assigned.inside, fixture.outside); moved = true; }
+  };
+  await assert.rejects(mode === 'preview'
+   ? fixture.returns.offboardingList(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer)
+   : fixture.returns.offboardingHistory(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer), { status: 412 });
+  assert.equal(moved, true);
+ });
+});
+test('device OU returns withhold idempotent recovery after a late scope move without adding a return event', async () => {
+ await scopedReturns(async fixture => {
+  const body = fixture.requestBody(['inside']); await fixture.returns.request(fixture.target.id, body, fixture.delegate.user, bearer, randomUUID());
+  const before = (await fixture.deviceDb.query('SELECT count(*) AS count FROM device_return_events')).rows[0].count;
+  afterControlCheckpoint(fixture, client => moveControlUnit(fixture, client, fixture.outside));
+  const result = await fixture.returns.request(fixture.target.id, body, fixture.delegate.user, bearer, randomUUID());
+  assert.equal(result.results[0].status, 'unconfirmed'); assert.equal(result.results[0].code, 412);
+  assert.equal((await fixture.deviceDb.query('SELECT count(*) AS count FROM device_return_events')).rows[0].count, before);
+ });
+});
+test('device OU returns reject replacement of an original scoped receipt after its row guard ran', async () => {
+ await scopedReturns(async fixture => {
+  const prepared = await prepareReturn(fixture, 'requested'), before = await returnState(fixture.deviceDb); let replaced = false;
+  await fixture.deviceDb.query(`CREATE FUNCTION poison_return_source() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.proof=jsonb_set(NEW.proof,'{source,inventory,scope,resource,deviceRevision}','"99"'::jsonb);RETURN NEW;END; $$;CREATE TRIGGER z_poison_return_source BEFORE INSERT ON device_return_events FOR EACH ROW EXECUTE FUNCTION poison_return_source()`);
+  afterControlCheckpoint(fixture, async client => {
+   const row = (await client.query("SELECT proof#>>'{source,inventory,scope,resource,deviceRevision}' AS revision FROM device_return_events WHERE transaction_id=txid_current()")).rows[0];
+   assert.equal(row.revision, '99'); replaced = true;
+  });
+  await changeReturn(fixture, 'requested', prepared, 412); assert.equal(replaced, true); assert.deepEqual(await returnState(fixture.deviceDb), before);
+ });
+});
+test('device OU returns refuse protocol two capabilities against an actual previous SQL receiver', async () => {
+ await scopedReturns(async fixture => {
+  const directory = path.resolve(__dirname, '../../../device-service/migrations');
+  for (const file of ['006_device_returns.sql','012_delegated_device_returns.sql','015_device_scope_controls.sql']) await fixture.deviceDb.query(fs.readFileSync(path.join(directory, file), 'utf8'));
+  await fixture.deviceDb.query('DROP FUNCTION device_returns_receiving(integer)');
+  await fixture.deviceDb.query('SELECT device_returns_receiving()');
+  await assert.rejects(fixture.returns.capabilities(fixture.delegate.user, bearer), { status: 503 });
+  await assert.rejects(fixture.returns.offboardingCapabilities(fixture.target.id, { workflowId: fixture.workflowId }, fixture.delegate.user, bearer), { status: 503 });
+ });
+});
 function scopedAuthority(revalidate=options.revalidate){return new(require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,{...options,revalidate});}
 for (const mode of ['direct', 'PIM']) {
  test(`device OU offboarding source retains an actual ${mode} grant and negative parent across the private HTTP boundary`, async () => {
@@ -848,7 +1119,7 @@ function afterControlCheckpoint(fixture,check) {
   if(settings.beforeCommit)await settings.beforeCommit(client);
   if(!settings.readOnly)await check(client);
  }})};
- fixture.agents.database=database;fixture.sync.database=database;
+ fixture.agents.database=database;fixture.sync.database=database;if(fixture.returns)fixture.returns.database=database;
 }
 async function moveControlUnit(fixture,client,destination) {
  const bound={...fixture.deviceDb,transaction:async(operation,settings={})=>{const result=await operation(client);if(settings.beforeCommit)await settings.beforeCommit(client);return result;}};
