@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T13:42:24.150255+00:00",
+  "checkedAt": "2026-11-15T14:00:13.903557+00:00",
   "baseCommit": "09bae71596767c31fc0c3a9dd11cabbcad00a11d",
-  "status": "original-browser-registration-case-native-verified-linux-pending",
+  "status": "original-browser-registration-case-verified-natively-in-main-and-device-draft-and-three-linux-runs",
   "productionTouched": false,
   "productionCodeChanged": false,
   "failure": {
@@ -48,13 +48,67 @@
       "browser": "Actual isolated headless Google Chrome on macOS; Playwright uses the installed executable."
     },
     "nodeSyntax": "pass",
-    "diffCheck": "pass"
+    "diffCheck": "pass",
+    "mergedDeviceDraft": {
+      "sourceCommit": "94cfb58",
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59,
+      "cancelled": 0,
+      "caseMilliseconds": 256145.19375,
+      "totalMilliseconds": 291458.389042,
+      "includesOriginal42AdditionalOuUiAssertionLines": true,
+      "defaultScopedMode": false,
+      "notSignedScopedAcceptance": true
+    },
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43720908507",
+      "headCommit": "ae3a96c025b8c932a50d12b88650e31221006414",
+      "sourceCommit": "28b351cdf96e1aea112b4d437edab46e4eeae316",
+      "treeDifference": "Only .github/workflows/ci.yml: manual diagnostic workflow; product and test sources unchanged.",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 132832473179,
+          "tests": 60,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 59,
+          "cancelled": 0,
+          "caseMilliseconds": 368027.204827,
+          "totalMilliseconds": 409177.918292,
+          "exceedsFormer360SecondHarnessBudget": true
+        },
+        {
+          "id": 132832473432,
+          "tests": 60,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 59,
+          "cancelled": 0,
+          "caseMilliseconds": 289667.159942,
+          "totalMilliseconds": 320634.012374
+        },
+        {
+          "id": 132832473482,
+          "tests": 60,
+          "pass": 1,
+          "fail": 0,
+          "skipped": 59,
+          "cancelled": 0,
+          "caseMilliseconds": 325518.548614,
+          "totalMilliseconds": 366433.608211
+        }
+      ],
+      "realIndependentOwnerLoginMarkerPresentInEveryJob": true
+    }
   },
   "limits": [
-    "Three Linux repetitions and the complete newest-source CI remain pending.",
+    "Complete newest-source CI remains pending; the three exact-case Linux runs do not replace the full browser/cross-service gates.",
     "The original CI did not log auth_time or a finer rejection reason; exact retrospective causality is not claimed.",
     "This exact case is not the complete 60-case browser suite or the full cross-service CI.",
-    "The device-OU draft adds separate UI assertions; its merged browser variant still needs verification.",
+    "The merged device-OU draft tenant-wide browser regression passed with its extra UI assertions; actual signed scoped OAuth/browser acceptance remains open.",
     "No personal production login, external provider acceptance or deployment was performed.",
     "The full original BR/WF objective remains open."
   ],
