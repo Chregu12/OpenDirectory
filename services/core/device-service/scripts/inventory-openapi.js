@@ -65,18 +65,6 @@ function deviceInventoryOpenApi(){
   const contact=exact({hostname:{type:'string',minLength:1,maxLength:255},platform:{enum:['macos','windows','linux']},architecture:{type:'string',minLength:1,maxLength:40},osVersion:{type:'string',maxLength:120},agentVersion:{type:'string',minLength:1,maxLength:40}});
   const heartbeat=exact({deviceId:identifier,report:contact,inventory:reference('AgentInventoryFacts')});heartbeat.required=['deviceId','report'];
   paths['/api/device-agent/heartbeat']={post:{operationId:'receiveDeviceAgentHeartbeat',summary:'Receive an actual credential-bound agent contact and optional hardware report',description:'Only the currently registered device credential can report for that exact device. Human JWTs, tenant overrides, caller timestamps, unknown fields and invalid capacities are rejected. inventory is optional for older agents. Storage, source receipt and heartbeat update commit atomically through the device row lock and physical expiry guards. No inventory, assignment or compliance revision is changed.',security:[{deviceCredential:[]}],requestBody:{required:true,...json(heartbeat)},responses:{200:response(exact({schemaVersion:{const:1},agentProtocol:{const:1},deviceId:identifier,receivedAt:timestamp}),'Actual server-owned contact time; credentials are never returned on heartbeat'),...errors}}};
-  const scope = require('./device-scope-openapi');
-  Object.assign(schemas, scope.schemas(schemas.InventoryAuthoritySource));
-  for (const operation of Object.values(paths['/api/identity/device-inventory'])) {
-    operation.parameters = [structuredClone(scope.header)]; operation.description += ' ' + scope.description;
-    const response = operation.responses[200].content['application/json'];
-    const scoped = reference('InventoryScopedAuthoritySource');
-    response.schema = {oneOf:[response.schema, operation.operationId === 'readOriginalInventoryAuthority' ? {allOf:[scoped,{properties:{target:{type:'null'}}}]} : scoped]};
-  }
-  paths['/api/identity/device-inventory'].post.requestBody.content['application/json'].schema = {oneOf:[
-    paths['/api/identity/device-inventory'].post.requestBody.content['application/json'].schema,
-    {type:'object',additionalProperties:false,required:['userId','device'],properties:{userId:{oneOf:[identifier,{type:'null'}]},device:{oneOf:[reference('DeviceScopeResource'),{type:'null'}]}},description:'Requires the explicit scope protocol header. The resource is echoed for independent verification by Device, not verified against a Device database by Identity.'}
-  ]};
   return{openapi:'3.1.0',info:{title:'OpenDirectory Device Inventory API',version:'1.1.0'},paths,components:{schemas,securitySchemes:{deviceCredential:{type:'http',scheme:'bearer',bearerFormat:'OpenDirectory device credential',description:'Exact currently registered opaque odad_ device credential; never a human or workload token.'}}}};
 }
 if(require.main===module)process.stdout.write(JSON.stringify(deviceInventoryOpenApi(),null,2)+'\n');

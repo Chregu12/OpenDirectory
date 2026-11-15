@@ -1,0 +1,79 @@
+{
+  "checkedAt": "2026-11-15T11:01:11.772437+00:00",
+  "baseCommit": "e39fdde83947e17306a698559c5d959867a1580b",
+  "status": "schedule-version-conflict-guidance-and-durable-browser-assertions-locally-verified-linux-pending",
+  "productionTouched": false,
+  "productionSourceChanged": "Frontend 412 error guidance only; backend authority, version checks and worker behavior unchanged.",
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43696507132",
+    "job": 132758120513,
+    "case": "real roleless Owner configures dynamic and nested groups in the UI and reconciles actual membership sources, scheduled app work and history",
+    "line": 3166,
+    "caseMilliseconds": 130319.279819,
+    "error": "30-second wait for the schedule-stop success text",
+    "groupPass": 3,
+    "groupFail": 1,
+    "groupSkipped": 56,
+    "groupMilliseconds": 282306.882233
+  },
+  "evidence": {
+    "workerAdvancesScheduleRevisionOnDispatch": true,
+    "staleOriginalOwnerStopReproduces412WithoutAnyScheduleOrEventChange": true,
+    "freshVersionStopsWithRetainedOriginalOwnerReceipt": true,
+    "historicalFailureAttribution": "The failed run did not capture the disable HTTP response. Worker/snapshot concurrency and the repeated-notification loop are confirmed weaknesses of that test; the exact historic response status remains unobserved.",
+    "independentFullMain637": "https://github.com/Chregu12/OpenDirectory/actions/runs/43697861392"
+  },
+  "correction": {
+    "browserTest": "Finish the actual worker gracefully, explicitly reload current schedules, check each outgoing captured If-Match, require HTTP 200 with a matching stopped receipt, wait for the correct remaining UI row count and verify both retained database events.",
+    "existingPatternReused": "The neighboring actual license change-driven browser case already finishes its worker before capturing the explicit UI stop version.",
+    "frontend": "Reuse existing German 412 guidance. No success on a conflict, no automatic write retry; reload and a new explicit click are required.",
+    "originalAuthorityVersionAndTimeoutChecksUnchanged": true
+  },
+  "local": {
+    "node": "20.20.2",
+    "postgres": "16.15 actual disposable database",
+    "completeAutomationNative": {
+      "tests": 22,
+      "pass": 22,
+      "fail": 0,
+      "skipped": 0,
+      "milliseconds": 128103.214209
+    },
+    "frontendComponentAndClient": {
+      "suites": 2,
+      "pass": 21,
+      "fail": 0,
+      "seconds": 4.346
+    },
+    "actualCurrentBrowser": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59,
+      "cancelled": 0,
+      "caseMilliseconds": 94618.635833,
+      "totalMilliseconds": 128800.167625,
+      "browser": "Actual installed Google Chrome 157.0.8103.78",
+      "services": "Actual confidential Next browser, OAuth, Identity, credential/Redis and app worker services; real group-rule and nested membership effects.",
+      "selectedCase": "^real roleless Owner configures dynamic and nested groups"
+    },
+    "earlierBrowserBeforeGuidance": {
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59,
+      "caseMilliseconds": 110189.539209,
+      "totalMilliseconds": 152119.98725
+    }
+  },
+  "limits": [
+    "The complete four-case automation browser group and full current source CI remain pending on Linux.",
+    "No personal production login, external provider acceptance or deployment was performed.",
+    "The full BR/WF objective and separate scoped Device draft remain open."
+  ],
+  "sourceSha256": {
+    "frontend/web-app/src/components/views/CompanyAutomationView.tsx": "e8c5c00be18f863495367bfb7f8501d75408942e902b18932a308a231d4e405e",
+    "frontend/web-app/src/__tests__/views/CompanyAutomationView.test.tsx": "0dcedc5693a4538065df30ba543ec127964cc54fa454400466c60a3dc8f7be98",
+    "services/core/identity-service/src/__tests__/companyAutomation.postgres.cjs": "8ef808f2d5e5565efc01125470727878b0983b73b5b682a60696f8a5ff4b45d8",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "8dbf6ee141b85c628bdc55e2477b9ac2ffd092fbf8af3f58ed988b46da0bd638"
+  }
+}

@@ -58,8 +58,8 @@ async function tenantGrants(client,user,available) {
   return held.map(permission=>{
     const sources=captured.grants.filter(grant=>grant.permission===permission&&grant.source.scopeType==='tenant'&&grant.source.ouId===null);
     sources.sort((a,b)=>deadline(user,{grants:[b]})-deadline(user,{grants:[a]})||a.source.id.localeCompare(b.source.id)||(a.source.activationId||'').localeCompare(b.source.activationId||''));
-    return sources[0] || null;
-  }).filter(Boolean);
+    if(!sources.length)fail(403,'company_role_tenant_scope_required');return sources[0];
+  });
 }
 async function capture(client, user, required, resource = null) {
   await receiving(client); const tenant = await authorityTenant(client, { ...user.identity_authorization, issuer: user.iss, subject: user.sub });

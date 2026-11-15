@@ -247,3 +247,14 @@ test('an unavailable change observation does not acknowledge its checkpoint or p
  const first=await automation.run({grantId:permission.id},app,appBearer);assert.equal(first.job.id,queued.job.id);assert.equal(first.job.status,'succeeded');
  await assert.rejects(automation.run({grantId:permission.id},app,appBearer),{status:503});assert.equal((await pool.query('SELECT source_checkpoint FROM identity_automation_schedules WHERE id=$1',[plan.id])).rows[0].source_checkpoint,null);
 });
+
+test('a real worker advances the schedule version and stale owner stop cannot overwrite its retained progress',async()=>{
+ const permission=await grant(),plan=(await automation.enqueue({id:randomUUID(),grantId:permission.id,action:permission.actions[0],format:'json',intervalSeconds:60},app,appBearer,true)).schedule;
+ const completed=await automation.run({grantId:permission.id},app,appBearer);assert.equal(completed.job.status,'succeeded');
+ const snapshot=async()=>({schedule:(await pool.query('SELECT to_jsonb(row)::text AS value FROM identity_automation_schedules row WHERE id=$1',[plan.id])).rows,events:(await pool.query("SELECT to_jsonb(row)::text AS value FROM identity_automation_events row WHERE entity='schedule' AND entity_id=$1 ORDER BY revision",[plan.id])).rows});
+ const before=await snapshot(),current=(await automation.list({grantId:permission.id},owner.user,bearer,true)).schedules.find(row=>row.id===plan.id);assert.ok(BigInt(current.revision)>BigInt(plan.revision));
+ await assert.rejects(automation.disableSchedule(plan.id,'"company-automation-schedule-'+plan.id+'-'+plan.revision+'"',owner.user,bearer),{status:412});assert.deepEqual(await snapshot(),before);
+ const stopped=await automation.disableSchedule(plan.id,'"company-automation-schedule-'+current.id+'-'+current.revision+'"',owner.user,bearer);assert.equal(stopped.schedule.enabled,false);assert.equal(BigInt(stopped.schedule.revision),BigInt(current.revision)+1n);
+ const event=(await pool.query("SELECT actor,snapshot FROM identity_automation_events WHERE entity='schedule' AND entity_id=$1 AND revision=$2",[plan.id,stopped.schedule.revision])).rows[0];assert.equal(event.actor.kind,'owner');assert.equal(event.actor.source.actorUserId,owner.receipt.administratorId);assert.equal(event.snapshot.enabled,false);assert.equal(event.snapshot.next_run_at,JSON.parse(before.schedule[0].value).next_run_at);
+ assert.equal((await pool.query('SELECT status FROM identity_automation_jobs WHERE id=$1',[completed.job.id])).rows[0].status,'succeeded');
+});

@@ -75,3 +75,16 @@ test('owner explicitly enables a checked change subscription without a timer or 
  render(<CompanyAutomationView/>);await ready();fireEvent.change(screen.getByLabelText('Automationsaktion'),{target:{value:'directory.groups.reconcile'}});expect(screen.getByRole('button',{name:'Bei Quellenänderungen abgleichen'})).toBeDisabled();
  fireEvent.change(screen.getByLabelText('Gruppenregel-Gruppen-ID'),{target:{value:id(8)}});fireEvent.click(screen.getByRole('button',{name:'Gruppenregel prüfen'}));await screen.findByText(/Gespeicherte Regelversion 3/);expect(companyAutomation.queue).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Bei Quellenänderungen abgleichen'}));await waitFor(()=>expect(companyAutomation.queue).toHaveBeenCalledWith(grouped,'directory.groups.reconcile','json',principal,undefined,id(8),true));
 });
+
+test('a changed schedule shows reload guidance and requires a new explicit stop with its refreshed version',async()=>{
+ const schedule={id:id(12),grantId:grant.id,tenantId:principal.tenantId,action:'directory.users.export',intervalSeconds:60,enabled:true,nextRunAt:'2099-10-22T10:00:00.000Z',revision:'1'};
+ (companyAutomation.schedules as jest.Mock).mockResolvedValue({schedules:[schedule],total:1});
+ (companyAutomation.disable as jest.Mock).mockRejectedValueOnce({response:{status:412}});
+ render(<CompanyAutomationView/>);await ready();fireEvent.click(await screen.findByRole('button',{name:'Zeitplan stoppen'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Erfasster Stand wurde geändert. Aktuellen Stand ausdrücklich neu laden und erneut prüfen.');
+ expect(screen.queryByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.')).not.toBeInTheDocument();expect(companyAutomation.disable).toHaveBeenCalledTimes(1);expect(screen.getByRole('button',{name:'Zeitplan stoppen'})).toBeDisabled();
+ const current={...schedule,revision:'2'};(companyAutomation.schedules as jest.Mock).mockResolvedValue({schedules:[current],total:1});
+ fireEvent.click(screen.getByRole('button',{name:'Automationen neu laden'}));await waitFor(()=>expect(screen.getByRole('button',{name:'Zeitplan stoppen'})).toBeEnabled());expect(companyAutomation.disable).toHaveBeenCalledTimes(1);
+ (companyAutomation.disable as jest.Mock).mockImplementationOnce(async()=>{(companyAutomation.schedules as jest.Mock).mockResolvedValue({schedules:[],total:0});return{...current,enabled:false,revision:'3'};});
+ fireEvent.click(screen.getByRole('button',{name:'Zeitplan stoppen'}));await screen.findByText('Zeitplan gestoppt; bereits erstellte Jobs separat beachten.');expect(companyAutomation.disable).toHaveBeenLastCalledWith(current,principal);expect(companyAutomation.disable).toHaveBeenCalledTimes(2);
+});
