@@ -160,9 +160,13 @@ jobs:
       - name: Test actual inventory, returns, agents, compliance and sync receivers
         run: npm run test:inventory:postgres
 
-  license-integration:
-    name: License and Identity PostgreSQL / Browser Integration
+  integration-suites:
+    name: PostgreSQL / Browser Integration (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [licenses, identity, oauth-browser]
     services:
       postgres:
         image: postgres:16
@@ -195,7 +199,9 @@ jobs:
       - name: Install canonical license adapter dependencies
         working-directory: services/core/license-management
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run test:licenses:integration
+      - name: Test license integration
+        if: matrix.suite == 'licenses'
+        run: npm run test:licenses:integration
       - name: Install identity integration dependencies
         working-directory: services/core/identity-service
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
@@ -203,6 +209,7 @@ jobs:
         working-directory: services/core/device-service
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test authoritative group snapshots
+        if: matrix.suite == 'identity'
         working-directory: services/core/identity-service
         run: npm run test:groups:integration
       - name: Install issuer integration dependencies
@@ -212,25 +219,41 @@ jobs:
         working-directory: services/platform/quick-actions
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test durable cross-service token, PIM and delegated orchestration revocation
+        if: matrix.suite == 'oauth-browser'
         working-directory: services/core/oauth-provider
         run: npm run test:revocations:integration
       - name: Install browser mediation dependencies
+        if: matrix.suite == 'oauth-browser'
         working-directory: .
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install integration-test Chromium
+        if: matrix.suite == 'oauth-browser'
         working-directory: frontend/web-app
         run: npx playwright install --with-deps chromium
       - name: Test browser mediation security boundaries
+        if: matrix.suite == 'oauth-browser'
         working-directory: frontend/web-app
         run: npm run test:browser-auth
       - name: Install actual browser credential receiver dependencies
+        if: matrix.suite == 'oauth-browser'
         working-directory: services/core/authentication-service
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install native Redis for actual browser credentials
+        if: matrix.suite == 'oauth-browser'
         run: sudo apt-get update && sudo apt-get install --yes redis-server
       - name: Test actual confidential browser login and persistent logout
+        if: matrix.suite == 'oauth-browser'
         working-directory: services/core/oauth-provider
         run: npm run test:browser:integration
+
+  license-integration:
+    name: License and Identity PostgreSQL / Browser Integration
+    runs-on: ubuntu-latest
+    needs: integration-suites
+    if: ${{ always() }}
+    steps:
+      - name: Require every integration suite
+        run: test "${{ needs.integration-suites.result }}" = "success"
 
   service-tests:
     name: Service Tests
