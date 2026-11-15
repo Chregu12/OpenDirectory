@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-15T01:29:43.654178+00:00",
+  "checkedAt": "2026-11-15T02:48:05.471418+00:00",
   "sourceBaseCommit": "5c8a6320829ab2eaa7ea4656f8b3e2bd27b8e5d2",
   "status": "complete-local-followup-suites-passed-final-linux-ci-and-rollout-pending",
   "runtime": {
@@ -93,11 +93,12 @@
     "frontend/web-app/src/components/views/CompanyPimPanel.tsx": "acf212879670174488acb5fe62946cad7857b3ab56dee51647931d53d8ebe114",
     "frontend/web-app/src/components/views/CompanyPimRequestPanel.tsx": "097036de5686840943836ef7b0f12ffbd92cf5af42caa3f3be2fda4a001519ce",
     "services/core/oauth-provider/scripts/test-browser.js": "23aa1b4e9bf73fcaed4f1f13e80fabf45f5178e84e260d6c6956aa97957e0b7e",
-    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "2719e9f6566f28355cd6aebffa5b725b16b6992321e84c244d127f0f6e80b8c0",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "a6fbbda30798dcda46b1b2c38ad9cf5f9070a9ded0ab8506997ebcf60e509bda",
     "services/core/identity-service/scripts/company-pim-approval-openapi.js": "02d1a5a14c8cf1c3d5009ca5f477c24eb198d6fd410188fb5b8ea87149d612ef",
     "scripts/lib/reset-directory-fixture.cjs": "f77964158379753f0d15fdaf7f43d8a60e00926d24aee97bb0a7b83951494bb4",
     "services/core/identity-service/src/__tests__/fixtureReset.postgres.cjs": "eb257647dab86025b689980952b312782fde407173009f38498198ca88a7c9bc",
-    "services/core/policy-service/src/licenses/__tests__/groups.integration.cjs": "4a1ce33d541c1a1b5319e6f36f41065e13b3bc55eb0387afaab5d0d1480ce1ed"
+    "services/core/policy-service/src/licenses/__tests__/groups.integration.cjs": "4a1ce33d541c1a1b5319e6f36f41065e13b3bc55eb0387afaab5d0d1480ce1ed",
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "47d4b50e219dd14388507dbe8f9e1b5e66a425577042120f2459cd54fe5cee93"
   },
   "limits": [
     "This source branch has not yet passed complete GitHub CI or been deployed.",
@@ -132,5 +133,31 @@
       "both actual browser cases run together on the merged portable-path source"
     ],
     "completeLinuxFollowup": "pending updated PR CI"
+  },
+  "ciPermissionListFollowup": {
+    "failedRunId": 43663348061,
+    "failedJobId": 132657297752,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43663348061",
+    "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+    "licensePassed": 557,
+    "identityPassed": 815,
+    "oauthFirstGroupPassed": 297,
+    "oauthFirstGroupSkipped": 9,
+    "registrationGroupFailed": 1,
+    "cause": "Old exact Owner access DTO expectations omitted company.pim.requests.review. Native and browser assertions now include exactly that additional capability.",
+    "localNativeRegistrationGateway": {
+      "tests": 191,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 190
+    },
+    "localBrowserRegistrationWithRecoverySynchronization": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59
+    },
+    "completeLinuxFollowup": "pending updated PR CI",
+    "runtimeApplicationSourcesUnchanged": true
   }
 }

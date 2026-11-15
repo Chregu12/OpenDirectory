@@ -1,0 +1,94 @@
+{
+  "checkedAt": "2026-11-15T02:34:23.070557+00:00",
+  "sourceBaseCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+  "status": "local-cross-platform-runner-regressions-passed-full-ci-pending",
+  "originalReproduction": {
+    "node": "20.20.2",
+    "exitCode": 0,
+    "actualPassingCases": 0,
+    "skippedCases": 1,
+    "cause": "A misspelled --test-name-pattern skipped every actual case and Node returned success."
+  },
+  "fix": "Require actual native test:pass events. Ignore suites, skipped/TODO cases and synthetic file passes. Keep the normal TAP reporter. The shared PostgreSQL runner preserves nonzero exits and cleans up its owned cluster.",
+  "regressionTests": {
+    "file": "scripts/lib/__tests__/run-postgres-tests.test.mjs",
+    "node20Passed": 7,
+    "node26Passed": 7,
+    "node20": "20.20.2",
+    "node26": "26.10.0",
+    "cases": [
+      "misspelled filter",
+      "all skipped",
+      "empty suite",
+      "synthetic file pass",
+      "actual pass alongside deliberate skip",
+      "actual failure alongside actual pass",
+      "printed TAP-like output cannot forge native test events"
+    ]
+  },
+  "checks": {
+    "macNode20Root": {
+      "tests": 56,
+      "pass": 56,
+      "fail": 0,
+      "skipped": 0
+    },
+    "linuxNode20Root": {
+      "tests": 56,
+      "pass": 56,
+      "fail": 0,
+      "skipped": 0
+    },
+    "nativePostgres": {
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0
+    },
+    "nativeEmptySelection": {
+      "tests": 5,
+      "pass": 0,
+      "fail": 0,
+      "skipped": 5
+    }
+  },
+  "nativeEmptySelectionExitCode": 1,
+  "linuxContainer": {
+    "node": "20.20.2",
+    "platform": "linux/arm64",
+    "network": "none; fixture HTTP uses loopback only",
+    "sourceMounts": "read-only scripts and packages",
+    "temporaryStorage": "bounded 64 MiB tmpfs"
+  },
+  "nativePostgreSQL": {
+    "version": "postgres (PostgreSQL) 16.15 (Homebrew)",
+    "sourceTestFile": "services/core/identity-service/src/__tests__/fixtureReset.postgres.cjs",
+    "sourceWorktreeCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+    "clustersCreated": "separate disposable local clusters",
+    "clustersStoppedAndRemoved": true,
+    "tcpOnly": true
+  },
+  "socketReproduction": {
+    "platform": "macOS",
+    "socketPathBytes": 106,
+    "postgresMaximumBytes": 103,
+    "originalStartupSucceeded": false,
+    "fix": "Disable unused Unix sockets; fixture clients already use loopback TCP."
+  },
+  "ciIntegration": "The existing npm run test:automation-client gate includes the new .test.mjs file. Shared Identity, License and OAuth runners automatically use the native reporter.",
+  "sourceSha256": {
+    "scripts/lib/run-postgres-tests.js": "8082e155561ab2c7fcfa79d43db0f0dcda15963b539ccbefb979412598c9aec8",
+    "scripts/lib/nonempty-test-reporter.cjs": "81020fa132e127540736adaa90ff70ce96502094a0d03970cd84c315429c6b49",
+    "scripts/lib/__tests__/run-postgres-tests.test.mjs": "4dcd964d1d0fe243fb56b63a87b159071671bd0c3588ba9e35cf434a5d438f90"
+  },
+  "references": [
+    "https://nodejs.org/api/test.html#custom-reporters",
+    "https://www.postgresql.org/docs/16/app-postgres.html"
+  ],
+  "limits": [
+    "The harness tests use explicit disposable test programs and prove runner behavior, not application authorization.",
+    "The five real PostgreSQL cases validate shared-runner operation, not complete native Identity/OAuth/browser coverage.",
+    "No production application source, users, grants, keys or database data were changed.",
+    "Complete CI for this test-only followup is still pending."
+  ]
+}

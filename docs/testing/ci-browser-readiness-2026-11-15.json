@@ -1,0 +1,56 @@
+{
+  "checkedAt": "2026-11-15T02:48:05.471418+00:00",
+  "sourceBaseCommit": "5c8a6320829ab2eaa7ea4656f8b3e2bd27b8e5d2",
+  "status": "local-browser-recovery-synchronization-passed-complete-linux-ci-pending",
+  "failedCi": {
+    "runId": 43662796359,
+    "jobId": 132655566323,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43662796359",
+    "licensePassed": 557,
+    "identityPassed": 806,
+    "oauthDistinctPassed": 306,
+    "browserMediationPassed": 67,
+    "actualBrowserPassedBeforeFailure": 48,
+    "actualBrowserFailed": 1,
+    "actualBrowserNotReached": 10,
+    "case": "real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery",
+    "failure": "page.waitForResponse timed out waiting for the recovered offboarding workflow GET after a fresh Owner login; the existing test did not wait for the saved-workflow queue before using the form"
+  },
+  "fix": [
+    "Wait for the actual saved-workflow heading after reopening the offboarding panel, following the existing component test pattern.",
+    "Check that the controlled recovery input contains the exact original workflow ID before submitting it.",
+    "Retain the real GET, HTTP 200 and exact original checkpoint assertion."
+  ],
+  "localVerification": {
+    "runtime": "macOS arm64 / Node 20.20.2 / PostgreSQL 16.15 / actual installed Chrome",
+    "applicationSourceBaseCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+    "sourceContext": "PIM worktree with the corresponding explicit new Owner review-capability expectation and identical recovery synchronization patch",
+    "actualBrowser": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59
+    },
+    "nativeRegistrationGateway": {
+      "tests": 191,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 190
+    },
+    "productionNextBuild": true,
+    "actualSqlIdentityOAuthPolicyDeviceAndRedisFixtures": true,
+    "passwordProvider": "Explicit disposable legacy fixture for this company-registration flow; real employee credentials are covered by the separate onboarding case.",
+    "liveGraphDisabled": true,
+    "rootCliRegressionPassed": 56
+  },
+  "sourceSha256": {
+    "mainBrowserTest": "19a6b41fd5d2c3e05e8473fc99d82a499c5fbe1fcbf53b88c93a23d19445e08f",
+    "pimBrowserTest": "a6fbbda30798dcda46b1b2c38ad9cf5f9070a9ded0ab8506997ebcf60e509bda"
+  },
+  "limits": [
+    "The exact Linux cause remains an inferred missing synchronization until the complete patched CI confirms it.",
+    "The local targeted browser flow ran on the PIM worktree; the main branch still needs its complete Linux run.",
+    "No productive application source, database data, users, grants or human MFA were changed.",
+    "Prepared runtime images are unchanged; rollout still requires complete source CI and fresh backups."
+  ]
+}

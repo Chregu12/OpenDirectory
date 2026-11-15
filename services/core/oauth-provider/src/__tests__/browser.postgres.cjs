@@ -1614,7 +1614,7 @@ test('real company registration UI persists one disabled tenant and candidate th
     await reviewFirstFactor(page, 'company-registration-owner'); await login(page, 'company-registration-owner'); await page.goto(origin + '/organization');
     assert.equal(await page.evaluate(() => localStorage.getItem('od_onboarded')), null);
     await page.getByText('Gespeicherte Version 1', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Firmenname *', { exact: true }).inputValue(), 'Actual Pending Browser Company');
-    const ownerSession = await mediated(page); const ownerAccess = await page.request.get(origin + '/api/identity/access', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.deepEqual((await ownerAccess.json()).permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', 'company.roles.read', 'company.roles.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
+    const ownerSession = await mediated(page); const ownerAccess = await page.request.get(origin + '/api/identity/access', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.deepEqual((await ownerAccess.json()).permissions, ['organization.read', 'organization.manage', 'organization.delegations.manage', 'company.roles.read', 'company.roles.manage', ...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS, 'company.pim.requests.review']);
     assert.equal(require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS.length, 14);
     const ownerPeople = await page.request.get(origin + '/api/users', { headers: { Authorization: 'Bearer ' + ownerSession.body.access_token } }); assert.equal(ownerPeople.status(), 200); assert.deepEqual((await ownerPeople.json()).users.map(account => account.id), [receipt.administratorId]);
     await page.getByLabel('Ort *', { exact: true }).fill('Bern'); await page.getByLabel('Begründung der Änderung', { exact: true }).fill('New company owner updates only the own original profile'); await page.getByRole('button', { name: 'Organisationsprofil speichern', exact: true }).click(); await page.getByText('Organisationsprofil gespeichert. Version 2.', { exact: true }).waitFor();
@@ -2371,7 +2371,9 @@ test('real company registration UI persists one disabled tenant and candidate th
     {
     await login(page, 'company-registration-owner'); const returnOwnerToken = (await mediated(page)).body.access_token;
     await page.goto(origin + '/applications'); await offboardingPanel.getByRole('button', { name: 'Mitarbeiter-Offboarding', exact: true }).click();
+    await offboardingPanel.getByRole('heading', { name: 'Gespeicherte Vorgänge', exact: true }).waitFor();
     await offboardingPanel.getByLabel('Bekannte Vorgangs-ID', { exact: true }).fill(offboardingJob.id);
+    assert.equal(await offboardingPanel.getByLabel('Bekannte Vorgangs-ID', { exact: true }).inputValue(), offboardingJob.id);
     const loadingReturnWorkflow = page.waitForResponse(response => new URL(response.url()).pathname === workflowRoute + '/' + offboardingJob.id && response.request().method() === 'GET');
     await offboardingPanel.getByRole('button', { name: 'Arbeitsstand neu laden', exact: true }).click(); const returnWorkflowResponse = await loadingReturnWorkflow; assert.equal(returnWorkflowResponse.status(), 200, await returnWorkflowResponse.text()); assert.equal((await returnWorkflowResponse.json()).workflow.checkpoint.operationId, offboardingJob.checkpoint.operationId);
     const deviceReturnBase = '/api/devices/returns'; const deviceOffboardingRoute = '/api/devices/users/' + employeeIds[0] + '/offboarding-returns';
