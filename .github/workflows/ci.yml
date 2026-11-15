@@ -1,12 +1,12 @@
 # Diagnostic branch only: do not merge this workflow replacement into main.
-name: Device OU hierarchy governance diagnostic
+name: Device OU retirement source diagnostic
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   automation:
-    name: Actual device OU hierarchy governance (${{ matrix.attempt }})
+    name: Actual original OU retirement source (${{ matrix.attempt }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -37,10 +37,10 @@ jobs:
         run: |
           npm install --prefix services/core/identity-service --package-lock=false --ignore-scripts --no-audit --no-fund
           npm ci --prefix services/core/device-service --ignore-scripts --no-audit --no-fund
-      - name: Test actual device OU hierarchy protection
+      - name: Test original retirement source and lock ordering
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
           --test-concurrency=1
-          --test-name-pattern='^device OU governance'
+          --test-name-pattern='^device OU retirement source'
           services/core/identity-service/src/__tests__/companyRoles.postgres.cjs
