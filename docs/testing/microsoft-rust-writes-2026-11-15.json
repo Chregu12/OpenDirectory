@@ -61,7 +61,15 @@
     "nativeRustJobAdded": true,
     "stableIntegrationAggregateRequiresNativeRust": true,
     "fiveOriginalIntegrationCommandsExactlyOnce": true,
-    "completeLinuxRun": "required before merge"
+    "completeLinuxRun": "required on corrected pushed head before merge",
+    "initialCompleteLinuxRun": {
+      "run": 43770792608,
+      "passedJobs": 13,
+      "totalJobs": 15,
+      "conclusion": "failure",
+      "failure": "Browser case55 four-minute total business-flow assertion; integration aggregate consequently failed."
+    },
+    "browserCorrection": "ci-browser-mfa-phases-2026-11-16.json"
   },
   "remaining": [
     "Company-owned pool/user/SKU binding and GUI cloud-assignment flow remain to implement.",
