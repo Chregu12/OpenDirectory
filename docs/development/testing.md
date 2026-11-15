@@ -109,6 +109,22 @@ SQL-login tests set their own random passwords and assert `session_user` before
 checking the original permission denial. They must not pass merely because login
 itself failed.
 
+The dedicated `Device PostgreSQL integration` CI job runs the inventory, returns
+and agent/compliance/sync native suites against the complete current migration
+directory. Fixtures must not pin an older subset of migration files. The BIGINT
+import oracle seeds its explicit disposable fixture with row triggers disabled,
+restores every trigger, and checks the receiver before exercising real commands.
+It does not establish a supported production import path.
+
+This job builds the current Rust agent with Rust 1.95.0 and sets
+`DEVICE_AGENT_BINARY` to that exact build. The native client test therefore must
+execute its actual HTTP enrollment, private credential storage, hardware and
+security reports, compliance/sync result and credential revocation; an absent or
+broken binary fails the job. Without that environment variable a local run
+explicitly skips that single client test. The other native receiver cases still
+run. Human authority in this isolated Device suite uses explicit disposable
+fixtures; original issuer-backed OAuth/MFA and browser checks remain separate.
+
 Legacy fixture cleanup uses `scripts/lib/reset-directory-fixture.cjs` only in
 explicit UUID-named disposable schemas and only while new company-role storage is
 empty. It restores retention triggers transactionally and checks their receiver;
