@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-11-15T18:52:28.640261+00:00",
+  "baseCommit": "ad72beb1d29a6d2b46aa8012ea6f892405d474b4",
+  "failedSourceCi": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43741841143",
+    "job": 132896491399,
+    "conclusion": "failure",
+    "failedStep": "Test actual confidential browser login and persistent logout",
+    "case": "real company registration UI persists one disabled tenant and candidate through actual credentials, issuer proof, BFF and status recovery",
+    "failure": "page.waitForResponse timed out after 30000ms at the offboarding-workflow POST response observer (browser.postgres.cjs:2115).",
+    "passedOAuthCases": 306,
+    "passedBrowserMediationCases": 67,
+    "actualBrowserCasesBeforeStop": {
+      "passed": 48,
+      "failed": 1
+    },
+    "otherSuccessfulJobs": 11,
+    "aggregateCheck": "correctly failed"
+  },
+  "change": {
+    "file": "services/core/oauth-provider/src/__tests__/browser.postgres.cjs",
+    "explicitObservers": [
+      "Direct offboarding creation",
+      "Source-aware Blueprint offboarding creation"
+    ],
+    "previousObservationMilliseconds": 30000,
+    "observationMilliseconds": 65000,
+    "existingUiHttpBudgetMilliseconds": 60000,
+    "uiHttpBudgetChanged": false,
+    "globalBrowserTimeoutChanged": false,
+    "mfaOrSqlBudgetChanged": false,
+    "assertionsChanged": false,
+    "applicationRuntimeChanged": false
+  },
+  "nativeRegression": {
+    "command": "node -e runPostgresTests({files:[\"--test-name-pattern=^real company registration UI persists\",\"services/core/oauth-provider/src/__tests__/browser.postgres.cjs\"],environmentVariable:\"OAUTH_TEST_DATABASE_URL\",label:\"browser-observer\"})",
+    "node": "v26.10.0",
+    "status": "passed",
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "durationMilliseconds": 297287.800375,
+    "browser": "Actual Chrome 157.0.8103.78",
+    "services": "Disposable local PostgreSQL, actual Identity/authentication/OAuth/Policy/device/gateway services and production-built Next.js UI.",
+    "coverage": "The original full registration, credential, owner and direct-offboarding case with all existing HTTP, SQL, bearer, receipt and state assertions; no simplified replacement case."
+  },
+  "limits": [
+    "The historical request completion time in the failed Linux run was not captured; the 30-second observer/60-second request mismatch is proven, but its eventual success is not assumed.",
+    "The source-aware observer has the same request-budget alignment; that second workflow was not part of the selected native registration case. Its full Linux check remains required.",
+    "This does not establish a permanent fix for every earlier 60-second backend timeout.",
+    "Fresh full source CI remains required before the prepared Web rollout.",
+    "No production deployment, database migration, user or privilege was created by this regression check."
+  ]
+}
