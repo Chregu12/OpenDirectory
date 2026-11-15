@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T03:56:00.308103+00:00",
+  "checkedAt": "2026-11-15T04:23:38.473087+00:00",
   "sourceBaseCommit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
-  "status": "local-native-unit-types-and-actual-browser-verified-complete-feature-ci-pending",
+  "status": "local-verification-passed-policy-version-expectation-corrected-full-linux-followup-pending",
   "scope": "Organizational device OU metadata assignment, move, removal and retained audit; no OU/group device authorization scopes.",
   "runtime": {
     "node": "20.20.2",
@@ -60,6 +60,11 @@
       "finalHistoryCancellationFollowup": "passed",
       "completedTargetedRuns": 2,
       "finalRunMilliseconds": 289964.096583
+    },
+    "policyUnit": {
+      "pass": 1471,
+      "fail": 0,
+      "suites": 45
     }
   },
   "visualInspection": {
@@ -124,12 +129,25 @@
     "services/core/identity-service/src/__tests__/identityAccess.test.js": "9006bc4f77cae963403169b36787409aae37809ceb1e47333b631ec9d2ea5ef1",
     "services/core/identity-service/src/index.js": "93cbef5a592a49108bd289e5c2a68bf8d2b6e55469ab33a5e1e88f4a385818e8",
     "services/core/identity-service/src/middleware/identityAccess.js": "589abd0ea5b7ecc4a8bd3447bc47444e4aa6afff325071361ca199166dd27169",
-    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "279ec0ce14bda4f99c21e5873129ff3c6567a370c02d2a78beb7b2d692081276"
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "279ec0ce14bda4f99c21e5873129ff3c6567a370c02d2a78beb7b2d692081276",
+    "services/core/policy-service/src/__tests__/CompanyBlueprintAssignmentOpenApi.test.js": "24767714f6049e90c25b84bc4d0941169064f6f95215d7c8822542e184c34813"
   },
   "limits": [
     "The complete Linux CI for this feature source has not run.",
-    "This feature has not been deployed; production remains Helm revision 85 / application 1.0.50 at the last check.",
+    "This feature has not been deployed; the separately verified production release is Helm revision 86 / application 1.0.53.",
     "OU/group role and PIM device scopes, current OU status/deletion dependencies and distributed immediate revocation remain open.",
     "No live external provider, hardware enrollment, full-platform recovery or WCAG acceptance is established by these tests."
-  ]
+  ],
+  "ciFollowup": {
+    "initialRunId": 43674585621,
+    "failedJobId": 132692100251,
+    "sourceCommit": "e7330395e10cb58525186804d0f9a36117523d32",
+    "job": "Service Tests",
+    "service": "policy-service",
+    "passedBeforeFailure": 1470,
+    "failed": 1,
+    "cause": "One additional global OpenAPI version assertion in the Policy test still expected 1.39.0 after the generated public contract moved to 1.40.0. The exact assertion is now updated; canonical document equality and reference/operation checks remain unchanged.",
+    "verification": "All 1471 Policy unit cases passed with the canonical service dependencies.",
+    "completeLinuxFollowup": "pending next source run"
+  }
 }
