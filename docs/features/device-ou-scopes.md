@@ -32,7 +32,7 @@ Geräte-OU-Schreibgrenzen und Hierarchie-/Löschabhängigkeiten, übergreifende 
 
 Vor einer Freigabe müssen folgende Teile zusammen fertig sein:
 
-- Die privaten ursprünglichen Schreibbelege und physischen SQL-Commit-Prüfungen für Inventarpflege/Zuweisung, Agent-/Sync-Verwaltung und Rückgaben sind ergänzt; ihre vollständige gemeinsame Regression und aktuelle Linux-Abnahme bleiben erforderlich. Tenantweite Neuerfassung und Richtlinienänderung benötigen weiterhin eine entsprechende tenantweite Pflicht.
+- Die privaten ursprünglichen Schreibbelege und physischen SQL-Commit-Prüfungen für Inventarpflege/Zuweisung, Agent-/Sync-Verwaltung und Rückgaben sind ergänzt; ihre vollständige lokale gemeinsame Regression besteht, die komplette aktuelle Linux-/Browserabnahme bleibt erforderlich. Tenantweite Neuerfassung und Richtlinienänderung benötigen weiterhin eine entsprechende tenantweite Pflicht.
 - Unabhängige Begrenzung von Änderungen der Geräte-OU selbst, Schutz gegen Bereichserweiterung durch gewöhnliche OU-Administratoren und überprüfte dienstübergreifende Verschiebungs-/Löschabhängigkeiten.
 - Firmenrollen-/PIM-Oberfläche mit verständlicher Scope-Auswahl, tatsächlichen gerätebezogenen Rechten, Ablauf/Sitzungsverlust und ehrlichen Teilfehlern.
 - Native PostgreSQL-, vollständige Linux-CI- und tatsächliche Browserabläufe sowie geprüfter separater Image-/Migrations-Rollout.
@@ -49,4 +49,4 @@ Der [lokale Agent-/Sync-Schreib-Prüfbericht](../testing/device-ou-scope-control
 
 Der [private Austrittsquellen-Prüfbericht](../testing/device-ou-scope-offboarding-source-2026-11-15.json) ergänzt vier native Fälle für direkte und PIM-Quellen über echtes HTTP und den Entzug ursprünglicher Quellen. Der vollständige Rollen-/PIM-Lauf besteht 124/124 Fälle, daneben bestehen 740 Geräte- und 1’304 Identity-Unitfälle. Die tatsächliche bisherige tenantweite Rückgabe bleibt geprüft. Dieser Nachweis aktiviert keine begrenzten Rückgabe-Schreibwege.
 
-Der [Rückgabe-Schreib-Prüfbericht](../testing/device-ou-scope-returns-2026-11-15.json) hält die neuen Grenzen, die ausdrückliche SQL-Bereitschaftsprüfung und den Stand der vollständigen Regression fest. Die bisherigen nativen 138 Gerätefälle mit echtem Rust-Agenten und 742 Geräte-Unitfälle bestehen auf diesem Stand; der vollständige 160-Fälle-Rollen-/PIM-Lauf ist noch aktiv.
+Der [Rückgabe-Schreib-Prüfbericht](../testing/device-ou-scope-returns-2026-11-15.json) hält die neuen Grenzen, die ausdrückliche SQL-Bereitschaftsprüfung und den Stand der vollständigen Regression fest. Der vollständige lokale 160-Fälle-Rollen-/PIM-Lauf besteht ohne Fehler oder übersprungene Fälle. Daneben bestehen 138 native Gerätefälle mit echtem Rust-Agenten und 742 Geräte-Unitfälle. Drei Linux-Rückgabegruppen bestehen jeweils 37 Fälle; die übrigen 123 Fälle sind in diesen gezielten Gruppen ausdrücklich nicht ausgeführt. Die vollständige aktuelle CI und tatsächliche scoped OAuth-/Browserabnahme bleiben erforderlich.

@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T13:04:55.667321+00:00",
+  "checkedAt": "2026-11-15T13:19:48.048466+00:00",
   "baseCommit": "02270eb2b9eae312a06a606006995d7d2dd5f198",
-  "status": "scoped-return-boundaries-verified-targeted-complete-native-regression-running",
+  "status": "scoped-return-boundaries-verified-in-complete-native-regression-and-three-linux-groups",
   "productionTouched": false,
   "standardScopedModeEnabled": false,
   "canonicalApiVersion": "1.45.0",
@@ -36,9 +36,13 @@
   "verification": {
     "newNativeCases": 36,
     "completeRolesNative": {
-      "expectedTests": 160,
-      "status": "running",
-      "notClaimedPassed": true
+      "tests": 160,
+      "pass": 160,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "milliseconds": 930454.424583,
+      "exitCode": 0
     },
     "currentMarkerCoreSubset": {
       "tests": 160,
@@ -89,7 +93,45 @@
     },
     "canonicalApiMatchesGenerator": true,
     "node": "20.20.2",
-    "postgres": "16.15 actual disposable Identity and Device schemas"
+    "postgres": "16.15 actual disposable Identity and Device schemas",
+    "linuxReturnGroups": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43717368162",
+      "headCommit": "726c6fa39303fbfda14e03e6a7d046e61d2e38ec",
+      "sourceCommit": "ce862c00ea0b59cfd1917d1e2eea3347e7d94ed1",
+      "sourceTreeDifference": "Only .github/workflows/ci.yml: manual diagnostic workflow; no product or test source changes.",
+      "conclusion": "success",
+      "filter": "^(device OU returns|delegated device assignment roles execute real offboarding)",
+      "jobs": [
+        {
+          "id": 132821692023,
+          "tests": 160,
+          "pass": 37,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 123,
+          "milliseconds": 365848.786701
+        },
+        {
+          "id": 132821692186,
+          "tests": 160,
+          "pass": 37,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 123,
+          "milliseconds": 237562.055084
+        },
+        {
+          "id": 132821692201,
+          "tests": 160,
+          "pass": 37,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 123,
+          "milliseconds": 403123.580082
+        }
+      ],
+      "notAFull160CaseLinuxClaim": true
+    }
   },
   "testPreparationCorrections": [
     "Independent tenant read/assign duties correctly suppress redundant scoped read/assign sources into a genuine legacy source. The mixed-source fixture now adds an actual unrelated scoped create duty.",
@@ -97,7 +139,8 @@
     "Obsolete full run89973 was deliberately interrupted after fixture changes, terminal exit1, and is not verification evidence."
   ],
   "limits": [
-    "The complete current-source 160-case native regression is running; complete Linux CI is not yet claimed.",
+    "Complete current-source CI 43717207162 remains pending. The three targeted Linux return groups do not replace its full integration/browser gates.",
+    "An older main CI run 43708905305 failed the independent long company-registration/offboarding browser case with HTTP401 instead of201. The original auth_time/rejection subreason was not logged; separate actual-authentication investigation remains open.",
     "OU writes, hierarchy/delete dependencies, overall device capabilities and role/PIM/device scope UI remain open.",
     "Actual signed scoped OAuth/browser acceptance and verified Harbor/image/migration rollout remain open; defaults scoped:false.",
     "Separate Identity and Device databases cannot supply instantaneous distributed revocation or an atomic cross-database commit.",
