@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T09:34:42.240662+00:00",
+  "checkedAt": "2026-11-15T09:46:19.895400+00:00",
   "baseCommit": "63791c6cf790284689507be0c80f3fc1082bf4dd",
-  "status": "test-only-real-reauthentication-locally-verified-linux-pending",
+  "status": "real-reauthentication-locally-and-twice-on-linux-verified-outer-test-budget-corrected-linux-pending",
   "productionTouched": false,
   "productionSourceChanged": false,
   "failure": {
@@ -26,7 +26,10 @@
     "laterParentsUseExactNewTokenId": true,
     "originalContextAndPendingOutboxChecksRetained": true,
     "originalAccessTokenAndMfa300SecondLimitsUnchanged": true,
-    "allExistingAssignmentAtomicityAndOldWorkflowRecoveryAssertionsRetained": true
+    "allExistingAssignmentAtomicityAndOldWorkflowRecoveryAssertionsRetained": true,
+    "outerTestTimeoutMilliseconds": 660000,
+    "outerTestTimeoutReason": "Two separately authenticated journeys may each consume their existing 300-second authority window, plus 60 seconds of bounded fixture setup. The former 360-second aggregate test budget could cancel valid second-journey work.",
+    "perRequestHttpBudgetsUnchanged": true
   },
   "nativeLocal": {
     "tests": 191,
@@ -37,14 +40,52 @@
     "durationMilliseconds": 243409.714583,
     "node": "20.20.2",
     "postgres": "16.15 disposable native cluster",
-    "selectedTest": "^production gateway applies actual roleless company blueprint license origins"
+    "selectedTest": "^production gateway applies actual roleless company blueprint license origins",
+    "sourceNote": "Passed the identical case body with the earlier, stricter 360000ms aggregate harness budget."
   },
   "limits": [
     "The selected native case is not the full two-case blueprint group or complete source CI.",
-    "Corrected repeated Linux validation is pending.",
+    "Repeated Linux validation with the corrected aggregate harness budget is pending.",
     "No personal production login or external provider acceptance was performed."
   ],
   "sourceSha256": {
-    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "fe6e4738ce0539cd4814392fab9a34582195cfacf7cf59436e0d14db3eff1ce6"
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "3098b2c99b630ebb60be4bded936673d78a18025f8b153158df9376eddb3d4c0"
+  },
+  "firstLinuxValidation": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43700005124",
+    "diagnosticCommit": "9303e748e3fae1ac18d86ddfb2e9738f1d779186",
+    "sameCaseBodyAsMain": "e01788d8ac0b8e70dc48abf4bfd9a1b9cea4fbae",
+    "successfulJobs": [
+      {
+        "id": 132768848940,
+        "pass": 2,
+        "fail": 0,
+        "skipped": 189,
+        "blueprintCaseMilliseconds": 58441.624879,
+        "assignmentCaseMilliseconds": 207530.5024,
+        "totalMilliseconds": 274055.68899
+      },
+      {
+        "id": 132768848665,
+        "pass": 2,
+        "fail": 0,
+        "skipped": 189,
+        "blueprintCaseMilliseconds": 68393.294621,
+        "assignmentCaseMilliseconds": 246219.881581,
+        "totalMilliseconds": 321564.023771
+      }
+    ],
+    "failedJob": {
+      "id": 132768848961,
+      "pass": 1,
+      "fail": 0,
+      "cancelled": 1,
+      "skipped": 189,
+      "failureType": "testTimeoutFailure",
+      "error": "test timed out after 360000ms",
+      "actualCaseMilliseconds": 364902.295356,
+      "totalMilliseconds": 485898.875298,
+      "effect": "Harness teardown aborted an active offboarding request; subsequent connection-reset/authority-unavailable logs are teardown effects."
+    }
   }
 }
