@@ -290,6 +290,12 @@ before(async () => {
 }, { timeout: 180000 });
 
 after(async () => {
+  // A failed test can leave a SQL request open; cleanup must still fail finitely.
+  const cleanupDeadline = setTimeout(() => {
+    console.error('Browser fixture cleanup exceeded 60 seconds; terminating the failed test worker');
+    process.exit(1);
+  }, 60000);
+  cleanupDeadline.unref();
   process.stdout.write('Stopping browser clients before fixture services\n');
   if (browser) await browser.close(); await stop(nextProcess); await stop(quickProcess); await stop(issuerProcess);
   if(actualAuth)await actualAuth.stop();
@@ -298,10 +304,12 @@ after(async () => {
   for (const server of [quickReceiver, credentialServer?.authorityProxy, credentialServer, identityServer,policyServer]) {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
+  process.stdout.write('Closing browser fixture databases\n');
   if (issuerDb) await issuerDb.end();
   if (identityDb) await identityDb.pool.end();
   if (policyDb) await policyDb.shutdown();
   if(authDb)await authDb.end();
+  process.stdout.write('Dropping browser fixture schemas\n');
   await administration.query(`DROP SCHEMA IF EXISTS ${authSchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${policySchema} CASCADE`);
   await administration.query(`DROP SCHEMA IF EXISTS ${identitySchema} CASCADE`);
@@ -309,6 +317,7 @@ after(async () => {
   if (directory) fs.rmSync(directory, { recursive: true, force: true });
   if (buildDirectory) fs.rmSync(buildDirectory, { recursive: true, force: true });
   if (testTsconfig) fs.rmSync(testTsconfig, { force: true });
+  clearTimeout(cleanupDeadline);
 });
 
 async function context({ realQuick = false, onboarded = true } = {}) {
@@ -2832,7 +2841,9 @@ test('real recurring review UI separates configuration, independent MFA voting a
   }
 });
 
-test('real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding', { timeout: 240000 }, async () => {
+// Registration and two first-factor enrollments precede the four-minute
+// fresh-owner business-flow assertion below; include their setup in this budget.
+test('real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding', { timeout: 360000 }, async () => {
   const ownerUsername = 'company-assignment-owner'; const reviewerUsername = 'company-assignment-reviewer';
   const isolated = await context({ onboarded: false }); const page = await isolated.newPage();
   const savedEnvironment = Object.fromEntries(['NODE_ENV', 'CORS_ORIGIN', 'POLICY_SERVICE_URL', 'DEVICE_SERVICE_URL', 'DATABASE_URL'].map(name => [name, process.env[name]]));

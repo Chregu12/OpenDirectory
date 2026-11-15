@@ -166,7 +166,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [licenses, identity, oauth-browser]
+        suite: [licenses, identity, oauth, browser]
     services:
       postgres:
         image: postgres:16
@@ -219,30 +219,30 @@ jobs:
         working-directory: services/platform/quick-actions
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test durable cross-service token, PIM and delegated orchestration revocation
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'oauth'
         working-directory: services/core/oauth-provider
         run: npm run test:revocations:integration
       - name: Install browser mediation dependencies
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         working-directory: .
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install integration-test Chromium
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         working-directory: frontend/web-app
         run: npx playwright install --with-deps chromium
       - name: Test browser mediation security boundaries
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         working-directory: frontend/web-app
         run: npm run test:browser-auth
       - name: Install actual browser credential receiver dependencies
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         working-directory: services/core/authentication-service
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install native Redis for actual browser credentials
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         run: sudo apt-get update && sudo apt-get install --yes redis-server
       - name: Test actual confidential browser login and persistent logout
-        if: matrix.suite == 'oauth-browser'
+        if: matrix.suite == 'browser'
         working-directory: services/core/oauth-provider
         run: npm run test:browser:integration
 

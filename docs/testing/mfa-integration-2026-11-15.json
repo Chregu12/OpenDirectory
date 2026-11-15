@@ -1,0 +1,119 @@
+{
+  "checkedAt": "2026-11-15T19:34:52.902992+00:00",
+  "sourceCommit": "6dcb05b0d5fa0c98782f86b4a9085392494acc6c",
+  "guiSourceCommit": "3079cfd999f73d893cf66feee1f1bcd84da840bf",
+  "integrated": true,
+  "factors": [
+    "Independent OpenDirectory TOTP",
+    "One-use recovery codes with password and a replacement factor"
+  ],
+  "checks": {
+    "oauthUnit": {
+      "tests": 122,
+      "suites": 4,
+      "failed": 0
+    },
+    "credentialProviderUnit": {
+      "tests": 44,
+      "suites": 3,
+      "failed": 0,
+      "authBoundary": "Unit fixtures; not a personal production sign-in."
+    },
+    "frontendUnit": {
+      "tests": 33,
+      "suites": 2,
+      "failed": 0
+    },
+    "actualPostgres": {
+      "tests": 31,
+      "failed": 0,
+      "durationMilliseconds": 11845.17975
+    },
+    "actualBrowser": {
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "skipped": 0,
+      "caseNames": [
+        "real MFA enrollment, independent PIM review, factor-backed activation and revocation use canonical roles and force owner reauthentication",
+        "a signed-out browser recovers only its real MFA factor with password and one backup, receives no session and must sign in normally",
+        "real application MFA policy needs fresh independent management, blocks password access and bootstraps only an assigned factor in a signed-out browser",
+        "real role-wide MFA survives client choice, bootstraps its security operator without a session and independently fences browser refresh",
+        "real browser MFA enrollment rejects a code that crosses its final accepted counter boundary and confirms only a fresh code",
+        "real employee invitation activates the actual password credential and completes first MFA through the confidential browser callback"
+      ],
+      "groupDurationsMilliseconds": [
+        77719.710583,
+        42650.597125,
+        38210.109791
+      ],
+      "services": "Actual disposable SQL, Identity, OAuth, password authentication, gateway and production-built Next.js. The employee case uses the actual password credential service; older owner/password fixtures remain explicit."
+    }
+  },
+  "controls": [
+    "AES-256-GCM secrets bound to canonical user and pending/active purpose.",
+    "Own password reauthentication for setup/disable; a pending setup is not MFA.",
+    "Strict six-digit TOTP, bounded time window, single-use counters and persisted failure locks.",
+    "No database/demo fallback in production; key and audit failures deny success.",
+    "Factor revisions fence old sessions; refresh cannot fabricate a new MFA time.",
+    "Application and role policies enforce independent MFA; PIM requires actual fresh factor evidence.",
+    "Recovery codes are hashed and consumed once; recovery issues no normal session and invalidates the old factor/sessions."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/MfaAuthority.js": "dd317d44dff7f6b374e6c1b0513b6da3b106d565bcff8250e908009c2aab463c",
+    "services/core/oauth-provider/src/MfaRecovery.js": "b4456138d84e35ee63d529e38a2544b41c707ddc7e084aeb5b656316f5967295",
+    "services/core/oauth-provider/src/MfaEnrollment.js": "a2739906dd3c7cf0b02de12b2a6419207879908ac5db42ad165438cf98b742ec",
+    "packages/mfa-authorization-contract.js": "9dbcc3091bbabd7623322b58a5c118b1fce3c42b8765e37a64cae457d1164254",
+    "frontend/web-app/src/lib/verifiedMfa.ts": "6b6028f04acdea8da2b6f2801e6175a3d500bb31222a59b7397edbfa2c9f23d0",
+    "frontend/web-app/src/components/views/MFAView.tsx": "09d036b0055c141d14bc5d7fb9116316d92e0aebe9e3bf37d8905c695eeb181f"
+  },
+  "productionSourceProof": {
+    "checkedAt": "2026-11-15T20:39:54.048015+00:00",
+    "readOnly": true,
+    "files": {
+      "services/core/oauth-provider/src/MfaAuthority.js": {
+        "matchesAuditedSource": true,
+        "service": "oauth-provider"
+      },
+      "services/core/oauth-provider/src/MfaRecovery.js": {
+        "matchesAuditedSource": true,
+        "service": "oauth-provider"
+      },
+      "services/core/oauth-provider/src/MfaEnrollment.js": {
+        "matchesAuditedSource": true,
+        "service": "oauth-provider"
+      },
+      "packages/mfa-authorization-contract.js": {
+        "matchesAuditedSource": true,
+        "service": "oauth-provider"
+      },
+      "frontend/web-app/src/lib/verifiedMfa.ts": {
+        "matchesAuditedSource": true,
+        "service": "web-app"
+      },
+      "frontend/web-app/src/components/views/MFAView.tsx": {
+        "matchesAuditedSource": true,
+        "service": "web-app"
+      }
+    },
+    "allMatch": true
+  },
+  "limits": [
+    "The production service currently has zero enrolled OpenDirectory factors and zero recovery codes. Code integration does not mean the personal production factor is configured.",
+    "The user must complete setup in their own authenticator and save recovery codes privately; no production factor or login token was manufactured for this check.",
+    "No SMS, push or WebAuthn/passkey support is claimed.",
+    "Personal production sign-in remains unverified; no existing production browser is available."
+  ],
+  "productionObservation": {
+    "readOnly": true,
+    "production": true,
+    "demo": false,
+    "protectedKeyOwnerMatches": true,
+    "enabledFactors": 0,
+    "pendingFactors": 0,
+    "lockedFactors": 0,
+    "noAuthenticationAttempt": true,
+    "recoveryCodes": 0,
+    "secretValuesReadBackToClient": false
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "checkedAt": "2026-11-15T21:03:17.994725+00:00",
+  "applicationSourceCommit": "3079cfd999f73d893cf66feee1f1bcd84da840bf",
+  "productionChanged": false,
+  "observedLinuxFailure": {
+    "runId": 43749253551,
+    "jobId": 132919313245,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43749253551",
+    "test": "real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding",
+    "failureType": "testTimeoutFailure",
+    "durationMilliseconds": 239999.99187,
+    "testBudgetMilliseconds": 240000,
+    "failureAt": "2026-11-15T20:09:29Z",
+    "cleanupStoppedAfterDatabaseShutdown": true,
+    "terminalResult": "cancelled",
+    "cancelRequestedAt": "2026-11-15T20:55:14Z",
+    "cancellationReason": "Superseded comparison run was cancelled to obtain its log after running almost three times longer than the previous successful browser step. The log then exposed an earlier test failure and cleanup hang.",
+    "aggregateConclusion": "failure",
+    "sourceLogSha256": "83e00e4230a7f1809367905c21d57443e509506971554c52b0b791fd902175c1"
+  },
+  "changes": {
+    "affectedTestTotalBudgetMilliseconds": 360000,
+    "totalBudgetIncludes": "Independent registration, reviewer MFA, owner MFA and business flow.",
+    "freshOwnerBusinessFlowAssertionMilliseconds": 240000,
+    "freshMfaAuthorityLimitSeconds": 300,
+    "httpOffboardingBudgetMilliseconds": 60000,
+    "responseObserverMilliseconds": 65000,
+    "cleanupDeadlineMilliseconds": 60000,
+    "cleanupDeadlineExitCode": 1,
+    "globalSecurityBudgetsChanged": false,
+    "originalAssertionsRetained": true
+  },
+  "workflow": {
+    "suites": [
+      "licenses",
+      "identity",
+      "oauth",
+      "browser"
+    ],
+    "postgresServicePerJob": true,
+    "oauthAndBrowserDatabasesIndependent": true,
+    "originalCommandsExactlyOnce": [
+      "npm run test:licenses:integration",
+      "npm run test:groups:integration",
+      "npm run test:revocations:integration",
+      "npm run test:browser-auth",
+      "npm run test:browser:integration"
+    ],
+    "aggregateRequiresEverySuite": true,
+    "expectedCompleteJobs": 14,
+    "actionlint": "1.7.12 passed",
+    "prettier": "passed"
+  },
+  "localActualBrowser": {
+    "pass": 1,
+    "fail": 0,
+    "skipped": 0,
+    "durationMilliseconds": 172867.544542,
+    "testDurationMilliseconds": 171450.434083,
+    "services": "Real disposable native PostgreSQL, Identity, OAuth, authentication fixture, Policy, actual production gateway and production-built Next.js.",
+    "businessFlowFourMinuteAssertionPassed": true,
+    "cleanupCompleted": true,
+    "externalProviderConfigured": false,
+    "personalProductionSignIn": false
+  },
+  "runtimeApplicationChanges": false,
+  "limits": [
+    "The cancelled Linux run is not a successful complete CI result.",
+    "The full CI for the corrected commit remains required before integration and rollout.",
+    "The actual Linux cleanup stall is observed after a timed-out test; its exact outstanding SQL client was not recorded. The deadline now rejects such a stall finitely.",
+    "Local signed test users and factors are disposable fixtures, not production identities."
+  ]
+}
