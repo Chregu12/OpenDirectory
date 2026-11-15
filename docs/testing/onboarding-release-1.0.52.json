@@ -1,0 +1,113 @@
+{
+  "checkedAt": "2026-11-15T00:08:06.514455+00:00",
+  "status": "images-published-and-started-release-prepared-awaiting-full-ci",
+  "sourceCommits": {
+    "identity": "4d599b6f41b8ae438e4af9db5e8505275e2a4e76",
+    "oauthAndWeb": "c64301900f93fa5e9cf134d9f9ea0668ab89338a"
+  },
+  "chart": {
+    "version": "0.1.55",
+    "appVersion": "1.0.52",
+    "releaseBefore": 85,
+    "changedDeployments": [
+      "opendirectory-app-store",
+      "opendirectory-identity-service",
+      "opendirectory-oauth-provider",
+      "opendirectory-web-app"
+    ],
+    "otherDeclaredDeploymentSpecsUnchanged": 7,
+    "oauthAddsOnlyIdentityReceiver": true
+  },
+  "images": {
+    "identity-service": {
+      "tag": "harbor.heusser.local/opendirectory/identity-service:1.0.52",
+      "digest": "sha256:3488601fd7a5df4b223089cbceb3b304d64082cec6569b19252f0d18bdb3b468",
+      "runtimeProof": {
+        "sourceSha256": "5d6e51994ba2a81a552c5b7c33d6c64d6539d17031dacdf3074b51d7bf09d976",
+        "loaded": true,
+        "uid": 100,
+        "grpc": "1.14.7",
+        "node": "v20.20.2"
+      },
+      "architecture": "amd64",
+      "sourceLabel": "4d599b6f41b8ae438e4af9db5e8505275e2a4e76"
+    },
+    "oauth-provider": {
+      "tag": "harbor.heusser.local/opendirectory/oauth-provider:1.0.52",
+      "digest": "sha256:7067417be5cf7fbca88f35ace2c65ee17086a190c9aead42446ec8a061c822c7",
+      "runtimeProof": {
+        "uid": 1000,
+        "node": "v20.20.2",
+        "hashes": {
+          "/app/src/EmployeeInvitationGateway.js": "eec822d7e2fba505f1d134696fec15058726bfce63f8b6fac708d478787825f1",
+          "/app/src/MfaEnrollment.js": "a2739906dd3c7cf0b02de12b2a6419207879908ac5db42ad165438cf98b742ec",
+          "/app/migrations/015_credential_authorization.sql": "5892779331b9d4811b34f0678fbb12c9f2c06db87c7872fca7c35195cb56882a",
+          "/app/migrations/017_credential_binding_validation.sql": "8bca67a78eef7d5b666b66e0e332e7135b1cf19dcd0d531e3c146efc01c78ffd"
+        }
+      },
+      "architecture": "amd64",
+      "sourceLabel": "c64301900f93fa5e9cf134d9f9ea0668ab89338a"
+    },
+    "web-app": {
+      "tag": "harbor.heusser.local/opendirectory/web-app:1.0.52",
+      "digest": "sha256:9445eb08dee0adc8909520e95e9c4ea93579ca3486d2d60413d8d9f8a548cb15",
+      "runtimeProof": {
+        "uid": 1001,
+        "node": "v20.20.2",
+        "hashes": {
+          "/app/frontend/web-app/src/components/views/EmployeeInvitationManager.tsx": "25e894659529423742a5038192a78c599ca3ceef2fee9bf827f9e37790b9949b",
+          "/app/frontend/web-app/src/server/browserAuth.cjs": "82d67dbc109e30e978dfdb41599271cc6aa602f35257b639e0614f6922ea4789"
+        }
+      },
+      "architecture": "amd64",
+      "sourceLabel": "c64301900f93fa5e9cf134d9f9ea0668ab89338a"
+    }
+  },
+  "appStore": {
+    "tag": "harbor.heusser.local/opendirectory/app-store:1.0.51",
+    "digest": "sha256:a2a7344c7a678e6e977f6448eed4fb4558f63eab75ae869d69aa07c533cd35cc",
+    "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00"
+  },
+  "runtimeStartup": {
+    "productionTouched": false,
+    "images": {
+      "identity-service": {
+        "ready": true,
+        "anonymousAccess": 401
+      },
+      "oauth-provider": {
+        "ready": true,
+        "anonymousOwnerManagement": 401,
+        "invitationsEnabled": true,
+        "validBindingAccepted": true,
+        "invalidBindingRejected": true
+      },
+      "web-app": {
+        "ready": true,
+        "loginPage": 200,
+        "anonymousSession": 401
+      }
+    },
+    "status": "passed",
+    "postgresVersion": "15.20",
+    "lastPhase": "Web image startup"
+  },
+  "localValidation": {
+    "mfaPostgresPassed": 31,
+    "companyRolesPostgresPassed": 46,
+    "directoryAndAuthorityUnitPassed": 52,
+    "distinctBrowserScenariosPassed": 59,
+    "distinctOAuthPimDutiesPassed": 5,
+    "wholeCompanyRegistrationGatewayPassed": true
+  },
+  "unchangedProductionAuthSource": {
+    "checkedFiles": 56,
+    "differences": 0
+  },
+  "rollout": "not-applied; requires complete corrected CI and fresh database backups",
+  "scopeLimits": [
+    "container smoke covers startup, PostgreSQL 15 migration and anonymous denial; complete sign-in uses the separately documented local browser fixtures",
+    "live Graph and physical authenticator not accepted",
+    "complete platform recovery, load and physical agent acceptance remain open"
+  ]
+}

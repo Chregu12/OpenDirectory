@@ -16,7 +16,7 @@ ingress:
 
 apps:
   identity-service:
-    imageTag: "1.0.50"
+    imageTag: "1.0.52"
   license-management:
     imageTag: "1.0.17"
   policy-service:
@@ -35,11 +35,11 @@ apps:
   auth-service:
     imageTag: "1.0.21"
   oauth-provider:
-    imageTag: "1.0.31"
+    imageTag: "1.0.52"
     env:
       OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
   web-app:
-    imageTag: "1.0.50"
+    imageTag: "1.0.52"
   api-backend:
     imageTag: "1.0.10"
   device-service:
