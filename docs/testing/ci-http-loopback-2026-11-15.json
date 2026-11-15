@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-11-15T14:51:56.075414+00:00",
+  "baseCommit": "21a2755c7659e9688f6baf60bad2443e22aef0ec",
+  "status": "explicit-ipv4-test-fixtures-verified-on-macos",
+  "productionTouched": false,
+  "productionCodeChanged": false,
+  "finding": {
+    "observed": [
+      "One earlier Device API unit health response was 401 instead of 200/503. The original response body and server address were not captured.",
+      "A later independent full unit run had three socket hang ups in return routing tests."
+    ],
+    "controlledReproduction": {
+      "platform": "macOS, Node 20.20.2",
+      "samePort": true,
+      "intendedServerAddress": "::",
+      "supertestRequestAddress": "127.0.0.1",
+      "actualResponseStatus": 401,
+      "actualResponseBody": "specific-fixture",
+      "intendedResponseBody": "intended-supertest-fixture",
+      "explicitIpv4SamePortBind": "EADDRINUSE"
+    },
+    "causeScope": "The dual-bind routing mechanism was reproduced directly; the original transient failures did not capture enough socket evidence to prove their exact retrospective cause."
+  },
+  "correction": {
+    "actualTestServerAddress": "127.0.0.1",
+    "ephemeralPort": true,
+    "fixtures": [
+      "Legacy Device API characterization HTTP suite",
+      "Device return routing HTTP suite"
+    ],
+    "teardown": "Await actual server closure",
+    "productionAuthenticationChanged": false,
+    "testAssertionsWeakened": false,
+    "requestRetriesAdded": false
+  },
+  "verification": {
+    "rootNodeTests": {
+      "tests": 59,
+      "pass": 59,
+      "fail": 0,
+      "skip": 0,
+      "totalMilliseconds": 1786.41525
+    },
+    "mainDeviceUnits": {
+      "suites": 24,
+      "tests": 645,
+      "pass": 645,
+      "fail": 0,
+      "seconds": 4.575
+    },
+    "controlledOriginalPatternReproduction": "Wrong IPv4 fixture actually receives the request to the intended IPv6 wildcard port",
+    "diffCheck": "pass"
+  },
+  "sourceSha256": {
+    "scripts/lib/loopback-test-server.cjs": "b900c8e0e9ab98904c7907d6d5d4379ecd1ee1661661e6a85e22492824fcfdc3",
+    "scripts/lib/__tests__/loopback-test-server.test.mjs": "818d990c38ef8956b6b1fdc630e8066b119458d554a9be25dac55a821b60d938",
+    "services/core/device-service/src/__tests__/api.e2e.test.js": "e0bbc4c9a96e9b2bc35c41b9cb95b452ec858bc5acaff1996c505e4e0a87208c",
+    "services/core/device-service/src/__tests__/DeviceReturnsRoutes.test.js": "cb04181b79ef10b96cfac1c24c2ccb8cc0d0032aab7e3262f4cbace3b9b03961"
+  },
+  "limits": [
+    "Full newest-source GitHub CI has not yet completed.",
+    "Other HTTP fixtures still need migration if the same address mismatch is observed.",
+    "No deployment or personal production login was performed.",
+    "The complete OpenDirectory BR/WF objective remains open."
+  ]
+}

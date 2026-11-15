@@ -7,13 +7,15 @@ const { jwtVerify } = require('jose');
 const { createInventoryApp } = require('../inventoryServer');
 const { DeviceReturns } = require('../DeviceReturns');
 const { randomUUID } = require('node:crypto');
+const { listenLoopback, closeServer } = require('../../../../../scripts/lib/loopback-test-server.cjs');
 let app; let returns; let user; let requestId; let userId; let workflowId; let dto;
-beforeEach(() => {
+beforeEach(async () => {
   requestId = randomUUID(); userId = randomUUID(); workflowId = randomUUID(); user = { actor_type: 'user', token_use: 'access' }; jwtVerify.mockResolvedValue({ payload: user });
   dto = { id: requestId, revision: '1', currentDeviceRevision: '9007199254740993' };
   returns = Object.fromEntries(['capabilities','list','get','history','decide','offboardingCapabilities','offboardingList','offboardingHistory','request'].map(method => [method, jest.fn(async () => ({}))]));
-  app = createInventoryApp({ db: {}, inventory: {}, returns });
+  app = await listenLoopback(createInventoryApp({ db: {}, inventory: {}, returns }));
 });
+afterEach(() => closeServer(app));
 function get(url) { return request(app).get(url).set('Authorization', 'Bearer original'); }
 test.each([
   ['/api/devices/returns/capabilities','capabilities'], ['/api/devices/returns','list'], ['/api/devices/returns/ID','get'], ['/api/devices/returns/ID/history','history'],
