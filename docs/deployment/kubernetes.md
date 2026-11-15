@@ -419,6 +419,60 @@ helm upgrade opendirectory ./deploy/helm/opendirectory \
 
 Helm performs a rolling update by default — each Deployment's pods are replaced one at a time. Services with `replicaCount: 1` will have a brief downtime window; increase replicas before upgrading if this is unacceptable.
 
+### OpenDirectory Lite: PIM approver-group migration
+
+The existing `opendirectory.heusser.local` installation uses
+`deploy/helm/opendirectory-lite/`, not the full-platform chart shown above.
+Its image overrides are under `apps.<service>.imageTag`. Preserve the current
+release's complete values and review the rendered resources before upgrading;
+the checked-in k3s example alone does not contain all live configuration.
+
+[Release 1.0.53 verification](../testing/pim-release-1.0.53.json) records the
+tested image digests, migration rehearsal and frozen Helm manifest. It was
+deployed on 15 November 2026 as lite chart 0.1.56, Helm revision 86, after both
+source runs passed all nine CI jobs. Fresh private archives of Auth, OAuth,
+Identity, Devices and App Store, plus the App Store uploads, were taken before
+the upgrade. All eleven Deployments, four image digests, four SQL receivers and
+certificate-verified HTTPS checks passed afterward. The live credential-shape
+validator now accepts the valid shape it previously rejected; actual human
+production sign-in remains a separate check.
+
+Future upgrades still require complete source CI and fresh database/upload
+backups. The migration rehearsal archive is not a current rollout backup or a
+coordinated platform recovery point. Device OU metadata in PR #6 is a separate
+feature and is not part of this release.
+
+Migration `061_company_pim_approver_groups.sql` adds the reviewer-group columns
+and expands the sealed approval receiver from six routines to eight. **An image
+rollback to Identity 1.0.50 does not reverse this migration.** On an isolated copy
+of the production database, that old image returned HTTP 200 from `/health` while
+`identity_company_pim_approval_receiving()` rejected the retained eight-routine
+manifest. Retained user data stayed unchanged, but PIM was unavailable. Do not
+use automatic image rollback as recovery for this migration.
+
+Restarting the exact tested 1.0.53 Identity image after that old-image replay
+restored the current SQL definitions and receiver checks without changing the
+retained user data. Prefer this tested forward repair if an old image has been
+started accidentally. A database restore instead requires a separate maintenance
+and reconciliation plan for writes since the backup; Helm does not provide it.
+
+After rollout, verify the actual image digests and all ready Deployments, then
+execute the following read-only checks against Identity as the application
+database owner. A successful health endpoint alone is insufficient:
+
+```sql
+BEGIN READ ONLY;
+SELECT identity_company_role_receiving();
+SELECT identity_company_group_rule_live_receiving();
+SELECT identity_company_activation_receiving();
+SELECT identity_company_pim_approval_receiving();
+COMMIT;
+```
+
+Also verify the anonymous API denials, actual login page and OAuth Identity
+receiver URL. These operator checks do not substitute for an authenticated
+human login or a complete platform recovery rehearsal.
+
 ---
 
 ## Uninstalling

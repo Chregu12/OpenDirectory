@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T02:48:05.471418+00:00",
+  "checkedAt": "2026-11-15T04:19:39.185403+00:00",
   "sourceBaseCommit": "5c8a6320829ab2eaa7ea4656f8b3e2bd27b8e5d2",
-  "status": "local-browser-recovery-synchronization-passed-complete-linux-ci-pending",
+  "status": "complete-linux-source-ci-passed",
   "failedCi": {
     "runId": 43662796359,
     "jobId": 132655566323,
@@ -48,9 +48,21 @@
     "pimBrowserTest": "a6fbbda30798dcda46b1b2c38ad9cf5f9070a9ded0ab8506997ebcf60e509bda"
   },
   "limits": [
-    "The exact Linux cause remains an inferred missing synchronization until the complete patched CI confirms it.",
-    "The local targeted browser flow ran on the PIM worktree; the main branch still needs its complete Linux run.",
-    "No productive application source, database data, users, grants or human MFA were changed.",
-    "Prepared runtime images are unchanged; rollout still requires complete source CI and fresh backups."
-  ]
+    "The patched complete Linux browser driver passed all 59 cases. The missing synchronization remains an inferred explanation of the original failure, rather than an independently isolated counterfactual.",
+    "Both the main and PIM source followups completed all nine Linux CI jobs.",
+    "The synchronization and permission-expectation fixes do not change productive authorization or create accounts, grants or human MFA proofs.",
+    "Runtime release and live verification are recorded separately in docs/testing/pim-release-1.0.53.json."
+  ],
+  "linuxFollowup": {
+    "runId": 43669454896,
+    "commit": "a8affc5a51f0f15290e5c13ad31219a083887c82",
+    "successfulJobs": 9,
+    "totalJobs": 9,
+    "licensePassed": 557,
+    "identityPassed": 806,
+    "oauthPassed": 306,
+    "browserMediationPassed": 67,
+    "actualBrowserPassed": 59,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669454896"
+  }
 }

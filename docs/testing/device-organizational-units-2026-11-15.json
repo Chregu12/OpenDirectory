@@ -149,5 +149,13 @@
     "cause": "One additional global OpenAPI version assertion in the Policy test still expected 1.39.0 after the generated public contract moved to 1.40.0. The exact assertion is now updated; canonical document equality and reference/operation checks remain unchanged.",
     "verification": "All 1471 Policy unit cases passed with the canonical service dependencies.",
     "completeLinuxFollowup": "pending next source run"
+  },
+  "latestBaseCommit": "d97f70a2cca0dac1d611bdb4468631034b00a2f3",
+  "productionPrerequisite": {
+    "release": 86,
+    "appVersion": "1.0.53",
+    "pimPullRequest": 5,
+    "merged": true,
+    "deviceOuFeatureDeployed": false
   }
 }

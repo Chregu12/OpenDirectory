@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T02:48:05.471418+00:00",
+  "checkedAt": "2026-11-15T04:19:39.185403+00:00",
   "sourceBaseCommit": "5c8a6320829ab2eaa7ea4656f8b3e2bd27b8e5d2",
-  "status": "complete-local-followup-suites-passed-final-linux-ci-and-rollout-pending",
+  "status": "complete-linux-source-ci-and-production-rollout-verified",
   "runtime": {
     "node": "20.20.2",
     "postgresql": "16.15 (Homebrew)",
@@ -101,8 +101,7 @@
     "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "47d4b50e219dd14388507dbe8f9e1b5e66a425577042120f2459cd54fe5cee93"
   },
   "limits": [
-    "This source branch has not yet passed complete GitHub CI or been deployed.",
-    "The single new actual browser case and ten UI cases do not prove the entire final 60-case browser driver.",
+    "The complete 60-case actual Linux browser driver passed. Human production sign-in, physical devices and live external provider acceptance remain separate.",
     "No productive accounts, grants or real human MFA were created for these tests.",
     "Passwords in this new case use an explicit disposable provider fixture; hardware authenticators and live external identity providers were not tested.",
     "Provider notification delivery, periodic group reviews, physical devices, full platform recovery, load and WCAG acceptance remain open."
@@ -132,7 +131,7 @@
       "five schema-restricted reset cases including unconditional retention after reset",
       "both actual browser cases run together on the merged portable-path source"
     ],
-    "completeLinuxFollowup": "pending updated PR CI"
+    "completeLinuxFollowup": "passed: run 43669472668 on 3fc67eadb50e1d02ecb02c7c0fe50057991a0165"
   },
   "ciPermissionListFollowup": {
     "failedRunId": 43663348061,
@@ -157,7 +156,24 @@
       "fail": 0,
       "skipped": 59
     },
-    "completeLinuxFollowup": "pending updated PR CI",
+    "completeLinuxFollowup": "passed: run 43669472668 on 3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
     "runtimeApplicationSourcesUnchanged": true
+  },
+  "completeCi": {
+    "runId": 43669472668,
+    "commit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+    "successfulJobs": 9,
+    "totalJobs": 9,
+    "licensePassed": 557,
+    "identityPassed": 815,
+    "oauthPassed": 306,
+    "browserMediationPassed": 67,
+    "actualBrowserPassed": 60,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669472668"
+  },
+  "productionRollout": {
+    "release": 86,
+    "appVersion": "1.0.53",
+    "report": "docs/testing/pim-release-1.0.53.json"
   }
 }

@@ -1,0 +1,516 @@
+{
+  "checkedAt": "2026-11-15T04:19:39.185403+00:00",
+  "status": "deployed-complete-source-ci-and-live-runtime-verified",
+  "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+  "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/5",
+  "ci": {
+    "mainRunId": 43669454896,
+    "pimRunId": 43669472668,
+    "lastObservedSuccessfulJobsPerRun": 9,
+    "totalJobsPerRun": 9,
+    "completeResult": "success",
+    "results": {
+      "main": {
+        "runId": 43669454896,
+        "commit": "a8affc5a51f0f15290e5c13ad31219a083887c82",
+        "successfulJobs": 9,
+        "totalJobs": 9,
+        "licensePassed": 557,
+        "identityPassed": 806,
+        "oauthPassed": 306,
+        "browserMediationPassed": 67,
+        "actualBrowserPassed": 59,
+        "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669454896"
+      },
+      "pim": {
+        "runId": 43669472668,
+        "commit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+        "successfulJobs": 9,
+        "totalJobs": 9,
+        "licensePassed": 557,
+        "identityPassed": 815,
+        "oauthPassed": 306,
+        "browserMediationPassed": 67,
+        "actualBrowserPassed": 60,
+        "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43669472668"
+      }
+    },
+    "previousFailedRuns": {
+      "mainRunId": 43662796359,
+      "pimRunId": 43663348061
+    }
+  },
+  "chart": {
+    "chartVersion": "0.1.56",
+    "appVersion": "1.0.53",
+    "releaseBefore": 85,
+    "preparedManifestSha256": "e017693ccb52d86b48a93a62d16b98ee661d79e2ce6c13b1706432e081e41b10",
+    "resourcesCompared": 49,
+    "deploymentSpecsCompared": 11,
+    "changedDeployments": [
+      "opendirectory-app-store",
+      "opendirectory-identity-service",
+      "opendirectory-oauth-provider",
+      "opendirectory-web-app"
+    ],
+    "unchangedDeploymentSpecs": [
+      "opendirectory-api-backend",
+      "opendirectory-api-gateway",
+      "opendirectory-auth-service",
+      "opendirectory-device-service",
+      "opendirectory-integration-service",
+      "opendirectory-license-management",
+      "opendirectory-policy-service"
+    ],
+    "allOtherResourceBodiesUnchanged": true,
+    "allowedChanges": "Four image references and explicit OAuth Identity receiver only",
+    "releaseAfter": 86
+  },
+  "images": {
+    "identity-service": {
+      "tag": "harbor.heusser.local/opendirectory/identity-service:1.0.53-pim-c08aa46-r2",
+      "digest": "sha256:615439dad407944883e836c3aaa1f5b2f0990bcf3756e4d4e94aa463e67722f6",
+      "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705"
+    },
+    "web-app": {
+      "tag": "harbor.heusser.local/opendirectory/web-app:1.0.53-pim-c08aa46-r2",
+      "digest": "sha256:5f98bcbff77ebd6f80b653eb5d4107a48a1253aa8567b9a7ef28f02c6a83594c",
+      "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705"
+    },
+    "oauth-provider": {
+      "tag": "harbor.heusser.local/opendirectory/oauth-provider:1.0.52",
+      "digest": "sha256:7067417be5cf7fbca88f35ace2c65ee17086a190c9aead42446ec8a061c822c7",
+      "sourceCommit": "c64301900f93fa5e9cf134d9f9ea0668ab89338a"
+    }
+  },
+  "appStore": {
+    "tag": "harbor.heusser.local/opendirectory/app-store:1.0.51",
+    "digest": "sha256:a2a7344c7a678e6e977f6448eed4fb4558f63eab75ae869d69aa07c533cd35cc",
+    "sourceCommit": "2dd08c04903dca93627389540e6e73452e2c8f00"
+  },
+  "sourceProof": {
+    "identity-service": {
+      "uid": 100,
+      "files": 179,
+      "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+      "manifestSha256": "26db774e169e9bfd75039c39d0d3731cdee2800b1129e4dda7228cd61ab8fd01",
+      "productionTouched": false
+    },
+    "oauth-provider": {
+      "uid": 1000,
+      "files": 74,
+      "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+      "manifestSha256": "463723aa513eb8552c562f67b56abe83716c71066fc6c4132361d7be44335777",
+      "productionTouched": false
+    },
+    "web-app": {
+      "uid": 1001,
+      "files": 287,
+      "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+      "manifestSha256": "33f26bd60da4637e2b6c689e0180547fa8d9ddfc284c476baa00faa267d82b7f",
+      "productionTouched": false
+    }
+  },
+  "sourceProofCoverage": "Identity and OAuth src, migrations and copied shared package files; Web src, public and copied shared package files; package.json for all three. Test folders and installed dependencies excluded. All selected files were read and hashed as the image default non-root user; all bytes equal the committed source. OAuth is reused from 1.0.52 and its selected runtime source also matches c08aa46.",
+  "imageStartup": {
+    "productionTouched": false,
+    "images": {
+      "identity-service": {
+        "ready": true,
+        "anonymousAccess": 401
+      },
+      "oauth-provider": {
+        "ready": true,
+        "anonymousOwnerManagement": 401,
+        "invitationsEnabled": true,
+        "validBindingAccepted": true,
+        "invalidBindingRejected": true
+      },
+      "web-app": {
+        "ready": true,
+        "loginPage": 200,
+        "anonymousSession": 401
+      }
+    },
+    "status": "passed",
+    "testPostgreSQLStorage": "bounded 1 GiB tmpfs",
+    "testPostgreSQLMaxWalSize": "128MB",
+    "postgresVersion": "15.20",
+    "lastPhase": "Web image startup"
+  },
+  "migrationRehearsal": {
+    "checkedAt": "2026-11-15T01:48:42.707902+00:00",
+    "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+    "sourcePostgreSQL": "15.19",
+    "archiveSha256": "e23663c32f746fbc0000f5a70f71934498ea67008efc84b713e4dfa62347a27a",
+    "migrationSha256": "98b71fa413e5c7e1e50d41b2a51f576b85e219c8b5c6e54adbdd7b62fba4a74c",
+    "productionTouched": false,
+    "status": "passed",
+    "restorePostgreSQL": "15.20",
+    "migrationRole": {
+      "user": "opendirectory",
+      "superuser": false,
+      "databaseOwner": true
+    },
+    "upgrade": {
+      "tables": 133,
+      "sameRetainedTablesExcludingExpectedManifests": 131,
+      "newPolicyColumnsExcludedFromOldRowRepresentation": [
+        "reviewer_group_id",
+        "reviewer_group_generation"
+      ],
+      "changedRoleManifestRoutines": [
+        "identity_company_role_commit()"
+      ],
+      "addedApprovalManifestRoutines": [
+        "identity_company_pim_approver_group_current(uuid,uuid,bigint)",
+        "identity_company_pim_reviewer_source(jsonb,uuid)"
+      ],
+      "changedApprovalManifestRoutines": [
+        "identity_company_pim_approval_active(identity_company_role_activations)",
+        "identity_company_pim_approval_change(jsonb)",
+        "identity_company_pim_approval_policy(uuid)",
+        "identity_company_pim_approval_receiving()",
+        "identity_company_pim_request_status(identity_company_pim_requests)"
+      ],
+      "receiversPassed": true,
+      "newHelpersPublicExecution": false
+    },
+    "sameNormalizedRetainedDataSha256": "8021ee66b5bcfe6f82526c72ca387354f6026de861ed3e09c2e50a90c1854eaa",
+    "actualImageMigrationReplay": {
+      "tables": 133,
+      "sameRetainedTablesExcludingExpectedManifests": 131,
+      "newPolicyColumnsExcludedFromOldRowRepresentation": [
+        "reviewer_group_id",
+        "reviewer_group_generation"
+      ],
+      "changedRoleManifestRoutines": [
+        "identity_company_role_commit()"
+      ],
+      "addedApprovalManifestRoutines": [
+        "identity_company_pim_approver_group_current(uuid,uuid,bigint)",
+        "identity_company_pim_reviewer_source(jsonb,uuid)"
+      ],
+      "changedApprovalManifestRoutines": [
+        "identity_company_pim_approval_active(identity_company_role_activations)",
+        "identity_company_pim_approval_change(jsonb)",
+        "identity_company_pim_approval_policy(uuid)",
+        "identity_company_pim_approval_receiving()",
+        "identity_company_pim_request_status(identity_company_pim_requests)"
+      ],
+      "receiversPassed": true,
+      "newHelpersPublicExecution": false
+    },
+    "actualImage": {
+      "digest": "sha256:615439dad407944883e836c3aaa1f5b2f0990bcf3756e4d4e94aa463e67722f6",
+      "health": 200,
+      "anonymousAccess": 401,
+      "runsWithProductionNodeEnvironment": true,
+      "dbSuperuser": false
+    },
+    "completedAt": "2026-11-15T01:49:02.889672+00:00",
+    "lastPhase": "cold-start actual Identity image on upgraded production copy"
+  },
+  "rejectedArchiveBuild": {
+    "deployed": false,
+    "reason": "Restrictive archive extraction umask made source inaccessible to non-root users. Corrected code modes and rebuilt under distinct r2 tags.",
+    "validImagesAreR2Only": true
+  },
+  "rollout": {
+    "status": "deployed-and-verified",
+    "context": "default",
+    "namespace": "opendirectory",
+    "releaseBefore": 85,
+    "releaseAfter": 86,
+    "appVersion": "1.0.53",
+    "verifiedAt": "2026-11-15T04:15:13.158535+00:00",
+    "automaticRollbackUsed": false
+  },
+  "limits": [
+    "Live verification covers the reviewed release, ready deployments, exact image digests, service health, certificate-verified HTTPS denials and SQL receivers. It is not full platform or actual human sign-in acceptance.",
+    "The 133-table migration rehearsal used an earlier consistent per-database production archive, not a current coordinated platform backup.",
+    "Container smoke covers actual image startup, PostgreSQL migration, login page and anonymous denials. Complete authenticated flows use the separately documented disposable browser fixtures.",
+    "No productive users, credentials, MFA proofs, grants or PIM activations were created.",
+    "Live provider delivery, physical authenticators/devices, full platform key recovery, load and WCAG acceptance remain open."
+  ],
+  "rollbackRehearsal": {
+    "checkedAt": "2026-11-15T02:19:00.599288+00:00",
+    "sourceCommit": "c08aa46a4681ab6af942d9763b2f720e96019705",
+    "sourcePostgreSQL": "15.19",
+    "archiveSha256": "e23663c32f746fbc0000f5a70f71934498ea67008efc84b713e4dfa62347a27a",
+    "migrationSha256": "98b71fa413e5c7e1e50d41b2a51f576b85e219c8b5c6e54adbdd7b62fba4a74c",
+    "productionTouched": false,
+    "status": "passed",
+    "restorePostgreSQL": "15.20",
+    "migrationRole": {
+      "user": "opendirectory",
+      "superuser": false,
+      "databaseOwner": true
+    },
+    "upgrade": {
+      "tables": 133,
+      "sameRetainedTablesExcludingExpectedManifests": 131,
+      "newPolicyColumnsExcludedFromOldRowRepresentation": [
+        "reviewer_group_id",
+        "reviewer_group_generation"
+      ],
+      "changedRoleManifestRoutines": [
+        "identity_company_role_commit()"
+      ],
+      "addedApprovalManifestRoutines": [
+        "identity_company_pim_approver_group_current(uuid,uuid,bigint)",
+        "identity_company_pim_reviewer_source(jsonb,uuid)"
+      ],
+      "changedApprovalManifestRoutines": [
+        "identity_company_pim_approval_active(identity_company_role_activations)",
+        "identity_company_pim_approval_change(jsonb)",
+        "identity_company_pim_approval_policy(uuid)",
+        "identity_company_pim_approval_receiving()",
+        "identity_company_pim_request_status(identity_company_pim_requests)"
+      ],
+      "receiversPassed": true,
+      "newHelpersPublicExecution": false
+    },
+    "sameNormalizedRetainedDataSha256": "8021ee66b5bcfe6f82526c72ca387354f6026de861ed3e09c2e50a90c1854eaa",
+    "actualImageMigrationReplay": {
+      "tables": 133,
+      "sameRetainedTablesExcludingExpectedManifests": 131,
+      "newPolicyColumnsExcludedFromOldRowRepresentation": [
+        "reviewer_group_id",
+        "reviewer_group_generation"
+      ],
+      "changedRoleManifestRoutines": [
+        "identity_company_role_commit()"
+      ],
+      "addedApprovalManifestRoutines": [
+        "identity_company_pim_approver_group_current(uuid,uuid,bigint)",
+        "identity_company_pim_reviewer_source(jsonb,uuid)"
+      ],
+      "changedApprovalManifestRoutines": [
+        "identity_company_pim_approval_active(identity_company_role_activations)",
+        "identity_company_pim_approval_change(jsonb)",
+        "identity_company_pim_approval_policy(uuid)",
+        "identity_company_pim_approval_receiving()",
+        "identity_company_pim_request_status(identity_company_pim_requests)"
+      ],
+      "receiversPassed": true,
+      "newHelpersPublicExecution": false
+    },
+    "actualImage": {
+      "digest": "sha256:615439dad407944883e836c3aaa1f5b2f0990bcf3756e4d4e94aa463e67722f6",
+      "health": 200,
+      "anonymousAccess": 401,
+      "runsWithProductionNodeEnvironment": true,
+      "dbSuperuser": false
+    },
+    "previousImageAfterMigration": {
+      "digest": "sha256:e0031a16e6b257afcfe0d4b2a34e14f34c14d7fa9e154776ca915faaefd1865e",
+      "imageVersion": "1.0.50",
+      "basicHealth": 200,
+      "pimReceiverAccepted": false,
+      "receiverError": "Complete PIM approval manifest required",
+      "retainedDataUnchanged": true,
+      "safeAutomaticImageRollback": false
+    },
+    "forwardRepairAfterOldImage": {
+      "tables": 133,
+      "sameRetainedTablesExcludingExpectedManifests": 131,
+      "newPolicyColumnsExcludedFromOldRowRepresentation": [
+        "reviewer_group_id",
+        "reviewer_group_generation"
+      ],
+      "changedRoleManifestRoutines": [
+        "identity_company_role_commit()"
+      ],
+      "addedApprovalManifestRoutines": [
+        "identity_company_pim_approver_group_current(uuid,uuid,bigint)",
+        "identity_company_pim_reviewer_source(jsonb,uuid)"
+      ],
+      "changedApprovalManifestRoutines": [
+        "identity_company_pim_approval_active(identity_company_role_activations)",
+        "identity_company_pim_approval_change(jsonb)",
+        "identity_company_pim_approval_policy(uuid)",
+        "identity_company_pim_approval_receiving()",
+        "identity_company_pim_request_status(identity_company_pim_requests)"
+      ],
+      "receiversPassed": true,
+      "newHelpersPublicExecution": false,
+      "health": 200
+    },
+    "completedAt": "2026-11-15T02:19:42.946534+00:00",
+    "lastPhase": "restore current candidate image after old-image migration replay",
+    "receiverChecks": [
+      "identity_company_role_receiving",
+      "identity_company_group_rule_live_receiving",
+      "identity_company_activation_receiving",
+      "identity_company_pim_approval_receiving"
+    ]
+  },
+  "rolloutRecovery": {
+    "automaticImageRollbackSafe": false,
+    "previousImagePimReceiverAccepted": false,
+    "testedForwardRepair": true,
+    "sqlApprovalReceiverRequiredInAcceptance": true
+  },
+  "testedSourceCommit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+  "releaseRuntimeSourceMatchesTestedPimHead": true,
+  "liveVerification": {
+    "checkedAt": "2026-11-15T04:15:13.158535+00:00",
+    "release": {
+      "name": "opendirectory",
+      "namespace": "opendirectory",
+      "revision": "86",
+      "updated": "2026-11-15 05:14:34.8754 +0100 CET",
+      "status": "deployed",
+      "chart": "opendirectory-lite-0.1.56",
+      "app_version": "1.0.53"
+    },
+    "backupCompletedAt": "2026-11-15T04:13:14.029047+00:00",
+    "deployments": {
+      "opendirectory-api-backend": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-api-gateway": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-app-store": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:a2a7344c7a678e6e977f6448eed4fb4558f63eab75ae869d69aa07c533cd35cc"
+      },
+      "opendirectory-auth-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-device-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-identity-service": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:615439dad407944883e836c3aaa1f5b2f0990bcf3756e4d4e94aa463e67722f6"
+      },
+      "opendirectory-integration-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-license-management": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-oauth-provider": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:7067417be5cf7fbca88f35ace2c65ee17086a190c9aead42446ec8a061c822c7"
+      },
+      "opendirectory-policy-service": {
+        "ready": 1,
+        "changed": false
+      },
+      "opendirectory-web-app": {
+        "ready": 1,
+        "changed": true,
+        "digest": "sha256:5f98bcbff77ebd6f80b653eb5d4107a48a1253aa8567b9a7ef28f02c6a83594c"
+      }
+    },
+    "health": {
+      "opendirectory-identity-service": {
+        "status": 200
+      },
+      "opendirectory-web-app": {
+        "status": 200
+      },
+      "opendirectory-oauth-provider": {
+        "status": 200
+      },
+      "opendirectory-app-store": {
+        "status": 200
+      }
+    },
+    "https": {
+      "/login": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/.well-known/openid-configuration": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/api/identity/access": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/capabilities": {
+        "status": 401,
+        "certificateVerified": true
+      }
+    },
+    "receivers": {
+      "identity_company_role_receiving": true,
+      "identity_company_group_rule_live_receiving": true,
+      "identity_company_activation_receiving": true,
+      "identity_company_pim_approval_receiving": true
+    },
+    "appStoreUploadDirectoryWritableAsContainerUser": true,
+    "credentialValidator": {
+      "validShapeAccepted": true,
+      "invalidShapeRejected": true,
+      "pureReadOnlyInputs": true,
+      "noUserRecordsCreated": true
+    },
+    "limits": [
+      "Actual human production sign-in was not performed.",
+      "Device OU metadata PR #6 is not deployed.",
+      "The archives are individually consistent, not a coordinated cross-database or key-recovery checkpoint."
+    ],
+    "status": "passed"
+  },
+  "freshBackup": {
+    "startedAt": "2026-11-15T04:13:07.198827+00:00",
+    "completedAt": "2026-11-15T04:13:14.029047+00:00",
+    "consistentAcrossDatabases": false,
+    "databases": {
+      "auth": {
+        "bytes": 83919,
+        "sha256": "0d9160239536b772ce6ca8ca82a38573d68e5bdd20769236bdb6608caae7b70d",
+        "tocEntries": 150
+      },
+      "oauth": {
+        "bytes": 176125,
+        "sha256": "80591036de213765572fdbb0c0623e2b44987ff7eca15c49555239d09b55ba53",
+        "tocEntries": 270
+      },
+      "identity": {
+        "bytes": 3735048,
+        "sha256": "6e71da9b3c430ad0efdc70ed6fd6f98154b0f844a73f329c5585bc75d4114c91",
+        "tocEntries": 6230
+      },
+      "devices": {
+        "bytes": 180853,
+        "sha256": "e319c6fef27a5c4d3ad7f0c3b1e028e916da9949ac2c9dd5607ca85d63a5208e",
+        "tocEntries": 209
+      },
+      "app_store": {
+        "bytes": 19970,
+        "sha256": "d54c8cad822d7dcbb577cd96494c62cdda8c1058c6855ffd3e199f425e87c86b",
+        "tocEntries": 39
+      }
+    },
+    "uploads": {
+      "bytes": 173,
+      "sha256": "d1b117e16bba7a533b2fd0031ccd8059c6ff9d54cb299b418d3dc9f503db7acd",
+      "members": 3
+    },
+    "privateStoragePermissions": "directory 0700, files 0600"
+  },
+  "productionCredentialValidatorBefore": {
+    "checkedAt": "2026-11-15T04:07:40.022572+00:00",
+    "release": 85,
+    "oauthImage": "harbor.heusser.local/opendirectory/oauth-provider:1.0.31",
+    "validShapeAccepted": false,
+    "noUserRecordsReadOrCreated": true
+  }
+}
