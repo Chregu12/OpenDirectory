@@ -1,12 +1,12 @@
 # Diagnostic branch only: do not merge this workflow replacement into main.
-name: Company automation browser diagnostic
+name: Fresh OTP registration diagnostic
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   automation:
-    name: Actual automation browser group (${{ matrix.attempt }})
+    name: Actual registration with fresh OTP (${{ matrix.attempt }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -43,22 +43,11 @@ jobs:
               npm install --prefix "$service" --ignore-scripts --no-audit --no-fund --package-lock=false
             fi
           done
-      - name: Install browser dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Install actual browser and credential receivers
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes redis-server
-          npx playwright install --with-deps chromium
-      - name: Verify actual worker version conflict and retained current stop
+      - name: Verify the fresh OTP fixture against the unchanged production window
+        run: npm --prefix services/core/oauth-provider test -- --runInBand src/__tests__/MfaFixture.test.js
+      - name: Test the complete original signed registration journey
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-name-pattern='^a real worker advances the schedule version'
-          services/core/identity-service/src/__tests__/companyAutomation.postgres.cjs
-      - name: Test the complete actual automation browser group
-        run: >-
-          node --test --test-reporter=tap --test-reporter-destination=stdout
-          --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-name-pattern='^(real company automation|real change-driven|real roleless Owner)'
-          services/core/oauth-provider/src/__tests__/browser.postgres.cjs
+          --test-name-pattern='^production gateway does not treat a real credential-bound pending company registration'
+          services/core/oauth-provider/src/__tests__/revocations.postgres.cjs
