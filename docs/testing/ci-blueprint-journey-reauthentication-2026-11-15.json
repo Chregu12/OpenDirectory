@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-11-15T09:34:42.240662+00:00",
+  "baseCommit": "63791c6cf790284689507be0c80f3fc1082bf4dd",
+  "status": "test-only-real-reauthentication-locally-verified-linux-pending",
+  "productionTouched": false,
+  "productionSourceChanged": false,
+  "failure": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43691910537",
+    "jobId": 132744157638,
+    "durationMilliseconds": 302213.249345,
+    "operation": "POST /api/licenses/company/v2/offboarding-workflows",
+    "expected": 201,
+    "actual": 401,
+    "identityErrors": [
+      "Original company license authority changed",
+      "Company license activation authority rejected"
+    ],
+    "diagnosis": "The long case reused the initial owner login across independent assignment and offboarding journeys. The rejection occurred at its original access-token/MFA deadline; an earlier fast successful run did not demonstrate robustness on the slower runner."
+  },
+  "correction": {
+    "freshPasswordTotpLogin": "Same canonical roleless Owner, explicitly before the independent offboarding preview and write",
+    "sameCanonicalIdentityAsserted": true,
+    "automaticWriteRetries": false,
+    "perRequestOriginalBearerCheckedAtEveryObservedBlueprintAndLicenseCheckpoint": true,
+    "historicalAssignmentParentsRetainExactInitialTokenId": true,
+    "laterParentsUseExactNewTokenId": true,
+    "originalContextAndPendingOutboxChecksRetained": true,
+    "originalAccessTokenAndMfa300SecondLimitsUnchanged": true,
+    "allExistingAssignmentAtomicityAndOldWorkflowRecoveryAssertionsRetained": true
+  },
+  "nativeLocal": {
+    "tests": 191,
+    "pass": 1,
+    "fail": 0,
+    "skipped": 190,
+    "cancelled": 0,
+    "durationMilliseconds": 243409.714583,
+    "node": "20.20.2",
+    "postgres": "16.15 disposable native cluster",
+    "selectedTest": "^production gateway applies actual roleless company blueprint license origins"
+  },
+  "limits": [
+    "The selected native case is not the full two-case blueprint group or complete source CI.",
+    "Corrected repeated Linux validation is pending.",
+    "No personal production login or external provider acceptance was performed."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "fe6e4738ce0539cd4814392fab9a34582195cfacf7cf59436e0d14db3eff1ce6"
+  }
+}

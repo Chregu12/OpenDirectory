@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T09:09:23.565724+00:00",
+  "checkedAt": "2026-11-15T09:32:25.331318+00:00",
   "baseCommit": "2056c9bd4fcdf87e5d1e9f3228931bd41aa02714",
-  "status": "native-clock-oracle-fixed-and-locally-verified-linux-ci-pending",
+  "status": "activation-clock-oracle-locally-and-three-times-on-linux-verified-full-source-ci-pending",
   "productionTouched": false,
   "productionSourceChanged": false,
   "failure": {
@@ -53,5 +53,42 @@
   ],
   "sourceSha256": {
     "services/core/oauth-provider/src/__tests__/companyLicenseActivations.postgres.cjs": "569040ecd6ed6d0b22ef157ec32377dca610b518580bba5a7ebe737f20b521c8"
+  },
+  "nativeLinux": {
+    "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43698132789",
+    "diagnosticCommit": "40416c3ca24341e7442baa1ad9f9a56e25c6fac1",
+    "sameActivationTestAsMainCommit": "63791c6cf790284689507be0c80f3fc1082bf4dd",
+    "jobs": [
+      {
+        "id": 132763098311,
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "durationMilliseconds": 2586.388465
+      },
+      {
+        "id": 132763098484,
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "durationMilliseconds": 2492.450085
+      },
+      {
+        "id": 132763098563,
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "durationMilliseconds": 2920.880642
+      }
+    ]
+  },
+  "currentMainCi": {
+    "run": 43697861392,
+    "completedSuccessfulJobs": 9,
+    "pendingJobs": 1,
+    "checkedAt": "2026-11-15T09:32:25.331318+00:00"
   }
 }
