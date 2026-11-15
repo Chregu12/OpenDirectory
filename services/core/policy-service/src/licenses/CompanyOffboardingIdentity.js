@@ -10,7 +10,8 @@ class CompanyOffboardingIdentity {
   }
   async request(path, authorization, body = null) {
     if (typeof authorization !== 'string' || authorization.length > 16384 || !/^Bearer [A-Za-z0-9._~-]+$/u.test(authorization)) fail(401, 'Original offboarding bearer required');
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 5000);
+    // Durable account writes include independent commit checks; a short read timeout can lose their receipt.
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), body === null ? 5000 : 30000);
     try {
       const response = await this.fetchImpl(new URL(path, this.origin), { method: body === null ? 'GET' : 'POST',
         headers: { Authorization: authorization, Accept: 'application/json', ...(body === null ? {} : { 'Content-Type': 'application/json' }) },
