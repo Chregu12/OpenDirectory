@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-15T12:20:19.971413+00:00",
+  "checkedAt": "2026-11-15T12:26:03.114914+00:00",
   "baseCommit": "f88b301",
-  "status": "native-complete-group-verified-linux-pending",
+  "status": "complete-native-automation-group-verified-locally-and-in-three-linux-runs",
   "productionTouched": false,
   "productionCodeChanged": false,
   "failure": {
@@ -60,10 +60,52 @@
       "postgres": "16.15 actual disposable database"
     },
     "actionlint": "1.7.12 pass",
-    "diffCheck": "pass"
+    "diffCheck": "pass",
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43713406565",
+      "headCommit": "141ccaa4ec9fe996c7589f3606dcd767b3de33a7",
+      "sourceCommit": "8048cba1bf67d9e03ed74ca45ad26bf255e61321",
+      "sourceTreeDifference": "Only .github/workflows/ci.yml: manual diagnostic workflow; no product or fixture changes.",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 132809687533,
+          "tests": 22,
+          "pass": 22,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "firstAbandonedLeaseCaseMilliseconds": 46536.545032,
+          "fifthAbandonedLeaseCaseMilliseconds": 46682.620444,
+          "totalMilliseconds": 187715.387695
+        },
+        {
+          "id": 132809687657,
+          "tests": 22,
+          "pass": 22,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "firstAbandonedLeaseCaseMilliseconds": 46659.080272,
+          "fifthAbandonedLeaseCaseMilliseconds": 46723.403897,
+          "totalMilliseconds": 189682.825466
+        },
+        {
+          "id": 132809687683,
+          "tests": 22,
+          "pass": 22,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "firstAbandonedLeaseCaseMilliseconds": 46472.02337,
+          "fifthAbandonedLeaseCaseMilliseconds": 46573.715481,
+          "totalMilliseconds": 187344.091222
+        }
+      ]
+    }
   },
   "limits": [
-    "Three Linux repetitions and the complete latest-source CI are pending.",
+    "The complete latest-source CI remains pending: main source 8048cba run 43713327726 and scoped Device draft 02270eb run 43713602211. No complete-suite success is inferred from the three targeted automation groups.",
     "The deterministic before case reproduces the timing mechanism, not a captured CI admission trace.",
     "No personal production login, external provider acceptance or deployment was performed.",
     "The full original BR/WF objective remains open."
