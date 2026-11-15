@@ -17,8 +17,8 @@ class DeviceOuAuthority {
     this.inventory = new DeviceInventoryAuthority(database, options);
     this.directory = new DirectoryReader(database, options);
   }
-  async base(user, authorization, permission = 'devices.inventory.create') {
-    const source = await this.inventory.read(user, authorization);
+  async base(user, authorization, permission = 'devices.inventory.create', scoped = false) {
+    const source = await this.inventory[scoped?'readScoped':'read'](user, authorization);
     if (!source.permissions.includes(permission)) C.fail(403, 'Required tenant inventory duty unavailable');
     return source;
   }
@@ -56,9 +56,9 @@ class DeviceOuAuthority {
     if (!C.validProof(result, user)) C.fail(503, 'Original device OU proof unavailable');
     return result;
   }
-  async status(body, user, authorization) {
+  async status(body, user, authorization, scoped = false) {
     if (!C.exact(body, ['selection']) || body.selection !== null && !C.validReference(body.selection)) C.fail(400, 'Exact original OU reference required');
-    const selection = body.selection, inventory = await this.base(user, authorization, 'devices.inventory.read');
+    const selection = body.selection, inventory = await this.base(user, authorization, 'devices.inventory.read',scoped);
     const target = async () => {
       if (selection === null) return { currentOu: null, directoryGrant: null, validUntil: inventory.validUntil };
       return this.directory.read(['ous.read'], user, authorization, async (client, tenant, captured) => {
@@ -72,7 +72,7 @@ class DeviceOuAuthority {
       });
     };
     const captured = await target();
-    if (JSON.stringify(inventory) !== JSON.stringify(await this.base(user, authorization, 'devices.inventory.read')) || JSON.stringify(captured) !== JSON.stringify(await target())) C.fail(401, 'Original current OU or source changed');
+    if (JSON.stringify(inventory) !== JSON.stringify(await this.base(user, authorization, 'devices.inventory.read',scoped)) || JSON.stringify(captured) !== JSON.stringify(await target())) C.fail(401, 'Original current OU or source changed');
     const result = { schemaVersion: 1, deviceOuStatusProtocol: 1, inventory, selection, ...captured };
     if (!C.validStatusProof(result, user)) C.fail(503, 'Original current OU proof unavailable');
     return result;

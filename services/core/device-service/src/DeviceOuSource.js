@@ -5,8 +5,8 @@ const C = require('../../../../packages/device-ou-contract');
 const { inventorySourceMatches } = require('./InventoryAuthority');
 
 class DeviceOuSource {
-  constructor({ endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + '/api/identity/device-organizational-units', fetchImpl = (...args) => global.fetch(...args) } = {}) {
-    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl;
+  constructor({ scoped = false, endpoint = (process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001') + '/api/identity/device-organizational-units', fetchImpl = (...args) => global.fetch(...args) } = {}) {
+    this.endpoint = new URL(endpoint); this.fetchImpl = fetchImpl;this.scoped=scoped;
     if (!['http:', 'https:'].includes(this.endpoint.protocol) || this.endpoint.username || this.endpoint.password || this.endpoint.search || this.endpoint.hash || this.endpoint.pathname !== '/api/identity/device-organizational-units') throw new Error('Invalid device OU authority URL');
   }
   async request(authorization, user, method, values, status = false) {
@@ -16,12 +16,12 @@ class DeviceOuSource {
       const endpoint = new URL(this.endpoint);
       if (status) endpoint.pathname += '/status';
       if (method === 'GET') for (const [key, value] of Object.entries(values)) endpoint.searchParams.set(key, String(value));
-      const response = await this.fetchImpl(endpoint, { method, headers: { Authorization: authorization, Accept: 'application/json', ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+      const response = await this.fetchImpl(endpoint, { method, headers: { Authorization: authorization, Accept: 'application/json', ...(this.scoped&&status?{'X-OD-Device-Scope-Protocol':'1'}:{}),...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
         ...(method === 'POST' ? { body: JSON.stringify(values) } : {}), redirect: 'error', cache: 'no-store', signal: controller.signal });
       if ([400, 401, 403, 404, 428].includes(response.status)) C.fail(response.status, 'Device OU identity authority rejected the request');
       if (response.status !== 200 || !/^application\/json(?:;|$)/i.test(response.headers.get('content-type') || '')) throw new Error('Unconfirmed device OU authority');
       const chunks = []; let size = 0;
-      for await (const chunk of response.body) { size += chunk.length; if (size > 32768) throw new Error('Oversized device OU source'); chunks.push(Buffer.from(chunk)); }
+      for await (const chunk of response.body) { size += chunk.length; if (size > (this.scoped&&status?262144:32768)) throw new Error('Oversized device OU source'); chunks.push(Buffer.from(chunk)); }
       return JSON.parse(Buffer.concat(chunks).toString('utf8'));
     } catch (error) { if (error.status) throw error; C.fail(503, 'Device OU identity authority unavailable'); }
     finally { clearTimeout(timer); controller.abort(); }
@@ -42,7 +42,7 @@ class DeviceOuSource {
   async status(authorization, user, selection) {
     if (selection !== null && !C.validReference(selection)) C.fail(400, 'Exact original OU reference required');
     const result = await this.request(authorization, user, 'POST', { selection }, true);
-    if (!inventorySourceMatches(result?.inventory, user) || !C.validStatusProof(result, user)
+    if (!inventorySourceMatches(result?.inventory, user,null,false,this.scoped) || !C.validStatusProof(result, user)
       || (selection === null ? result.selection !== null : result.selection?.id !== selection.id || result.selection?.generation !== selection.generation)) C.fail(503, 'Original current OU source unavailable');
     return result;
   }

@@ -5,6 +5,7 @@ const { validUuid } = require('../../../../packages/identity-authorization-contr
 const C = require('../../../../packages/device-ou-contract');
 const { DeviceInventory } = require('./DeviceInventory');
 const { DeviceOuSource } = require('./DeviceOuSource');
+const Scope = require('./DeviceScope');
 const iso = value => new Date(value).toISOString();
 function assignment(row) {
   if (!row) return { revision: '0', ou: null, updatedAt: null, updatedBy: null };
@@ -13,7 +14,7 @@ function assignment(row) {
 }
 
 class DeviceOrganizationalUnits {
-  constructor(database, { inventory = new DeviceInventory(database), authority = new DeviceOuSource() } = {}) { this.database = database; this.inventory = inventory; this.authority = authority; }
+  constructor(database, { inventory = new DeviceInventory(database), authority = new DeviceOuSource({scoped:inventory.authority?.scoped === true}) } = {}) { this.database = database; this.inventory = inventory; this.authority = authority; }
   async receiving(client) { try { await client.query('SELECT device_ou_receiving()'); } catch (cause) { throw Object.assign(new Error('Device OU receiver unavailable'), { status: 503, cause }); } }
   async current(client, tenantId, deviceId) {
     const device = await this.inventory.current(client, tenantId, deviceId);
@@ -29,11 +30,12 @@ class DeviceOrganizationalUnits {
   async get(id, query, user, authorization) {
     C.identifier(id); if (Object.keys(query).length) C.fail(400, 'No device OU selectors');
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    let scope;
     const result = await this.database.transaction(async client => {
-      await this.receiving(client); const value = await this.current(client, source.tenant.id, id);
+      await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',id); const value = await this.current(client, source.tenant.id, id);scope=await Scope.pin(client,source,'devices.inventory.read',[id]);
       return { schemaVersion: 1, deviceOuProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, deviceId: id, ...value };
     }, { readOnly: true });
-    await this.inventory.checkpoint(source, user, authorization); return result;
+    await this.inventory.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
   async write(id, body, expected, user, authorization, correlationId) {
     C.identifier(id); const values = C.input(body), versions = C.expected(expected, id);
@@ -56,7 +58,7 @@ class DeviceOrganizationalUnits {
   async status(id, query, expected, user, authorization) {
     C.identifier(id); C.expected(expected, id); if (Object.keys(query).length) C.fail(400, 'No current OU selectors');
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
-    const snapshot = async () => this.database.transaction(async client => { await this.receiving(client); return this.current(client, source.tenant.id, id); }, { readOnly: true });
+    const snapshot = async () => this.database.transaction(async client => { await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',id); return this.current(client, source.tenant.id, id); }, { readOnly: true });
     const original = await snapshot();
     if (C.etag(id, original.deviceRevision, original.revision) !== expected) C.fail(412, 'Original device OU assignment changed');
     const selection = original.ou ? { id: original.ou.id, generation: original.ou.generation } : null;
@@ -79,15 +81,16 @@ class DeviceOrganizationalUnits {
   async history(id, query, user, authorization) {
     C.identifier(id); const selected = C.page(query);
     const source = await this.inventory.authorized(user, authorization, 'devices.inventory.read');
+    let scope;
     const result = await this.database.transaction(async client => {
-      await this.receiving(client); await this.inventory.current(client, source.tenant.id, id);
+      await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',id); await this.inventory.current(client, source.tenant.id, id);scope=await Scope.pin(client,source,'devices.inventory.read',[id]);
       const total = Number((await client.query('SELECT count(*) AS count FROM device_ou_events WHERE tenant_id=$1 AND device_id=$2', [source.tenant.id, id])).rows[0].count);
       const rows = (await client.query('SELECT event.*,outbox.status AS delivery_status FROM device_ou_events event LEFT JOIN device_ou_outbox outbox ON outbox.id=event.id AND outbox.tenant_id=event.tenant_id WHERE event.tenant_id=$1 AND event.device_id=$2 ORDER BY event.created_at DESC,event.id DESC LIMIT 25 OFFSET $3', [source.tenant.id, id, (selected.page - 1) * 25])).rows;
       if (rows.some(row => row.delivery_status !== 'pending')) C.fail(503, 'Retained device OU history unavailable');
       return { schemaVersion: 1, deviceOuProtocol: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, deviceId: id, page: selected.page, limit: 25, total,
         events: rows.map(row => ({ id: row.id, actorUserId: row.actor_user_id, correlationId: row.correlation_id, reason: row.reason, createdAt: iso(row.created_at), before: row.before_state ? assignment(row.before_state) : null, after: assignment(row.after_state), deliveryStatus: 'pending' })) };
     }, { readOnly: true });
-    await this.inventory.checkpoint(source, user, authorization); return result;
+    await this.inventory.checkpoint(source, user, authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope); return result;
   }
 }
 module.exports = { DeviceOrganizationalUnits };

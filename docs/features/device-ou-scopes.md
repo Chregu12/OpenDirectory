@@ -1,6 +1,6 @@
 # Geräte-OU-Scopes (in Arbeit)
 
-Dieser Zweig ergänzt den eigenen Rollen-/PIM-Kern um den ausdrücklich getrennten Scope `device-ou`. Die Erweiterung ist noch nicht produktiv und erfüllt die Geräte-Capability noch nicht vollständig. Bestehende Device-Empfänger akzeptieren ausschließlich tenantweite Quellen und lehnen die neuen begrenzten Quellen ab. Die Oberfläche bietet noch keine Geräte-OU-Vergabe an.
+Dieser Zweig ergänzt den eigenen Rollen-/PIM-Kern um den ausdrücklich getrennten Scope `device-ou`. Die Erweiterung ist noch nicht produktiv und erfüllt die Geräte-Capability noch nicht vollständig. Die Standardkonfiguration behält die bisherigen tenantweiten Quellen. Ausdrücklich aktualisierte private Lese-Empfänger können die neue begrenzte Quelle unabhängig prüfen; die Standard-Device-Instanz aktiviert diesen Modus noch nicht. Die Oberfläche bietet noch keine Geräte-OU-Vergabe an.
 
 `tenant` behält die bisherige Wirkung. `ou` bleibt auf die drei bisherigen Benutzeraktionen begrenzt. `device-ou` bindet die ursprüngliche eigene OU samt Eigentümergeneration und darf ausschließlich `devices.inventory.read`, `devices.inventory.create`, `devices.inventory.assign` und `devices.compliance.read` enthalten. Benutzeraktionen, gemischte Verzeichnisrollen und die tenantweite Compliance-Richtlinienverwaltung sind ausgeschlossen. Bestehende tenantweite Pflichten bleiben unabhängig wirksam; eine zusätzliche begrenzte Quelle darf sie weder erweitern noch entziehen.
 
@@ -8,13 +8,12 @@ Migration `062_device_ou_scopes.sql` erweitert die bestehenden Grant-/Eligibilit
 
 Eine neue Mitgliedschaft oder ersetzte OU-Generation rettet keine alte Aktivierung oder Vergabe. Verschobene Unter-OUs folgen der aktuellen Hierarchie. Die Migration aktualisiert nur die tatsächlich geänderten, bereits versiegelten Funktionsnachweise und überprüft den vollständigen Rollenempfänger am Ende. Sie vergibt selbst keine Rollen und ändert keine vorhandenen Grants oder PIM-Anträge. Der additive vollständige Migrationslauf muss die vorhandenen Belege erhalten.
 
-Der API-Vertrag 1.42.0 unterscheidet den neuen Scope in direkter Vergabe, Eligibility und Genehmigungsantrag. Ein gültiger Grant oder eine PIM-Aktivierung allein ist noch kein gerätebezogener Berechtigungsnachweis.
+Der API-Vertrag 1.43.0 unterscheidet den neuen Scope in direkter Vergabe, Eligibility und Genehmigungsantrag. Der private Header `X-OD-Device-Scope-Protocol: 1` ermöglicht eine Quelle mit `schemaVersion: 2`, aktueller eigener Hierarchie und ursprünglichen Grant-/PIM-Belegen. Alte Empfänger lehnen diese Quelle ab. Eine mitgesendete Geräte-/Zuordnungsversion ist nur eine angeforderte Bindung: Identity bestätigt damit keine Daten aus der getrennten Device-Datenbank. Ein gültiger Grant oder eine PIM-Aktivierung allein ist noch kein gerätebezogener Schreibnachweis.
+
+Im ausdrücklich aktivierten Lesemodus werden tatsächliche lokale OU-Zuordnungen und Generationen bei Bestandslisten, Zählungen, Suche, Filtern, CSV, Einzelgeräten und Historien geprüft. Agent-/Hardware-, Compliance-, Sync- und allgemeine Rückgabeansichten nutzen dieselbe Begrenzung. Die aktuelle OU-Metadatenabfrage benötigt zusätzlich unabhängig `ous.read`. Lokale Zuordnungen werden nach der abschließenden Identity-Prüfung erneut gelesen; späte Umordnungen führen zu 412. Unzugeordnete Geräte bleiben ohne tenantweites Recht verborgen. Reine OU-Compliance-Leser erhalten keine tenantweiten Richtlinienansichten. Ursprüngliche tenantweite Rechte bleiben unabhängig erhalten. Private Offboarding-Elternquellen und sämtliche Schreibbelege bleiben noch im bisherigen Protokoll.
 
 Vor einer Freigabe müssen folgende Teile zusammen fertig sein:
 
-- Ursprüngliche menschliche Identity-Quelle mit aktueller OU-Generation, Hierarchie, Deadline und einer explizit versionierten Device-Empfangsgrenze.
-- Tatsächliche lokale Geräte-/OU-Zuordnung und Version bei Listen, Zählungen, Filtern, CSV, Einzelgeräten und sämtlichen erhaltenen Gerätehistorien.
-- Dieselbe Begrenzung bei Agent-, Hardware-, Compliance-, Synchronisierungs- und Rückgabeansichten.
 - Gerätebezogene ursprüngliche Schreibbelege und physische SQL-Commit-Prüfungen für Änderungen, Zuweisung/Freigabe, Agent-/Sync-Verwaltung und Rückgabeentscheidungen; tenantweite Neuerfassung und Richtlinienänderung benötigen weiterhin eine entsprechende tenantweite Pflicht.
 - Unabhängige Begrenzung von Änderungen der Geräte-OU selbst und überprüfte dienstübergreifende Verschiebungs-/Löschabhängigkeiten.
 - Firmenrollen-/PIM-Oberfläche mit verständlicher Scope-Auswahl, tatsächlichen gerätebezogenen Rechten, Ablauf/Sitzungsverlust und ehrlichen Teilfehlern.
@@ -23,3 +22,5 @@ Vor einer Freigabe müssen folgende Teile zusammen fertig sein:
 Die fünfminütige ursprüngliche Geräte-MFA-Frische bleibt verbindlich. Getrennte Identity-/Device-Datenbanken liefern weiterhin keine augenblickliche verteilte Widerrufsgarantie. Gerätegruppenscopes und die weiteren Anforderungen des [Gesamtauftrags](../implementation-worklist.md) bleiben offen.
 
 Der [lokale Kern-Prüfbericht](../testing/device-ou-scope-kernel-2026-11-15.json) belegt 62 tatsächliche PostgreSQL-Fälle, 1’288 Identity-Unit-Fälle und sieben Policy-API-Prüfungen. Diese Nachweise ersetzen die oben noch offenen Device-/UI-/Rollout-Prüfungen nicht.
+
+Der [lokale Quellen-/Lese-Prüfbericht](../testing/device-ou-scope-reads-2026-11-15.json) ergänzt den Kernnachweis: 76 tatsächliche PostgreSQL-Rollen-/PIM-Fälle einschließlich 14 neuer Quellen-/Lesefälle, 100 bisherige native Geräte-/Rückgabefälle, 708 Geräte-Unit-Fälle und 1’288 Identity-Unit-Fälle. Vollständige Linux-CI für diesen Quellenstand, schreibende SQL-Grenzen, Oberfläche und Rollout bleiben offen.

@@ -175,8 +175,8 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 app.get('/api/identity/device-inventory', asyncRoute(async (req, res) => {
-  if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact inventory source request required' });
-  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority.read(req.user, req.headers.authorization));
+  if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact inventory source request required' });
+  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority[req.headers['x-od-device-scope-protocol'] === '1'?'readScoped':'read'](req.user, req.headers.authorization));
 }));
 app.get('/api/identity/device-organizational-units', asyncRoute(async (req, res) => {
   if (Array.isArray(req.body) || Object.keys(req.body || {}).length || req.headers['x-api-key'] !== undefined) return res.status(400).json({ error: 'Exact device OU request required' });
@@ -187,16 +187,16 @@ app.post('/api/identity/device-organizational-units', asyncRoute(async (req, res
   res.set('Cache-Control', 'no-store').json(await deviceOuAuthority.resolve(req.body, req.user, req.headers.authorization));
 }));
 app.post('/api/identity/device-organizational-units/status', asyncRoute(async (req, res) => {
-  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined) return res.status(400).json({ error: 'Exact current OU request required' });
-  res.set('Cache-Control', 'no-store').json(await deviceOuAuthority.status(req.body, req.user, req.headers.authorization));
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact current OU request required' });
+  res.set('Cache-Control', 'no-store').json(await deviceOuAuthority.status(req.body, req.user, req.headers.authorization,req.headers['x-od-device-scope-protocol'] === '1'));
 }));
 app.get('/api/identity/device-compliance', asyncRoute(async (req, res) => {
-  if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact compliance source request required' });
-  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority.read(req.user, req.headers.authorization, null, true));
+  if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact compliance source request required' });
+  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority[req.headers['x-od-device-scope-protocol'] === '1'?'readScoped':'read'](req.user, req.headers.authorization, null, true));
 }));
 app.post('/api/identity/device-inventory', asyncRoute(async (req, res) => {
-  if (Object.keys(req.query).length || req.headers['x-api-key']) return res.status(400).json({ error: 'Exact inventory source request required' });
-  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority.read(req.user, req.headers.authorization, req.body));
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact inventory source request required' });
+  res.set('Cache-Control', 'no-store').json(await deviceInventoryAuthority[req.headers['x-od-device-scope-protocol'] === '1'?'readScoped':'read'](req.user, req.headers.authorization, req.body));
 }));
 app.post('/api/identity/device-offboarding', asyncRoute(async (req, res) => {
   res.set('Cache-Control', 'no-store');
