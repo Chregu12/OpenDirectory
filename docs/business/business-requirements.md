@@ -1,6 +1,16 @@
 # Business Requirements
 
-Quelle: Apple-Business-Master-Prompt des Auftraggebers vom 19. Oktober 2026. Alle folgenden Bereiche bleiben Teil des Auftrags. Die Priorität bestimmt die Umsetzung, nicht den Ausschluss späterer Anforderungen.
+## Aktuelles Produktziel
+
+Aktualisiert am 15. November 2026 auf ausdrücklichen Wunsch des Auftraggebers: OpenDirectory erhält die wichtigsten Funktionen für Identitäten, Zugriffsrechte, Geräte und Lizenzen in der vorhandenen Oberfläche. Microsoft Entra dient als Orientierung für verständliche Bedienung und PIM. Eine vollständige Funktions- oder Designkopie ist kein Abnahmeziel.
+
+Der verbindliche Kernumfang und seine Abnahme stehen in der [Umsetzungsliste](../implementation-worklist.md#verbindlicher-kernumfang). Dieser Umfang ersetzt die frühere Vorgabe, sämtliche BR-001–012 und WF-001–005 vor Abschluss des Ziels umzusetzen. Die folgenden ursprünglichen Anforderungen bleiben als Referenz und späteres Backlog erhalten. Sie erweitern den aktuellen Auftrag nicht automatisch.
+
+Zum Kern gehören Anmeldung/MFA und Sitzungen, Benutzer/Gruppen/OUs, Rollen und protokollierte PIM-Aktivierungen, Geräteinventar mit Agent und Zuweisungen, Apps/Lizenzpools, eine übersichtliche Oberfläche sowie ein getesteter Betrieb mit Harbor-Deployment. Sicherheit, Mandantentrennung und nachvollziehbare Fehler bleiben für alle umgesetzten Funktionen verbindlich. Zusätzliche Anbieter und Ausbaustufen werden nach Nutzen ausgewählt.
+
+## Ursprünglicher Anforderungskatalog / späteres Backlog
+
+Quelle: Apple-Business-Master-Prompt des Auftraggebers vom 19. Oktober 2026. Die Prioritäten in dieser Tabelle stammen aus dem ursprünglichen Gesamtauftrag; für die aktuelle Umsetzung gilt der oben verlinkte Kernumfang.
 
 | ID | Bereich und Ziel | Priorität | Anforderungsumfang |
 | --- | --- | --- | --- |
@@ -47,7 +57,7 @@ Die Story [Geräterückgabe beim Austritt](../features/device-returns.md) verbin
 
 Zielwerte, keine gemessenen Zusagen: P95 normaler Lesezugriffe unter 500 ms, mindestens 1'000 Tenants, grosse Tenants mit 10'000 Benutzern, insgesamt 100'000 Geräte und 99,9 % Kernverfügbarkeit. Vor entsprechenden Aussagen sind Last-, Ausfall- und Wiederherstellungstests erforderlich. Server-Pagination, asynchrone Exporte/Jobs, Readiness, Monitoring, strukturierte Logs, Secrets und reproduzierbare Migrationen gehören zum Umfang.
 
-Die UI benötigt deutsche/englische Texte, responsive Desktop-/Tablet-Bedienung, Tastaturzugriff, Dark Mode und WCAG 2.2 AA als Ziel. Navigation: Dashboard, Organisation, Personen/Gruppen, Geräte, Blueprints, Apps, Standorte, Marketing, Analytics, Abonnements, Support, Integrationen, Einstellungen. Keine sichtbare Aktion ohne funktionsfähigen, autorisierten Backend-Prozess.
+Die UI benötigt deutsche/englische Texte, responsive Desktop-/Tablet-Bedienung, Tastaturzugriff, Dark Mode und WCAG 2.2 AA als Ziel. Die Navigation zeigt die tatsächlich unterstützten Kernbereiche. Die ursprünglich geplanten zusätzlichen Bereiche wie Marketing, Billing und Support gehören zum späteren Backlog. Keine sichtbare Aktion ohne funktionsfähigen, autorisierten Backend-Prozess.
 
 ## Definition of Done
 

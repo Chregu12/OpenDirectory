@@ -1,8 +1,34 @@
-# Vollständiger Umsetzungsauftrag
+# OpenDirectory: wichtigste Funktionen
 
-Auftrag vom 22. Oktober 2026: sämtliche in der Bestandsaufnahme genannten fehlenden Funktionen umsetzen. Grundlage sind zusätzlich die unveränderten BR-001–012 und WF-001–005 in `business/business-requirements.md`. Die Reihenfolge verkleinert den Auftrag nicht. Der Gesamtauftrag bleibt offen, bis Code, erreichbare APIs, Berechtigung, Oberfläche, Fehler-/Recovery-Verhalten, Tests und Dokumentation für alle Punkte nachgewiesen sind.
+## Aktuelles Ziel
 
-| Bereich | Verbindlicher Restumfang | Stand |
+**Eine alltagstaugliche OpenDirectory-Verwaltung in der vorhandenen GUI: Die wichtigsten Identitäts-, PIM-, Geräte- und Lizenzabläufe funktionieren durchgängig, sind nachvollziehbar protokolliert und können zuverlässig über Harbor bereitgestellt werden.**
+
+Umfangsänderung des Auftraggebers vom 15. November 2026: Entra ist eine Orientierung für einfache Bedienung und PIM; eine 1:1-Kopie wird nicht gebaut. Dieser Kernumfang ersetzt den früheren vollständigen Umsetzungsauftrag vom 22. Oktober 2026. Die Umsetzung benötigt nicht sämtliche Funktionen aus BR-001–012/WF-001–005.
+
+## Verbindlicher Kernumfang
+
+| Reihenfolge | Bereich | Abnahme am tatsächlichen Benutzerablauf |
+| --- | --- | --- |
+| 1 | Anmeldung und Zugriff | Lokale Anmeldung, MFA, Sitzungen/Abmeldung und vorhandenes OIDC-SSO funktionieren. Fehlende App-Zuweisung, abgelaufene Anmeldung und Anmeldesperre werden verständlich angezeigt. Serverseitige Rechte und Mandantentrennung gelten bei jedem Zugriff. |
+| 2 | Benutzer, Gruppen und Rollen | Berechtigte Administratoren können eigene Benutzer, Gruppen und OUs verwalten und bestehende oder eigene Rollen zuweisen/entziehen. Änderungen wirken auf die tatsächlichen Zugriffsrechte und erscheinen im Audit. |
+| 3 | PIM | Berechtigungen für getrennte Aufgaben wie Engineering oder Lizenzen lassen sich Benutzern bzw. geschützten Gruppen zuweisen und einfach befristet aktivieren, gemäss Richtlinie bis zehn Stunden. Genehmigung, Ablauf, Entzug und Aktivierungsgrund sind sichtbar und protokolliert. Eine ausdrücklich vergebene Global-Security-Rolle deckt die administrativen Kernaufgaben ab; ihre Vergabe und Nutzung bleiben nachvollziehbar. |
+| 4 | Geräte | Inventar erfassen/suchen/filtern, Details lesen, Benutzer zuweisen, Rückgabe bearbeiten und den vorhandenen Rust-Agent registrieren/widerrufen. Kontaktstatus, Hardware, bestehende Compliance-Prüfungen und Synchronisierung zeigen tatsächliche Ergebnisse. Unterstützte Aktionen sind in der GUI erreichbar. |
+| 5 | Apps und Lizenzen | Eigene Apps und Lizenzpools verwalten, Plätze Benutzern/Gruppen zuweisen und wieder freigeben; Bestand, Herkunft und Fehler nachvollziehen. Zunächst einen ausgewählten Lizenzanbieter mit echten Testzugängen durchgängig anbinden; weitere Anbieter sind optionale Ausbaustufen. |
+| 6 | Oberfläche und Audit | Eine ruhige, konsistente Navigation und ein Dashboard mit tatsächlichen Kennzahlen, eigenen aktivierbaren PIM-Rollen und relevanter Historie. Laden, leere Daten, fehlende Rechte und Teilfehler haben verständliche Zustände. |
+| 7 | Betrieb | Relevante CI- und Workflowfehler beheben, erforderliche Tests bestehen, Images reproduzierbar bauen, über Harbor bereitstellen und die Kernabläufe nach dem Deployment prüfen. Migrationen, Sicherung und Wiederherstellung sind für den ausgelieferten Stand dokumentiert und geprüft. |
+
+Die Reihenfolge priorisiert nutzbare Abläufe; notwendige Abhängigkeiten werden mit umgesetzt. Angefangene Erweiterungen werden nur weitergeführt, soweit sie für diesen Kern nötig sind. Unfertige Erweiterungen bleiben isoliert und werden nicht allein wegen bereits investierter Arbeit zum Pflichtumfang. Sicherheits- und Integritätsfehler in ausgelieferten Funktionen bleiben zu beheben.
+
+**Fertig bedeutet:** Für jede Kernfunktion gibt es eine erreichbare Oberfläche, funktionierende API/Business Logic, wirksame Autorisierung, sichtbare Erfolgs-/Fehlerzustände, erforderliche Audit-Belege, angemessene erfolgreiche Tests und Dokumentation. Die wesentlichen Abläufe sind auf dem bereitgestellten Stand geprüft. Ein privater Backend-Baustein oder ein Mockup allein schliesst keine Funktion ab. Benötigte externe Testzugänge und physische Geräte werden konkret benannt; eine ausstehende Live-Abnahme wird nicht als Erfolg ausgegeben.
+
+## Späteres Backlog
+
+Nicht Voraussetzung für den Abschluss dieses Ziels sind eine vollständige Entra-Parität, sämtliche Authentifizierungs-/Lizenzanbieter, allgemeines SCIM, umfassende Conditional-Access-/Governance-Prozesse, vollständiges MDM mit Remote-Wipe/Lock, Blueprint-Deployment/Drift, Mail-/Kalender-Provisionierung, Standorte, Marketing, Billing und Support/ITSM. Diese Bereiche werden nur mit einer neuen konkreten Priorisierung Teil der Umsetzung. Die begrenzten Eintritts-/Austrittsaktionen des Kerns bleiben enthalten; ein vollständiger unternehmensweiter JML-Prozess ist eine spätere Ausbaustufe.
+
+Die folgende Bestandsaufnahme bleibt als Historie und Planungshilfe erhalten. Ihre offenen Punkte erweitern den oben festgelegten Kernumfang nicht. Die dort genannte Gesamtabnahme aller BR/WF ist keine aktuelle Abschlussbedingung.
+
+| Bereich | Bisher erfasster Umfang | Stand |
 | --- | --- | --- |
 | App-Automation | Eigene widerrufbare App-Schreibdelegation; persistente Jobs, Zeitplanung, Wiederholungen, Dead Letter und Historie; Lizenzabgleich ohne offene Eigentümersitzung | Teil umgesetzt: eigene explizite App-Freigaben, persistente Export-, Gruppenregel- und Lizenzgruppenjobs/-Zeitpläne, Worker-Leases, Backoff, fünf Versuche, wiederaufnehmbare Seiten, Teilresultate, Historie und UI/CLI. [Eigene tenantgebundene vertrauliche App-Konten](features/company-apps.md) mit separater Aktivierung, Rotation, Archiv/Historie und ursprünglicher Tenantbindung sind umgesetzt. Offen: weitere Schreib-/Providerhandler, eigene Web-/Public-/weitere App-Typen/Scopes und delegierte Firmenrollen |
 | Gruppen/Lizenzen | Dynamische und verschachtelte Gruppen; externe Änderungsereignisse; automatischer Abgleich bei freiem Bestand; Quellen-/Kapazitäts-/Review-Regeln erhalten | Teil umgesetzt: normale Gruppen-/Pool-Verknüpfungen, tatsächliche Attribut-/Untergruppenregeln mit explizitem kanonischem UI-/Skript-Abgleich und Herkunft/Review, sowie zeitgesteuerter und [quellenabhängiger Gruppenregel-/Lizenz-App-Abgleich](features/company-automation-changes.md), einschliesslich neuer Materialisierung, Sitzrückgabe und Wiederabgleich bei geändertem freien Bestand. Aktuelle Identity-Quellenprüfung und geerbte Review-Fristen sperren alte ungültige Regel-Links vor der Bereinigung. Offen: generische Ereigniszustellung, dienstübergreifende Cache-Invalidierung und externe Änderungsereignisse |
