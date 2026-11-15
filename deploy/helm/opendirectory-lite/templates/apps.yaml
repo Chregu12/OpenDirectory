@@ -160,7 +160,7 @@ spec:
         {{- if $app.mountFiles }}
         - name: credentials-source
           secret:
-            secretName: {{ $root.Values.secrets.filesName }}
+            secretName: {{ $app.filesSecretName | default $root.Values.secrets.filesName }}
             defaultMode: 0400
         - name: credentials
           emptyDir: {}

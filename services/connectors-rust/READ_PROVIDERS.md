@@ -59,6 +59,49 @@ assigns or removes no licenses. Existing manufacturer fulfillment remains a
 separate platform-catalog workflow. Company-owned pools remain local, and this
 probe does not connect them to cloud assignments.
 
+### Show the selected company's Microsoft stock in the GUI
+
+In **Apps & Lizenzen** (`/applications`), open **Microsoft 365 · Anbieterbestand**
+and select **Verbindung prüfen**. The API uses the same current company-license
+authority as the local inventory, verifies it after the read, and returns the
+actor and OpenDirectory company binding with the observation. A provider failure
+clears old vendor rows and leaves the independent local inventory available.
+An expired or revoked company source clears the license view's access as well.
+
+This first GUI reader supports one explicitly selected OpenDirectory company
+per Policy-service deployment. The OpenDirectory company UUID is separate from
+the Microsoft tenant UUID inside the protected JSON. Other companies receive
+`not_configured` without reading the file or calling Microsoft. Configure both:
+
+```yaml
+apps:
+  policy-service:
+    mountFiles: true
+    mountFilesUID: 100
+    filesSecretName: opendirectory-company-microsoft
+    env:
+      LICENSE_COMPANY_PROVIDER_TENANT_ID: YOUR-OPENDIRECTORY-COMPANY-UUID
+      LICENSE_COMPANY_PROVIDER_CONFIG_FILE: /run/opendirectory/company-microsoft-read.json
+```
+
+Obtain the OpenDirectory company UUID from the authorized
+`GET /api/licenses/company/capabilities` response; do not substitute the Microsoft
+directory ID. Have the operator create the dedicated Kubernetes Secret
+`opendirectory-company-microsoft` with only the `company-microsoft-read.json`
+file described above. Keep the source file outside Git/chat. The existing init
+container copies it into an owner-only regular file for Policy's UID 100.
+The app-specific `filesSecretName` keeps this credential out of the shared OAuth
+and Web credential Secret. It defaults to the existing shared name for other
+deployments, so existing manifests are unchanged unless explicitly configured.
+
+Enable this only with Web and Policy images built from the GUI-reader revision;
+the earlier one-off probe image does not include this API. No provider connection
+has been configured in production by this change. There is no automatic polling
+or retry, local pool import, user mapping or cloud assignment. The display shows
+the returned SKU states, all four prepaid-unit counters and consumption without
+turning them into locally allocated seats. A configuration changed during the
+read invalidates that observation.
+
 ## Google Workspace
 
 1. Enable the Enterprise License Manager API in the Google Cloud project.

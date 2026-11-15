@@ -221,7 +221,8 @@ before(async () => {
   identityServer = require('../../../identity-service/src').listen(Number(new URL(identityBase).port), '127.0.0.1'); await serverBase(identityServer);
   inventoryFixture=await require('../../../../../scripts/lib/device-inventory-fixture.cjs').deviceInventoryFixture(process.env.OAUTH_TEST_DATABASE_URL,identityBase);
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
-  Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase });
+  Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase,
+    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'' });
   policyDb=require('../../../policy-service/src/db/postgres');
   for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|030)_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
@@ -1739,6 +1740,13 @@ test('real company registration UI persists one disabled tenant and candidate th
     const companyLicenseAccessResponse = await checkingCompanyLicenseAccess; assert.equal(companyLicenseAccessResponse.status(), 200, await companyLicenseAccessResponse.text());
     assert.deepEqual(await companyLicenseAccessResponse.json(), { schemaVersion: 1, companyLicenseProtocol: 1, actorUserId: receipt.administratorId, tenantId: receipt.tenantId,
       permissions: ['company.apps.read', 'company.apps.create', 'company.apps.assign'], allocationMode: 'local-only', supportedTargets: ['user'] });
+    await page.getByText('Microsoft 365 · Anbieterbestand', { exact: true }).click();
+    const checkingCompanyProvider = page.waitForResponse(response => new URL(response.url()).pathname === companyRoute + '/provider' && response.request().method() === 'GET');
+    await page.getByRole('region', { name: 'Microsoft-365-Verbindung', exact: true }).getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
+    const companyProviderResponse = await checkingCompanyProvider; assert.equal(companyProviderResponse.status(), 200, await companyProviderResponse.text());
+    assert.deepEqual(await companyProviderResponse.json(), { schemaVersion: 1, companyLicenseProviderProtocol: 1, actorUserId: receipt.administratorId, tenantId: receipt.tenantId, provider: 'microsoft-365', state: 'not_configured' });
+    assert.equal(companyProviderResponse.headers()['cache-control'], 'no-store');
+    await page.getByText('Für diese Firma ist noch keine Microsoft-365-Verbindung eingerichtet.', { exact: true }).waitFor();
     await page.getByText('Lokaler Bestand und Wirkung von Zuweisungen', { exact: true }).click(); await page.getByText(/Keine Cloud-Zuweisung, Installation, SSO-Einrichtung oder Abrechnung/).waitFor();
     await page.getByRole('button', { name: 'Lizenzpool erstellen', exact: true }).click();
     const poolDialog = page.getByRole('alertdialog', { name: 'Lizenzpool erstellen', exact: true });

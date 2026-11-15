@@ -1,0 +1,86 @@
+{
+  "checkedAt": "2026-11-15T19:07:45.270877+00:00",
+  "baseCommit": "19025ce6c5bb7657cd72e90cd05134708313e378",
+  "feature": "Own-company Microsoft 365 provider stock in /applications",
+  "api": "GET /api/licenses/company/provider",
+  "checks": {
+    "policyUnit": {
+      "status": "passed",
+      "tests": 1502,
+      "suites": 47,
+      "seconds": 25.586,
+      "newProviderCases": 13
+    },
+    "frontendUnit": {
+      "status": "passed",
+      "tests": 3256,
+      "suites": 161,
+      "seconds": 96.315,
+      "newProviderCases": 16
+    },
+    "finalTargetedFrontend": {
+      "status": "passed",
+      "tests": 82,
+      "suites": 2,
+      "seconds": 11.346
+    },
+    "frontendBrowser": {
+      "status": "passed",
+      "tests": 112,
+      "retries": 0,
+      "reportedDuration": "2.2m",
+      "backend": "Explicit local API fixtures.",
+      "newProviderCases": 2,
+      "initialSelectorCorrection": "The first full run had 111 passes and one strict-locator failure because the authentication alert and Next route announcer both have role=alert. The assertion now targets the alert containing the expected authentication message. All assertions retained; final full run passes."
+    },
+    "productionBuild": {
+      "status": "passed",
+      "typescriptSeconds": 14.8,
+      "subsequentProductionBuild": "The final native signed-browser fixture also compiles the final UI source."
+    },
+    "signedNativeBrowser": {
+      "command": "node -e 'require(\"./scripts/lib/run-postgres-tests\").runPostgresTests({files:[\"--test-name-pattern=^real company registration UI persists\",\"services/core/oauth-provider/src/__tests__/browser.postgres.cjs\"],environmentVariable:\"OAUTH_TEST_DATABASE_URL\",label:\"company-provider-browser\"}).catch(error=>{console.error(error.message);process.exitCode=1})'",
+      "status": "passed",
+      "tests": 1,
+      "failed": 0,
+      "durationMilliseconds": 323665.967167,
+      "browser": "Actual Chrome 157.0.8103.78",
+      "services": "Disposable actual PostgreSQL, Identity, authentication, OAuth, Policy, devices, gateway and production-built Next.js.",
+      "assertions": "The original complete registration/owner/offboarding case plus an actual provider-button GET. Its HTTP 200 response is strictly bound to the real administrator/company, Cache-Control is no-store, and the GUI displays not_configured. Test setup explicitly blanks both provider environment settings to prevent cloud access."
+    },
+    "helm": {
+      "defaultResourceBodiesUnchanged": 28,
+      "configuredChangeOnly": "opendirectory-policy-service",
+      "dedicatedSecretSelected": true,
+      "copiedFileOwnerUid": 100,
+      "unconfiguredProductionResourceBodiesUnchanged": 49,
+      "productionWritePerformed": false
+    },
+    "syntaxAndDiff": "node --check for changed server/fixture JavaScript and git diff --check passed",
+    "screenshots": "Inspected actual desktop/mobile browser captures. Provider stock uses responsive counters; at 390px there is no horizontal page overflow."
+  },
+  "authority": [
+    "Reuses CompanyLicenses.read with actual company source and receiving check; the existing before/after source checks are retained.",
+    "Another OpenDirectory company receives not_configured without protected-file access or any vendor call.",
+    "Exact operator binding and protected read configuration are required; changed credentials/configuration invalidate an in-flight observation.",
+    "Bounded Graph failures expose stable codes and optional Retry-After only. Company source denial clears local view access; independent cloud failures clear old cloud rows without destroying local pools.",
+    "HEAD, GET bodies, API keys and query selectors cannot invoke the new reader.",
+    "Stale, cross-actor, cross-company, malformed or post-session-change frontend responses cannot restore old products."
+  ],
+  "sourceSha256": {
+    "services/core/policy-service/src/licenses/CompanyLicenseProvider.js": "7513b327e58d61d1c16b25615c451df9a85ad375df2a1c63752ad489c1a4f5bd",
+    "services/core/policy-service/src/licenses/companyRoutes.js": "fd4a9f461fb87eafb4b8aa6c87143a72a0d0cad2661f6c516814a17e32a000ef",
+    "frontend/web-app/src/components/views/CompanyApplicationsView.tsx": "8175a5c892f53393e6bef296fcc54ba4da978bc72430c637ecca5db9e7b3c7ef",
+    "frontend/web-app/src/components/views/CompanyLicenseProviderPanel.tsx": "2eeae343c458282c2ca908afe098925753d658cb1423af0ff45d5a8efd48c3c9",
+    "frontend/web-app/src/lib/companyLicenseProvider.ts": "b70f6a67726511869a5ce0d429274eb53b966f6d35b986ee9f0a726997ec224e",
+    "deploy/helm/opendirectory-lite/templates/apps.yaml": "ba89f9b263c0bac84cd9bd8d879c64a16e0c9372838500421e0b209aa06d1353"
+  },
+  "limits": [
+    "No real Microsoft tenant credential or successful external Microsoft acceptance was used. Connected/error UI states use fixtures; the actual signed-service journey proves the unconfigured state.",
+    "This initial operator configuration selects one OpenDirectory company per Policy deployment.",
+    "No company-pool cloud assignment, mapping, local import, automatic polling or database migration was added.",
+    "The earlier published probe-microsoft-681e387 image does not contain the new GUI API. Matching new Web and Policy images and complete source CI are still required before rollout.",
+    "No production resources, users, grants, PIM activations or provider connections were changed.",
+    "A personal production browser is unavailable; personal production login is not claimed."
+  ]
+}
