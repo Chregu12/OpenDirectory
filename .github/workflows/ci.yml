@@ -1,14 +1,14 @@
 # Diagnostic branch only: do not merge this workflow replacement into main.
-name: Scoped device OU metadata regression diagnostic
+name: Replacement return request budget diagnostic
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   automation:
-    name: Actual scoped device OU metadata group (${{ matrix.attempt }})
+    name: Actual signed return replacement budget (${{ matrix.attempt }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -27,26 +27,27 @@ jobs:
           --health-cmd "pg_isready -U automation_test -d automation_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      OAUTH_TEST_DATABASE_URL: postgres://automation_test:disposable_test_password@127.0.0.1:5432/automation_test
       IDENTITY_TEST_DATABASE_URL: postgres://automation_test:disposable_test_password@127.0.0.1:5432/automation_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install actual Identity and Device dependencies
+      - name: Install actual service dependencies
         run: |
-          npm install --prefix services/core/identity-service --package-lock=false --ignore-scripts --no-audit --no-fund
-          npm ci --prefix services/core/device-service --ignore-scripts --no-audit --no-fund
-      - name: Test actual scoped OU write boundaries
+          for service in services/core/policy-service services/core/api-gateway services/core/license-management services/core/identity-service services/core/device-service services/core/oauth-provider services/core/authentication-service services/platform/quick-actions; do
+            if [ -f "$service/package-lock.json" ]; then
+              npm ci --prefix "$service" --ignore-scripts --no-audit --no-fund
+            else
+              npm install --prefix "$service" --ignore-scripts --no-audit --no-fund --package-lock=false
+            fi
+          done
+      - name: Verify the fresh OTP fixture against the unchanged production window
+        run: npm --prefix services/core/oauth-provider test -- --runInBand src/__tests__/MfaFixture.test.js
+      - name: Test the complete original signed registration journey
         run: >-
           node --test --test-reporter=tap --test-reporter-destination=stdout
           --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-concurrency=1
-          --test-name-pattern='^device OU metadata'
-          services/core/identity-service/src/__tests__/companyRoles.postgres.cjs
-      - name: Test every original OU assignment and status case
-        run: >-
-          node --test --test-reporter=tap --test-reporter-destination=stdout
-          --test-reporter=./scripts/lib/nonempty-test-reporter.cjs --test-reporter-destination=stderr
-          --test-concurrency=1
-          services/core/identity-service/src/__tests__/deviceOrganizationalUnits.postgres.cjs
+          --test-name-pattern='^production gateway does not treat a real credential-bound pending company registration'
+          services/core/oauth-provider/src/__tests__/revocations.postgres.cjs
