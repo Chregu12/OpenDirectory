@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-11-15T15:42:13.415297+00:00",
-  "status": "six-native-device-ou-governance-cases-pass-linux-pending",
+  "checkedAt": "2026-11-15T16:11:51.089258+00:00",
+  "status": "six-native-governance-cases-and-three-six-case-linux-groups-pass-full-ci-pending",
   "baseSource": "c3aba45924b0fea6fcd3b2a183402f4fd3c582d8",
   "productionCodeChanged": false,
   "productionTouched": false,
@@ -15,7 +15,43 @@
       "totalMilliseconds": 38945.7805
     },
     "runtime": "Actual isolated PostgreSQL16.15; Node20.20.2; existing canonical Identity/Device classes",
-    "baseline": "All original180 native case definitions remain byte-identical to c3aba45, whose full native180-case run passed separately. This focused run is not a complete186-case run."
+    "baseline": "All original180 native case definitions remain byte-identical to c3aba45, whose full native180-case run passed separately. This focused run is not a complete186-case run.",
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43731688390",
+      "head": "3d4367867c218e17700f6ae2659e69da6bfd60e6",
+      "source": "a3ff91c88e9d061d6a96446ac55404e4d4a976fe",
+      "treeDifference": "Only .github/workflows/ci.yml; product and test sources unchanged",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 132865318706,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 57255.059467
+        },
+        {
+          "id": 132865318883,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 57449.935498
+        },
+        {
+          "id": 132865319060,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 41312.604621
+        }
+      ]
+    }
   },
   "cases": [
     "Ordinary and claimed admin labels cannot import an outside OU, export a child, rename a device role root or remove a protected child",
@@ -35,7 +71,7 @@
     "services/core/identity-service/migrations/062_device_ou_scopes.sql": "52f85ee22477cd9f5cc9b3b5310c59e9763adc908247b95e7ff46cc96916a4ac"
   },
   "limits": [
-    "New governance cases require Linux verification and the complete current CI.",
+    "The complete newest-source CI remains pending; each targeted Linux group intentionally skips the other180 cases.",
     "Cross-service device references and OU deletion coordination are still open. An OU hierarchy governance check is not a Device-database deletion fence.",
     "Default scoped reception, public scoped capabilities, GUI scope selection and actual signed scoped browser acceptance remain unreleased.",
     "Native fixture actors are not an actual signed OAuth/browser acceptance test.",

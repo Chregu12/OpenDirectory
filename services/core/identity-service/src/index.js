@@ -25,6 +25,7 @@ const directoryCreator = new (require('./DirectoryCreator').DirectoryCreator)(db
 const userMutator = new (require('./UserMutator').UserMutator)(db);
 const deviceInventoryAuthority = new (require('./DeviceInventoryAuthority').DeviceInventoryAuthority)(db);
 const deviceOuAuthority = new (require('./DeviceOuAuthority').DeviceOuAuthority)(db);
+const deviceOuRetirementAuthority = new (require('./DeviceOuRetirementAuthority').DeviceOuRetirementAuthority)(db);
 const deviceOffboardingAuthority = new (require('./DeviceOffboardingAuthority').DeviceOffboardingAuthority)(db);
 const companyLicenseAuthority = new (require('./CompanyLicenseAuthority').CompanyLicenseAuthority)(db);
 const companyBlueprintAuthority = new (require('./CompanyBlueprintAuthority').CompanyBlueprintAuthority)(db);
@@ -189,6 +190,10 @@ app.post('/api/identity/device-organizational-units', asyncRoute(async (req, res
 app.post('/api/identity/device-organizational-units/status', asyncRoute(async (req, res) => {
   if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact current OU request required' });
   res.set('Cache-Control', 'no-store').json(await deviceOuAuthority.status(req.body, req.user, req.headers.authorization,req.headers['x-od-device-scope-protocol'] === '1'));
+}));
+for (const [path, method] of [['/api/identity/device-ou-retirement', 'read'], ['/api/identity/device-ou-retirement/check', 'check']]) app.post(path, asyncRoute(async (req, res) => {
+  if (Object.keys(req.query).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-ou-retirement-protocol'] !== '1') return res.status(400).json({ error: 'Exact original OU retirement source request required' });
+  res.set('Cache-Control', 'no-store').json(await deviceOuRetirementAuthority[method](req.body, req.user, req.headers.authorization));
 }));
 app.get('/api/identity/device-compliance', asyncRoute(async (req, res) => {
   if (Object.keys(req.query).length || Object.keys(req.body || {}).length || req.headers['x-api-key'] !== undefined || req.headers['x-od-device-scope-protocol'] !== undefined && req.headers['x-od-device-scope-protocol'] !== '1') return res.status(400).json({ error: 'Exact compliance source request required' });

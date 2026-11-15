@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OpenDirectory Business API",
-    "version": "1.46.0",
+    "version": "1.47.0",
     "description": "Own-tenant profile/delegation, credential-bound registration, independent review, applicant activation, public employee invitation acceptance with first MFA setup and bounded own-directory administration including conditional organizational-unit edits, moves, memberships and leaf retirement. Not full Company-Administrator authority, external legal verification or production SaaS acceptance. Private employee invitation receivers and public recipient onboarding use original Auth/Identity evidence. The OAuth browser login completes first MFA enrollment for the requested client after a valid app assignment. Invitation mail uses a separately configured Microsoft Graph Mail.Send app; selected existing group memberships retain their own review and license automation policies. Central OAuth user tokens and MFA enrollment/recovery challenges bind the original password-confirmation snapshot to the live local credential revision."
   },
   "security": [
@@ -52939,6 +52939,472 @@
           }
         }
       }
+    },
+    "/api/identity/device-ou-retirement": {
+      "post": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OD-Device-Ou-Retirement-Protocol",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceOuRetirementSourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuRetirementSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "readOriginalDeviceOuRetirementSource",
+        "summary": "Read original OU retirement authority and acquire the initial cancellation witness",
+        "description": "Read-only source producer for the original human own-OU deletion duty. No inventory or global role is granted. Current canonical roles and original delegated/PIM sources, own OU generation/revision, original bearer and fresh MFA are revalidated. Protected role namespaces additionally require independent role governance. The requested fence revision is only an echo binding; Identity does not attest Device database state or a zero-reference count. No public retirement capability, durable fence or coordinated deletion is implemented by these endpoints. Initial cancel uses the existing OU lock and a read-committed transaction so a preceding committed deletion cannot remain visible through an older snapshot."
+      }
+    },
+    "/api/identity/device-ou-retirement/check": {
+      "post": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-OD-Device-Ou-Retirement-Protocol",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceOuRetirementSourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOuRetirementSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Original private authority only; no retirement or Device fence is performed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "checkOriginalDeviceOuRetirementSource",
+        "summary": "Recheck the original bounded authority without reacquiring the OU lock",
+        "description": "Read-only source producer for the original human own-OU deletion duty. No inventory or global role is granted. Current canonical roles and original delegated/PIM sources, own OU generation/revision, original bearer and fresh MFA are revalidated. Protected role namespaces additionally require independent role governance. The requested fence revision is only an echo binding; Identity does not attest Device database state or a zero-reference count. No public retirement capability, durable fence or coordinated deletion is implemented by these endpoints. This final check does not replace initial cancellation admission and must not be used to infer that an OU lock was observed."
+      }
     }
   },
   "components": {
@@ -75485,6 +75951,452 @@
           },
           "limit": {
             "const": 25
+          }
+        }
+      },
+      "DeviceOuRetirementSourceRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "ouId",
+              "generation",
+              "revision",
+              "fenceRevision"
+            ],
+            "properties": {
+              "action": {
+                "const": "prepare"
+              },
+              "ouId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              },
+              "fenceRevision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,18})$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "ouId",
+              "generation",
+              "revision",
+              "fenceRevision"
+            ],
+            "properties": {
+              "action": {
+                "const": "cancel"
+              },
+              "ouId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              },
+              "fenceRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              }
+            }
+          }
+        ]
+      },
+      "DeviceOuRetirementSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "deviceOuRetirementProtocol",
+          "issuer",
+          "subject",
+          "tokenId",
+          "expiresAt",
+          "context",
+          "tenant",
+          "actorUserId",
+          "permissions",
+          "validUntil",
+          "action",
+          "target",
+          "fenceRevision",
+          "protected",
+          "delegation"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "deviceOuRetirementProtocol": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "revision",
+              "linkRevision",
+              "rolesRevision"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "linkRevision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "rolesRevision": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+              }
+            }
+          },
+          "actorUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "permissions": {
+            "const": [
+              "ous.delete"
+            ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "description": "No later than the original token, grant and five-minute MFA deadline."
+          },
+          "action": {
+            "enum": [
+              "prepare",
+              "cancel"
+            ]
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "generation",
+              "revision"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "generation": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Canonical PostgreSQL BIGINT string, at most9223372036854775807."
+              }
+            }
+          },
+          "fenceRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,18})$"
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "delegation": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grants"
+                ],
+                "properties": {
+                  "grants": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "description": "Exactly one selected source per returned permission, in the same order; target user or original protected-group membership is live-checked in Identity.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "permission",
+                        "source"
+                      ],
+                      "properties": {
+                        "permission": {
+                          "const": "ous.delete"
+                        },
+                        "source": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "roleId",
+                                "roleRevision",
+                                "scopeType",
+                                "ouId",
+                                "targetType",
+                                "targetId",
+                                "membershipId",
+                                "validUntil"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "roleId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "roleRevision": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,18}$",
+                                  "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                },
+                                "scopeType": {
+                                  "const": "tenant"
+                                },
+                                "ouId": {
+                                  "type": "null"
+                                },
+                                "targetType": {
+                                  "enum": [
+                                    "user",
+                                    "group"
+                                  ]
+                                },
+                                "targetId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "membershipId": {
+                                  "oneOf": [
+                                    {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "validUntil": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "roleId",
+                                "roleRevision",
+                                "scopeType",
+                                "ouId",
+                                "targetType",
+                                "targetId",
+                                "membershipId",
+                                "validUntil",
+                                "activationId",
+                                "mfaRevision",
+                                "authTime",
+                                "issuer",
+                                "subject",
+                                "actorContext"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "roleId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "roleRevision": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,18}$",
+                                  "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                },
+                                "scopeType": {
+                                  "const": "tenant"
+                                },
+                                "ouId": {
+                                  "type": "null"
+                                },
+                                "targetType": {
+                                  "enum": [
+                                    "user",
+                                    "group"
+                                  ]
+                                },
+                                "targetId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "membershipId": {
+                                  "oneOf": [
+                                    {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "validUntil": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "description": "Original selected grant/activation expiry; authority.validUntil must not exceed it."
+                                },
+                                "activationId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "mfaRevision": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,18}$",
+                                  "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                },
+                                "authTime": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$"
+                                },
+                                "issuer": {
+                                  "type": "string"
+                                },
+                                "subject": {
+                                  "type": "string"
+                                },
+                                "actorContext": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "userId",
+                                    "revision",
+                                    "linkRevision",
+                                    "rolesRevision"
+                                  ],
+                                  "properties": {
+                                    "userId": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "revision": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{0,18}$",
+                                      "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                    },
+                                    "linkRevision": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{0,18}$",
+                                      "description": "Positive PostgreSQL BIGINT string, at most 9223372036854775807; not a JSON number."
+                                    },
+                                    "rolesRevision": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

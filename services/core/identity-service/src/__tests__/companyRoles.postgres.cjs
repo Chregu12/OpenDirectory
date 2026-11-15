@@ -1485,3 +1485,48 @@ test('device OU governance physical commit retains the independent managers orig
   await assert.rejects(new OuMutator(db,options).update(fixture.outside.id,{parentId:fixture.root.id},ouEtag(fixture.outside),operator.user,bearer),{code:'42501'});beforeCommit=null;assert.equal(reached,true);assert.deepEqual(await ouGovernanceState(),before);assert.deepEqual(await deviceState(fixture.deviceDb),devices);assert.equal((await fixture.inventory.list({},fixture.delegate.user,bearer)).total,2);
  },['devices.inventory.read']);
 });
+
+async function retirementSelection(unit,action='prepare',fenceRevision='0') {
+ const target=(await pool.query("SELECT unit.id AS \"ouId\",unit.revision::text,ownership.generation::text FROM ous unit JOIN identity_tenant_ownership ownership ON ownership.resource_kind='ou' AND ownership.resource_id=unit.id WHERE unit.id=$1",[unit.id])).rows[0];
+ return{action,...target,fenceRevision};
+}
+test('device OU retirement source binds only the actual own deletion duty and retains the selected original grant',async()=>{
+ const Authority=require('../DeviceOuRetirementAuthority').DeviceOuRetirementAuthority,contract=require('../../../../../packages/device-ou-retirement-contract'),unit=await creator.ou({name:'Own retirement target'},owner.user,bearer),selected=await retirementSelection(unit),operator=await person('retirement-operator'),role=await createRole({name:'Independent OU deletion only',permissions:['ous.delete']}),grant=(await assign(role,operator.id)).grant,authority=new Authority(db,options);
+ const source=await authority.read(selected,operator.user,bearer);assert.equal(contract.validSource(source,operator.user,selected),true);assert.deepEqual(source.permissions,['ous.delete']);assert.equal(source.protected,false);assert.equal(source.delegation.grants[0].source.id,grant.id);assert.equal(source.tokenId,operator.user.jti);assert.equal(source.target.generation,selected.generation);assert.equal(Object.hasOwn(source,'inventory'),false);assert.equal(Object.hasOwn(source,'authorization'),false);
+ await assert.rejects(new(require('../DeviceInventoryAuthority').DeviceInventoryAuthority)(db,options).read(operator.user,bearer),{status:403});
+ const ordinary=await person();await assert.rejects(authority.read(selected,{...ordinary.user,roles:['admin']},bearer),{status:403});
+ await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);await assert.rejects(authority.check(selected,operator.user,bearer),{status:403});
+ const protectedRole=await createRole({name:'Protected device root for retirement',permissions:['devices.inventory.read']});await assign(protectedRole,ordinary.id,{scopeType:'device-ou',ouId:unit.id});const ouAdmin=await fixedOperator('ou-administrator');await assert.rejects(authority.read(selected,ouAdmin.user,bearer),{status:403});assert.equal((await authority.read(selected,owner.user,bearer)).protected,true);
+ for(const changed of [{...selected,tenantId:randomUUID()},{...selected,generation:'0'},{...selected,action:'cancel'},{...selected,fenceRevision:0}])await assert.rejects(authority.read(changed,owner.user,bearer),{status:400});
+});
+test('device OU retirement source cancellation waits for an actual prior OU deletion and cannot use a pre-lock snapshot',async()=>{
+ const unit=await creator.ou({name:'Deletion preceding fence cancellation'},owner.user,bearer),selected=await retirementSelection(unit,'cancel','1'),authority=new(require('../DeviceOuRetirementAuthority').DeviceOuRetirementAuthority)(db,options),blocker=await pool.connect();let pending;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT identity_directory_ou_lock($1::uuid)',[owner.receipt.tenantId]);const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=authority.read(selected,owner.user,bearer);pending.catch(()=>{});let waiting=false;
+  for(let attempt=0;attempt<200;attempt++){waiting=(await pool.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND $1=ANY(pg_blocking_pids(pid))) AS waiting",[pid])).rows[0].waiting;if(waiting)break;await new Promise(resolve=>setTimeout(resolve,5));}
+  assert.equal(waiting,true,'Initial cancellation must actually wait for the original OU lock');
+  const bound={...db,transaction:async(operation,settings={})=>{const result=await operation(blocker);if(settings.beforeCommit)await settings.beforeCommit(blocker);return result;}};
+  await new OuMutator(bound,options).remove(unit.id,ouEtag(unit),owner.user,bearer);await blocker.query('COMMIT');
+  await assert.rejects(pending,{status:404});assert.equal((await pool.query('SELECT count(*)::int AS count FROM ous WHERE id=$1',[unit.id])).rows[0].count,0);
+ }finally{await blocker.query('ROLLBACK');blocker.release();if(pending)await pending.catch(()=>{});}
+});
+test('device OU retirement source preparation and final checks do not reacquire the Identity OU lock',async()=>{
+ const unit=await creator.ou({name:'Nonlocking final retirement source check'},owner.user,bearer),selected=await retirementSelection(unit,'cancel','1'),authority=new(require('../DeviceOuRetirementAuthority').DeviceOuRetirementAuthority)(db,options),blocker=await pool.connect();let pending,timer;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT identity_directory_ou_lock($1::uuid)',[owner.receipt.tenantId]);
+  pending=(async()=>{const prepared=await authority.read({...selected,action:'prepare',fenceRevision:'0'},owner.user,bearer);assert.equal(prepared.action,'prepare');return authority.check(selected,owner.user,bearer);})();pending.catch(()=>{});
+  const result=await Promise.race([pending,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Final source check must not wait on the OU mutation lock')),3000);})]);
+  assert.equal(require('../../../../../packages/device-ou-retirement-contract').validSource(result,owner.user,selected),true);
+ }finally{clearTimeout(timer);await blocker.query('ROLLBACK');blocker.release();if(pending)await pending.catch(()=>{});}
+});
+test('device OU retirement source crosses actual private HTTP with only the original bearer and preserves live denial',async()=>{
+ const operator=await person('http-retirement-reader'),role=await createRole({name:'Actual HTTP deletion source',permissions:['ous.delete']}),grant=(await assign(role,operator.id)).grant,unit=await creator.ou({name:'Actual HTTP retirement target'},owner.user,bearer),selected=await retirementSelection(unit),authority=new(require('../DeviceOuRetirementAuthority').DeviceOuRetirementAuthority)(db,options),calls=[];
+ const server=require('node:http').createServer(async(req,res)=>{try{calls.push({path:req.url,authorization:req.headers.authorization,protocol:req.headers['x-od-device-ou-retirement-protocol']});const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());assert.equal(req.method,'POST');assert.equal(req.headers['x-od-device-ou-retirement-protocol'],'1');const source=await authority[req.url.endsWith('/check')?'check':'read'](body,operator.user,req.headers.authorization);res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(source));}catch(error){res.writeHead(error.status||503,{'Content-Type':'application/json'});res.end(JSON.stringify({error:error.message}));}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  const client=new(require('../../../device-service/src/DeviceOuRetirementAuthority').DeviceOuRetirementAuthority)({endpoint:'http://127.0.0.1:'+server.address().port+'/api/identity/device-ou-retirement'});
+  const original=await client.read(bearer,operator.user,selected);assert.equal(original.delegation.grants[0].source.id,grant.id);assert.deepEqual(await client.check(bearer,operator.user,selected),original);
+  await roles.revoke(grant.id,{reason,confirm:true},C.etag('grant',grant),owner.user,bearer);await assert.rejects(client.check(bearer,operator.user,selected),{status:403});assert.equal(calls.length,3);assert.ok(calls.every(call=>call.authorization===bearer&&call.protocol==='1'));assert.deepEqual(calls.map(call=>call.path),['/api/identity/device-ou-retirement','/api/identity/device-ou-retirement/check','/api/identity/device-ou-retirement/check']);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
