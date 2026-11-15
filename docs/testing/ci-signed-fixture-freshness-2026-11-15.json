@@ -1,0 +1,106 @@
+{
+  "checkedAt": "2026-11-15T05:46:31.234255+00:00",
+  "sourceBaseCommit": "d97f70a2cca0dac1d611bdb4468631034b00a2f3",
+  "status": "complete-main-device-suite-and-actual-native-registration-verified-full-source-ci-pending",
+  "scope": "Test-only correction of legacy Device fixtures and real reauthentication between independent signed company lifecycle journeys.",
+  "legacyDeviceFixtures": {
+    "realModuleVirtualFlagsRemoved": 43,
+    "incorrectSharedPackagePathsCorrected": 2,
+    "remainingVirtualModules": [
+      "../database/manager"
+    ],
+    "actualMockInjectionAssertionsAdded": true,
+    "existingBusinessAssertionsPreserved": true,
+    "completeMainDeviceSuite": {
+      "suites": 24,
+      "pass": 645,
+      "fail": 0
+    },
+    "unintendedMessageBusConnectionOrRetryLogs": 0
+  },
+  "ciReproductions": [
+    {
+      "runId": 43674585621,
+      "commit": "e7330395e10cb58525186804d0f9a36117523d32",
+      "jobId": 132691828251,
+      "durationMilliseconds": 522918.485995,
+      "expected": 409,
+      "actual": 428,
+      "line": 3968,
+      "operation": "Later reactivation-epoch check using the old operator MFA login"
+    },
+    {
+      "runId": 43676445195,
+      "commit": "d97f70a2cca0dac1d611bdb4468631034b00a2f3",
+      "jobId": 132697527142,
+      "durationMilliseconds": 380462.316512,
+      "expected": 201,
+      "actual": 401,
+      "line": 3591,
+      "operation": "Offboarding creation",
+      "error": "Original company license authority changed"
+    },
+    {
+      "runId": 43676661495,
+      "commit": "673cddf9dbaef0840142932c80d7400635018458",
+      "jobId": 132698194665,
+      "durationMilliseconds": 366425.263731,
+      "expected": 201,
+      "actual": 401,
+      "line": 3591,
+      "operation": "Offboarding creation",
+      "error": "Original company license authority changed"
+    }
+  ],
+  "registrationCorrection": {
+    "newActualPasswordTotpLogins": [
+      "Own roleless Owner before the independent offboarding journey",
+      "Same canonical role/PIM operator before the later workflow reactivation-epoch check"
+    ],
+    "original300SecondMfaCutoffUnchanged": true,
+    "noAutomaticRequestRetry": true,
+    "originalBearersWithinEachOperationAndReceiptStillChecked": true,
+    "expiredAndRevokedMfaNegativeCasesPreserved": true,
+    "clockAndAuthorizationPoliciesUnchanged": true,
+    "productionSourceChanged": false
+  },
+  "otherCiFindings": {
+    "outdatedPolicyApiVersionExpectation": "Corrected separately in draft #6 at 51762c4; its subsequent Service Tests job passed.",
+    "nonemptySelectionGate": "Existing actual-native-event gate retained; complete main/PIM source runs 43669454896 and 43669472668 passed all nine jobs. Later d97/673 runs failed the long case above before browser integration was reached."
+  },
+  "sourceSha256": {
+    "docs/development/testing.md": "d2d1e4dc6ee59d317cdd037673666dd788f53fa0a8d43e20e033f026dfe46fc7",
+    "services/core/device-service/src/__tests__/api.e2e.test.js": "3c2d3355c8e7443538318633ab2ab7a37e734472bc7e379d7e29a87903bddad4",
+    "services/core/device-service/src/__tests__/deviceInstallCharacterization.test.js": "3dc918dd2e6121de932644030ec117ddb77ef1fd612300942612ecf20bd5d3d9",
+    "services/core/oauth-provider/src/__tests__/revocations.postgres.cjs": "4a794e86da94f3bbff54a566d889482e1be76d1c6511ca30cc70057a21c38d90"
+  },
+  "productionTouched": false,
+  "limits": [
+    "Full corrected Linux source CI is pending.",
+    "The selected native case is not the complete OAuth/browser suite.",
+    "No human production login or external provider acceptance was performed."
+  ],
+  "actualNativeRegistration": {
+    "tests": 191,
+    "pass": 1,
+    "fail": 0,
+    "skipped": 190,
+    "cancelled": 0,
+    "durationMilliseconds": 414015.099,
+    "node": "20.20.2",
+    "postgres": "16.15 native isolated cluster",
+    "platform": "macOS arm64",
+    "services": "Actual Identity, Device, OAuth, Policy and production Gateway with an explicit disposable password-provider fixture",
+    "productionSourceChanged": false,
+    "verified": [
+      "Independent credential-bound registration/review/activation and roleless Owner",
+      "Existing expired and revoked MFA denials",
+      "Own license return and immutable original source evidence",
+      "Actual offboarding account and license effects",
+      "Independent access cleanup and original bearer/token-hash checkpoints",
+      "Actual device returns and release recovery",
+      "Reactivation epoch 409 after actual same-operator password/TOTP reauthentication"
+    ],
+    "notTheCompleteSuite": true
+  }
+}
