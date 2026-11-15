@@ -3209,7 +3209,7 @@ test('production gateway does not treat a real credential-bound pending company 
       const ownProfile = await request(base, '/api/identity/organization', { token: companyOwner.access_token }); assert.equal(ownProfile.status, 200, JSON.stringify(ownProfile.body)); assert.equal(ownProfile.body.organization.name, body.profile.name);
       let token = companyOwner.access_token; const metadata = await request(base, '/api/identity/access', { token }); assert.equal(metadata.status, 200);
       assert.equal(require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS.length, 14);
-      assert.deepEqual(metadata.body.permissions, ['organization.read','organization.manage','organization.delegations.manage','company.roles.read','company.roles.manage',...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS]);
+      assert.deepEqual(metadata.body.permissions, ['organization.read','organization.manage','organization.delegations.manage','company.roles.read','company.roles.manage',...require('../../../identity-service/src/CompanyOwner').COMPANY_DIRECTORY_PERMISSIONS,'company.pim.requests.review']);
       const originalOwnerGroups=await request(base,'/api/users/'+activated.body.administratorId+'/groups',{token});assert.equal(originalOwnerGroups.status,200,JSON.stringify(originalOwnerGroups.body));
       const people = await request(base, '/api/users', { token }); assert.equal(people.status, 200); assert.deepEqual(people.body.users.map(account => account.id), [activated.body.administratorId]);
       assert.equal((await request(base, '/api/users/' + canonicalSubjects.get('production-ordinary'), { token })).status, 404);
