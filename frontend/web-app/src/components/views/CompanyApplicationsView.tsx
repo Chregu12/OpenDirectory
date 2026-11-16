@@ -11,6 +11,7 @@ import CompanyApplicationAssignmentsPanel from './CompanyApplicationAssignmentsP
 import CompanyLicenseActivationPanel from './CompanyLicenseActivationPanel';
 import CompanyOffboardingV2Panel from './CompanyOffboardingV2Panel';
 import CompanyLicenseProviderPanel from './CompanyLicenseProviderPanel';
+import CompanyMicrosoftPanel from './CompanyMicrosoftPanel';
 
 const initialValues: CompanyPoolInput = { name: '', vendor: '', description: '', totalSeats: 1, reason: '' };
 const eventLabels = { 'app.license.pool.created': 'Lizenzpool erstellt', 'app.license.pool.updated': 'App und Lizenzbestand aktualisiert', 'app.license.assigned': 'Lizenz zugewiesen', 'app.license.released': 'Lizenz freigegeben', 'app.license.source.assigned': 'Lizenzquelle zugewiesen', 'app.license.source.released': 'Lizenzquelle zurückgegeben' };
@@ -312,6 +313,7 @@ export default function CompanyApplicationsView() {
           {protocol === 'v2' && <CompanyApplicationAssignmentsPanel key={access.actorUserId + ':' + access.tenantId + ':' + selected.id} context={access} pool={selected} onReload={() => {
             setPoolVersion(value => value + 1); setListVersion(value => value + 1);
           }} />}
+          {protocol === 'v2' && <CompanyMicrosoftPanel key={`${access.actorUserId}:${access.tenantId}:${selected.id}:${reload}`} context={access} pool={selected} onAccessError={failure => fail(failure, generation.current)} />}
           {canAssign && protocol === 'v1' && <section aria-label="Lizenz zuweisen" className="border-t border-[var(--border)] pt-4 space-y-4">
             <h3 className="font-semibold">Lizenz zuweisen oder freigeben</h3>
             <label className="block text-sm">Begründung<input className="mt-1 block w-full rounded border p-2 bg-transparent" minLength={10} maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>

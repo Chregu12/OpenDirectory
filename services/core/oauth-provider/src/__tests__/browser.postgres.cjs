@@ -171,7 +171,7 @@ before(async () => {
       const result=await fetch(actualAuth.url+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentials),redirect:'error'});
       response.statusCode=result.status;return response.end(Buffer.from(await result.arrayBuffer()));
     }
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign','company-invitation-owner','company-pim-groups-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign','company-invitation-owner','company-pim-groups-owner','company-microsoft-owner','company-microsoft-configured-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -222,9 +222,9 @@ before(async () => {
   inventoryFixture=await require('../../../../../scripts/lib/device-inventory-fixture.cjs').deviceInventoryFixture(process.env.OAUTH_TEST_DATABASE_URL,identityBase);
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
   Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase,
-    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'' });
+    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'',LICENSE_COMPANY_PROVIDER_WRITE_CONFIG_FILE:'' });
   policyDb=require('../../../policy-service/src/db/postgres');
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|030)_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|03[0-2])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
   process.env.OAUTH_POLICY_SOURCE_URL=policyBase;
   process.env.DATABASE_URL=identityDatabaseUrl.toString();
@@ -2986,6 +2986,171 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     if (GatewayModule) await GatewayModule.closeDatabase();
     for (const [name, value] of Object.entries(savedEnvironment)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
     await administration.query(`DROP SCHEMA IF EXISTS ${gatewaySchema} CASCADE`);
+  }
+});
+
+test('real own-company Owner inspects unconfigured Microsoft mappings through real MFA and preserves local stock', { timeout: 120000 }, async () => {
+  const ownerUsername = 'company-microsoft-owner';
+  const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
+    { subject: ownerUsername + '-subject', username: ownerUsername });
+  const isolated = await context(); const page = await isolated.newPage(); const writes = [];
+  try {
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const original = await mediated(page); assert.equal(original.status, 200);
+    const claims = jwt.verify(original.body.access_token, require('node:crypto').createPublicKey(fs.readFileSync(path.join(directory, 'signing.pem'))), { algorithms: ['RS256'], issuer: logicalIssuer, audience: 'opendirectory-api' });
+    assert.deepEqual(claims.roles, []); assert.equal(claims.identity_authorization.userId, company.receipt.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(claims), true);
+    const created = await page.request.post(origin + '/api/licenses/company/pools', { headers: { Authorization: 'Bearer ' + original.body.access_token }, data: {
+      name: 'Microsoft browser connection pool', vendor: 'Microsoft', description: 'Actual own local stock remains independent', totalSeats: 2, reason: 'Actual MFA owner prepares its own connection test pool' } });
+    assert.equal(created.status(), 201, await created.text()); const pool = await created.json();
+    page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/licenses/company/provider/microsoft') && request.method() !== 'GET') writes.push(request); });
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(origin + '/applications'); await page.getByRole('button', { name: pool.name, exact: true }).click();
+    await page.getByText('Microsoft 365 · Verknüpfungen dieses Lizenzpools', { exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Microsoft-Verknüpfungen', exact: true });
+    const checking = page.waitForResponse(response => new URL(response.url()).pathname === '/api/licenses/company/provider/microsoft/state' && response.request().method() === 'GET');
+    await panel.getByRole('button', { name: 'Microsoft-Verknüpfungen laden', exact: true }).click();
+    const checked = await checking; assert.equal(checked.status(), 200, await checked.text()); assert.equal(checked.headers()['cache-control'], 'no-store');
+    assert.deepEqual(await checked.json(), { schemaVersion: 1, companyMicrosoftProtocol: 1, actorUserId: company.receipt.administratorId, tenantId: company.receipt.tenantId, state: 'not_configured', microsoftTenantId: null, connection: null });
+    await panel.getByText('Für diese Firma ist noch keine freigegebene Microsoft-Verbindung mit getrenntem Lese- und Schreibzugang eingerichtet.', { exact: true }).waitFor();
+    assert.equal(await panel.getByRole('heading', { name: 'Gespeicherte Kontozuordnungen', exact: true }).count(), 0); assert.equal(await panel.getByRole('button', { name: 'Microsoft-Verbindung bestätigen', exact: true }).count(), 0);
+    await panel.screenshot({ path: '/tmp/od-company-microsoft-unconfigured-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 1000 }); const box = await panel.boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 390);
+    await panel.screenshot({ path: '/tmp/od-company-microsoft-unconfigured-mobile.png' });
+    assert.deepEqual((await policyDb.query('SELECT used_seats,total_seats FROM license_catalog WHERE id=$1 AND business_tenant_id=$2', [pool.id, company.receipt.tenantId])).rows, [{ used_seats: 0, total_seats: 2 }]);
+    for (const table of ['company_microsoft_connections', 'company_microsoft_operations', 'company_microsoft_events']) assert.equal((await policyDb.query('SELECT count(*)::int AS count FROM ' + table + ' WHERE tenant_id=$1', [company.receipt.tenantId])).rows[0].count, 0);
+    assert.equal(writes.length, 0); assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_role_assignments WHERE user_id=$1', [company.receipt.administratorId])).rows[0].count, 0);
+  } finally { await isolated.unrouteAll({ behavior: 'ignoreErrors' }); await isolated.close(); }
+});
+
+test('real own-company Owner configures Microsoft fixture licensing and recovers, reviews and returns its actual local assignment', { timeout: 240000 }, async () => {
+  const ownerUsername = 'company-microsoft-configured-owner';
+  const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
+    { subject: ownerUsername + '-subject', username: ownerUsername });
+  const isolated = await context(); const page = await isolated.newPage(); let providerServer; let rejectFinish = false; let rejectedFinishes = 0;
+  const microsoftTenant = randomUUID(), readClient = randomUUID(), writeClient = randomUUID(), objectId = randomUUID(), skuId = randomUUID();
+  const providerWrites = [], providerRequests = []; const empty = { present: false, direct: false, active: false, plansMatch: false, inherited: false, accountEnabled: true }; let remote = { ...empty };
+  const readFilename = path.join(directory, 'configured-microsoft-read.json'), writeFilename = path.join(directory, 'configured-microsoft-write.json');
+  for (const [filename, clientId] of [[readFilename, readClient], [writeFilename, writeClient]]) fs.writeFileSync(filename, JSON.stringify({ schemaVersion: 1, provider: 'microsoft-365', consentReviewed: true, tenantId: microsoftTenant, clientId, clientSecret: 'explicit-browser-provider-fixture-only' }), { mode: 0o600 });
+  try {
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const original = await mediated(page); assert.equal(original.status, 200);
+    const publicKey = require('node:crypto').createPublicKey(fs.readFileSync(path.join(directory, 'signing.pem')));
+    const claims = jwt.verify(original.body.access_token, publicKey, { algorithms: ['RS256'], issuer: logicalIssuer, audience: 'opendirectory-api' });
+    assert.deepEqual(claims.roles, []); assert.equal(claims.identity_authorization.userId, company.receipt.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(claims), true);
+    const actualDatabase = { query: (...args) => policyDb.query(...args), getClient: async () => {
+      const client = await policyDb.getClient(); return { query: (...args) => {
+        if (rejectFinish && String(args[0]).includes('SELECT company_microsoft_finish(')) { rejectedFinishes++; return Promise.reject(new Error('Explicit browser receipt-loss fixture')); }
+        return client.query(...args);
+      }, release: destroy => client.release(destroy) };
+    } };
+    const express = require('express'); const providerApp = express(); providerApp.use(express.json());
+    providerApp.use(require('../../../policy-service/src/middleware/oidcAuth').oidcAuth());
+    providerApp.use('/api/licenses/company', require('../../../policy-service/src/middleware/licenseAccess').requireLicenseIdentity,
+      require('../../../policy-service/src/licenses/companyRoutes').companyLicenseRoutes(new (require('../../../policy-service/src/licenses/LicenseAllocator').LicenseAllocator)(actualDatabase), { microsoft: {
+        tenantId: company.receipt.tenantId, readFilename, writeFilename,
+        // Only the external Microsoft boundary is simulated; authentication, current authority and SQL stay real.
+        createReader: config => { assert.equal(config.tenantId, microsoftTenant); assert.equal(config.clientId, readClient); return { inspect: async () => [{ skuId, skuPartNumber: 'EXPLICIT_BROWSER_FIXTURE', appliesTo: 'User', capabilityStatus: 'Enabled', prepaidUnits: { enabled: 10, warning: 0, suspended: 0, lockedOut: 0 }, consumedUnits: remote.present ? 1 : 0 }] }; },
+        createGraph: config => {
+          assert.equal(config.tenantId, microsoftTenant); assert.equal(config.clientId, writeClient);
+          return { tenantId: microsoftTenant, tokens: { get: async () => 'explicit-browser-fixture-access-token', clear: () => {} },
+            readUser: async id => { assert.equal(id, objectId); return { id, accountEnabled: true }; },
+            inspect: async (id, sku, plans) => { assert.equal(id, objectId); assert.equal(sku, skuId); assert.deepEqual(plans, []); return { ...remote }; },
+            mutate: async (id, sku, plans, desired, token, attemptId) => {
+              assert.equal(id, objectId); assert.equal(sku, skuId); assert.deepEqual(plans, []); assert.equal(token, 'explicit-browser-fixture-access-token');
+              providerWrites.push({ objectId: id, skuId: sku, desired, attemptId }); remote = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true };
+            } };
+        },
+      } }));
+    providerServer = providerApp.listen(0, '127.0.0.1'); const providerBase = await serverBase(providerServer);
+    await isolated.route('**/api/licenses/company/provider/microsoft/**', async route => {
+      const req = route.request(), headers = await req.allHeaders(), authorization = headers.authorization;
+      assert.ok(authorization?.startsWith('Bearer ')); const actual = jwt.verify(authorization.slice(7), publicKey, { algorithms: ['RS256'], issuer: logicalIssuer, audience: 'opendirectory-api' });
+      assert.equal(actual.sid, claims.sid); assert.equal(actual.auth_time, claims.auth_time); assert.deepEqual(actual.identity_authorization, claims.identity_authorization); assert.deepEqual(actual.roles, []); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(actual), true);
+      const parsed = new URL(req.url()); const forwarded = Object.fromEntries(['authorization', 'content-type', 'if-match', 'idempotency-key'].filter(key => headers[key]).map(key => [key, headers[key]]));
+      const response = await fetch(providerBase + parsed.pathname + parsed.search, { method: req.method(), headers: forwarded, ...(['GET', 'HEAD'].includes(req.method()) ? {} : { body: req.postDataBuffer() }) });
+      providerRequests.push({ path: parsed.pathname, method: req.method(), status: response.status, operationId: headers['idempotency-key'], tokenId: actual.jti });
+      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
+    });
+    const api = async (pathname, method = 'GET', data, headers = {}, expected = 200) => {
+      const response = await page.request.fetch(origin + pathname, { method, headers: { Authorization: 'Bearer ' + original.body.access_token, ...headers }, ...(data ? { data } : {}) });
+      assert.equal(response.status(), expected, await response.text()); return response.json();
+    };
+    const pool = await api('/api/licenses/company/pools', 'POST', { name: 'Configured Microsoft browser fixture pool', vendor: 'Microsoft', description: 'Real local assignment with an explicitly simulated external boundary', totalSeats: 2, reason: 'Actual MFA owner prepares the configured provider browser journey' }, {}, 201);
+    const localBase = '/api/licenses/company/v2/pools/' + pool.id;
+    let local = await api(localBase + '/assignment-preview', 'POST', { userId: company.receipt.administratorId });
+    await api(localBase + '/assignments', 'POST', { userId: company.receipt.administratorId, eligibilityRevision: local.target.eligibilityRevision, assignmentId: null, sources: [], reason: 'Actual canonical owner obtains one independently audited local seat', confirm: true }, { 'Idempotency-Key': randomUUID(), 'If-Match': '"company-pool-' + pool.id + '-' + local.poolRevision + '"' }, 201);
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(origin + '/applications'); await page.getByRole('button', { name: pool.name, exact: true }).click();
+    await page.getByText('Microsoft 365 · Verknüpfungen dieses Lizenzpools', { exact: true }).click(); const panel = page.getByRole('region', { name: 'Microsoft-Verknüpfungen', exact: true });
+    const responseFor = async (suffix, click, status = 200) => {
+      const pending = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(suffix) && response.request().method() === 'POST'); await click(); const response = await pending;
+      assert.equal(response.status(), status, await response.text()); return response.json();
+    };
+    const reload = async () => {
+      const pending = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/provider/microsoft/history') && response.request().method() === 'GET');
+      await panel.getByRole('button', { name: 'Microsoft-Verknüpfungen laden', exact: true }).click(); assert.equal((await pending).status(), 200);
+      await panel.getByLabel('Begründung der Microsoft-Verknüpfung', { exact: true }).waitFor();
+    };
+    const metadata = async (button, suffix, status = 201) => {
+      await panel.getByLabel('Begründung der Microsoft-Verknüpfung', { exact: true }).fill('Actual browser owner explicitly reviews this provider mapping');
+      await panel.getByRole('button', { name: button, exact: true }).click(); const dialog = page.getByRole('alertdialog'); assert.equal(await dialog.getByRole('button', { name: 'Bestätigen', exact: true }).isDisabled(), true);
+      await dialog.getByRole('checkbox', { name: 'Ich bestätige diese Microsoft-Verknüpfung.', exact: true }).check();
+      return responseFor(suffix, () => dialog.getByRole('button', { name: 'Bestätigen', exact: true }).click(), status);
+    };
+    await reload(); await metadata('Microsoft-Verbindung bestätigen', '/connections'); await reload();
+    await panel.getByRole('button', { name: 'Microsoft-Produkte laden', exact: true }).click(); await panel.getByLabel('Microsoft-Produkt auswählen', { exact: true }).selectOption(skuId);
+    await metadata('Microsoft-Produkt verknüpfen', '/pools/' + pool.id + '/bind'); await reload();
+    await panel.getByRole('button', { name: 'Firmenbenutzer suchen', exact: true }).click(); await panel.getByLabel('Firmenbenutzer auswählen', { exact: true }).selectOption(company.receipt.administratorId);
+    await panel.getByLabel('Microsoft-Benutzer-ID', { exact: true }).fill(objectId); await metadata('Microsoft-Benutzer verknüpfen', '/users/' + company.receipt.administratorId + '/bind'); await reload();
+    const sync = async (status = 200) => {
+      await responseFor('/preview', () => panel.getByRole('button', { name: 'Microsoft-Lizenzabgleich prüfen', exact: true }).click());
+      await panel.getByLabel('Begründung des Microsoft-Lizenzabgleichs', { exact: true }).fill('Actual owner confirms exactly the newly observed provider action');
+      await panel.getByRole('button', { name: 'Microsoft-Lizenzabgleich vorbereiten', exact: true }).click(); const dialog = page.getByRole('alertdialog', { name: 'Microsoft-Lizenzabgleich bestätigen', exact: true });
+      await dialog.getByRole('checkbox', { name: 'Ich bestätige diesen Microsoft-Lizenzabgleich.', exact: true }).check();
+      return responseFor('/sync', () => dialog.getByRole('button', { name: 'Bestätigen', exact: true }).click(), status);
+    };
+    rejectFinish = true; await sync(503); rejectFinish = false; assert.equal(providerWrites.length, 1); assert.equal(rejectedFinishes, 2);
+    const interrupted = (await policyDb.query("SELECT * FROM company_microsoft_operations WHERE tenant_id=$1 AND action='sync'", [company.receipt.tenantId])).rows; assert.equal(interrupted.length, 1); assert.equal(interrupted[0].phase, 'dispatched'); assert.equal(interrupted[0].outcome, null);
+    await panel.getByRole('button', { name: 'Ursprünglichen Lizenzabgleich wiederaufnehmen', exact: true }).waitFor(); await reload();
+    const recovery = await responseFor('/recovery-preview', () => panel.getByRole('button', { name: 'Unterbrochenen Lizenzvorgang prüfen', exact: true }).click()); assert.equal(recovery.attempt.id, interrupted[0].id);
+    await panel.getByLabel('Begründung der Wiederherstellung', { exact: true }).fill('Actual current owner explicitly closes the interrupted receipt'); await panel.getByRole('button', { name: 'Wiederherstellung vorbereiten', exact: true }).click();
+    let dialog = page.getByRole('alertdialog', { name: 'Lizenzvorgang wiederherstellen', exact: true }); await dialog.getByRole('checkbox', { name: 'Ich bestätige diese Wiederherstellung ohne neue Lizenzanfrage.', exact: true }).check();
+    const recovered = await responseFor('/recover', () => dialog.getByRole('button', { name: 'Bestätigen', exact: true }).click()); assert.equal(recovered.result.status, 'unknown'); assert.equal(recovered.result.owned, false); assert.equal(providerWrites.length, 1);
+    const unknown = (await policyDb.query('SELECT source,request,permit_hash,outcome FROM company_microsoft_operations WHERE id=$1', [interrupted[0].id])).rows[0]; assert.equal(unknown.outcome.kind, 'unknown');
+    await page.getByRole('region', { name: 'Microsoft-Wiederherstellungsergebnis', exact: true }).waitFor(); await panel.screenshot({ path: '/tmp/od-company-microsoft-recovery-desktop.png' }); await reload();
+    const review = await responseFor('/review-preview', () => panel.getByRole('button', { name: 'Unklaren Lizenzversuch prüfen', exact: true }).click()); assert.deepEqual(review.decisions, ['adopt', 'release']);
+    const delay = Math.max(0, Date.parse(review.attempt.notBefore) - Date.now() + 40); assert.ok(delay <= 31000); if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    await responseFor('/review-preview', () => panel.getByRole('button', { name: 'Prüfung aktualisieren', exact: true }).click());
+    await panel.getByLabel('Entscheidung zum unklaren Versuch', { exact: true }).selectOption('adopt'); await panel.getByLabel('Begründung der Lizenzprüfung', { exact: true }).fill('Actual owner assumes management of this matching observed direct license');
+    await panel.getByRole('button', { name: 'Entscheidung vorbereiten', exact: true }).click(); dialog = page.getByRole('alertdialog', { name: 'Lizenzentscheidung bestätigen', exact: true });
+    await dialog.getByRole('checkbox', { name: 'Ich habe den ursprünglichen Versuch und den aktuellen Microsoft-Bestand geprüft und bestätige diese Entscheidung.', exact: true }).check();
+    const adopted = await responseFor('/review', () => dialog.getByRole('button', { name: 'Bestätigen', exact: true }).click()); assert.equal(adopted.result.status, 'confirmed'); assert.equal(adopted.result.owned, true); assert.equal(providerWrites.length, 1);
+    assert.deepEqual((await policyDb.query('SELECT source,request,permit_hash,outcome FROM company_microsoft_operations WHERE id=$1', [interrupted[0].id])).rows[0], unknown);
+    await page.getByRole('region', { name: 'Microsoft-Prüfentscheidung', exact: true }).waitFor(); await panel.screenshot({ path: '/tmp/od-company-microsoft-adopted-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(async () => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    const decisionResult = page.getByRole('region', { name: 'Microsoft-Prüfentscheidung', exact: true }); await decisionResult.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+    const box = await panel.boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 390);
+    assert.equal(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true); assert.equal(await decisionResult.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
+    await page.screenshot({ path: '/tmp/od-company-microsoft-adopted-mobile.png' }); await page.setViewportSize({ width: 1440, height: 1100 });
+    local = await api(localBase + '/assignment-preview', 'POST', { userId: company.receipt.administratorId });
+    await api(localBase + '/assignments/' + local.assignment.id + '/revoke', 'POST', { userId: company.receipt.administratorId, eligibilityRevision: local.target.eligibilityRevision, sources: local.assignment.sources, reason: 'Actual owner independently releases the local manual source before cloud return', confirm: true }, { 'Idempotency-Key': randomUUID(), 'If-Match': '"company-pool-' + pool.id + '-' + local.poolRevision + '"' });
+    await reload(); const removal = await sync(); assert.equal(removal.result.status, 'verifying'); assert.equal(removal.result.kind, 'acknowledged'); assert.equal(providerWrites.length, 2); assert.equal(providerWrites[1].desired, false);
+    await page.getByRole('heading', { name: 'Anbieterbestätigung ausstehend', exact: true }).waitFor(); await reload(); const confirmed = await sync(); assert.equal(confirmed.result.status, 'confirmed'); assert.equal(confirmed.result.owned, false); assert.equal(providerWrites.length, 2);
+    assert.deepEqual((await policyDb.query('SELECT used_seats,total_seats FROM license_catalog WHERE id=$1 AND business_tenant_id=$2', [pool.id, company.receipt.tenantId])).rows, [{ used_seats: 0, total_seats: 2 }]);
+    const evidence = (await policyDb.query('SELECT event.*,operation.source FROM company_microsoft_events event JOIN company_microsoft_operations operation ON operation.id=event.operation_id WHERE event.tenant_id=$1 ORDER BY event.created_at,event.id', [company.receipt.tenantId])).rows;
+    assert.ok(evidence.some(event => event.type === 'recover' && event.actor.kind === 'human' && event.actor.userId === company.receipt.administratorId)); assert.ok(evidence.some(event => event.type === 'review' && event.actor.kind === 'human'));
+    assert.ok(evidence.some(event => event.operation_id === interrupted[0].id && event.type === 'sync_finished' && event.actor.kind === 'workload' && event.actor.operationId === interrupted[0].id));
+    assert.equal((await policyDb.query('SELECT count(*)::int AS count FROM company_microsoft_outbox WHERE tenant_id=$1', [company.receipt.tenantId])).rows[0].count, evidence.length);
+    for (const event of evidence) { assert.equal(event.source.actorUserId, company.receipt.administratorId); assert.ok(providerRequests.some(req => req.tokenId === event.source.tokenId)); }
+    assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_role_assignments WHERE user_id=$1', [company.receipt.administratorId])).rows[0].count, 0);
+    assert.ok(providerRequests.every(req => req.status < 400 || req.path.endsWith('/sync') && req.status === 503));
+    process.stdout.write('Configured company Microsoft browser: actual roleless owner/password/TOTP/BFF/current authority/SQL/GUI; protected provider files and explicit external Graph fixture; one interrupted add, no resend through recovery/adoption, one separately confirmed return and independent absence.\n');
+  } catch (error) {
+    if (new URL(page.url()).pathname === '/applications') {
+      await page.screenshot({ path: '/tmp/od-company-microsoft-configured-failure.png', fullPage: true }).catch(() => {});
+      process.stderr.write('Configured Microsoft browser failure state: ' + (await page.locator('body').innerText().catch(() => '')).slice(-10000) + '\n');
+    }
+    throw error;
+  } finally {
+    rejectFinish = false; await isolated.unrouteAll({ behavior: 'ignoreErrors' }); await isolated.close();
+    if (providerServer?.listening) { providerServer.closeAllConnections(); await new Promise(resolve => providerServer.close(resolve)); }
   }
 });
 

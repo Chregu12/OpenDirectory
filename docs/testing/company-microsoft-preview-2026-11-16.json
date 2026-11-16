@@ -1,0 +1,89 @@
+{
+  "checkedAt": "2026-11-16T01:07:39.785485+00:00",
+  "baseCommit": "dbd1a128796a62fb9894ba9016c6821ade2818fd",
+  "status": "read-only-company-cloud-preview-native-validation-passed",
+  "unreleased": true,
+  "productionChanged": false,
+  "cloudDispatchImplemented": false,
+  "behavior": {
+    "canonicalOwnCompanyUserAndMappings": true,
+    "sqlValidatedPoolAndSourceLineage": true,
+    "allReferencedGroupRulesRetainedAndVerified": true,
+    "freshCanonicalEligibleGroupMembership": true,
+    "staleMaterializedGroupSeatDoesNotAuthorizeCloudGrant": true,
+    "manualOverlapRetainsEntitlement": true,
+    "oldUserGenerationCannotReviveGrant": true,
+    "providerStockCheckedBeforeProposedAddition": true,
+    "externalDirectAndInheritedLicenseNotAdopted": true,
+    "noGraphMutation": true,
+    "stableFingerprintExcludesObservationClock": true,
+    "guiAndHttpReachable": true
+  },
+  "validation": {
+    "policyUnit": {
+      "passed": 1524,
+      "failed": 0,
+      "suites": 48
+    },
+    "frontendUnit": {
+      "passed": 3285,
+      "failed": 0,
+      "suites": 163,
+      "durationSeconds": 105.709
+    },
+    "targetedFrontend": {
+      "passed": 29,
+      "failed": 0
+    },
+    "targetedCompanySqlHttp": {
+      "passed": 14,
+      "failed": 0,
+      "durationMilliseconds": 10738.839791
+    },
+    "fullLicensePostgres": {
+      "passed": 573,
+      "failed": 0,
+      "skipped": 0,
+      "companyCasesIncluded": 14,
+      "durationMilliseconds": 209928.963417
+    },
+    "typeCheck": "passed",
+    "diffCheck": "passed",
+    "actualBrowserRegression": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "case": "real own-company Owner inspects unconfigured Microsoft mappings through real MFA and preserves local stock",
+      "caseDurationMilliseconds": 46320.160125,
+      "totalDurationMilliseconds": 47618.131666,
+      "productionNextBuild": true,
+      "servicesAndSchemasCleaned": true,
+      "scope": "Actual central TOTP and disposable services; password provider is the explicit browser fixture. This verifies unconfigured GUI integration, not a configured external Microsoft connection."
+    }
+  },
+  "providerBoundary": "SQL/HTTP tests use explicit in-process Microsoft responses and normalized canonical-group fixtures. The metadata, blueprint/group/manual grants, source receipts, migrations and transactions are real PostgreSQL. No real Microsoft tenant credentials, consent or license mutation were created.",
+  "pr10": {
+    "run": 43777359943,
+    "testedHead": "0e27663d638c4b9a12b649a618306a9cb8e43356",
+    "all15JobsPassed": true,
+    "actualBrowserCasesExactlyOnce": 60,
+    "browserFixtureGroupsCleaned": 9,
+    "merged": "d68f1526bf96e6bd99373f81c5bfb5e5956b9137",
+    "testedTreeEqualsMergeTree": true,
+    "scope": "CI proves the merged Rust transport and browser MFA phase correction. It does not substitute for future full CI of the completed company cloud feature."
+  },
+  "remaining": [
+    "Durable one-use dispatch and original-operation receipt after response loss or authority expiry.",
+    "Separate provider-effect confirmation, ownership protection and pending-attempt retention.",
+    "Explicit crash recovery and review of unknown results without automatic retry or adoption.",
+    "Configured provider browser coverage, real tenant acceptance, final CI and deployment."
+  ],
+  "sourceSha256": {
+    "services/core/policy-service/src/db/migrations/032_company_microsoft_delivery.sql": "0ffe95acc2904c037ee33571fdb0534cc2d0f0f2eaf6966ce29f29e5fb3180b5",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftDelivery.js": "9825c6d22de1600358e8d64f142deb34675beaaa6c33bf20b07fd9b672f91f3f",
+    "services/core/policy-service/src/licenses/companyMicrosoftRoutes.js": "8adf53f80a72c89926cad1a5775a743c84ede0b5286d6b1e054c387783a0dd17",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "ec764ae61a0cbd8239d2ea93e2a0cbc665b1659b3e5e0b04e364c45c6fe37fee",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "5cab759cf8d39f56c1b006fe67c783f2a06cfcc8a20deca901d639319517f794",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "14a55a2e6ebea65e8265ef5468863abb6aba56e83ea234c15d9a75432c5e69e4"
+  }
+}

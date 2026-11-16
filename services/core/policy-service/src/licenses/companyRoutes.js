@@ -9,6 +9,7 @@ function companyLicenseRoutes(allocator, options) {
   const router = Router(); const store = new CompanyLicenses(allocator, options);
   const offboarding = new CompanyOffboarding(store, options?.offboarding);
   const provider = new (require('./CompanyLicenseProvider').CompanyLicenseProvider)(store, options?.provider);
+  router.use('/provider/microsoft', require('./companyMicrosoftRoutes').companyMicrosoftRoutes(store, options?.microsoft));
   router.use('/groups', require('./companyGroupRoutes').companyGroupRoutes(store, options?.groups));
   router.use('/v2', require('./companyV2Routes').companyLicenseV2Routes(store.v2, offboarding.v2));
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); req.companyLicenseCorrelation = randomUUID(); res.set('X-Correlation-ID', req.companyLicenseCorrelation);
