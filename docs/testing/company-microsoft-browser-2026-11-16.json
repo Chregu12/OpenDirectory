@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T03:45:16.036775+00:00",
+  "status": "configured-provider-fixture-browser-passed-final-ci-and-live-acceptance-pending",
+  "baseCommit": "3a8e36771048dd049cf810fc817612e0147ac24f",
+  "productionChanged": false,
+  "checks": {
+    "configuredActualBrowser": {
+      "selected": 1,
+      "passed": 1,
+      "caseDurationMilliseconds": 158705.832291,
+      "totalDurationMilliseconds": 160041.468541,
+      "actualChrome": "157.0.8103.78",
+      "productionNextBuild": true,
+      "currentSource": true,
+      "expectedFullSuiteCasesAfterAddition": 62,
+      "full62CaseRunObserved": false
+    },
+    "actualPostgresHistoryRegression": {
+      "selected": 2,
+      "passed": 2
+    },
+    "targetedFrontend": 65,
+    "typescript": "passed",
+    "javascriptSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "baselineFullRegression": {
+    "sourceCommit": "3a8e36771048dd049cf810fc817612e0147ac24f",
+    "policyUnit": 1529,
+    "frontendUnit": 3321,
+    "licensePostgres": 599,
+    "scope": "Earlier full native source checkpoint; these totals are not a new full run after the history/accessibility fixes. Final Linux CI will validate the complete current source."
+  },
+  "verifiedBehavior": [
+    "Actual roleless own-company Owner password-provider fixture plus real central TOTP, original BFF SID/auth_time/context, production JWT/access-state middleware and independent current license authority. No injected req.user or fabricated human MFA.",
+    "Real protected0600 read/write files parsed by the default production loader and scoped to the actual fixture company; explicit external Microsoft inventory/user/mutation doubles only.",
+    "GUI confirms connection, SKU and canonical-user/object-ID mappings; actual V2 API allocates one independently audited local seat.",
+    "Injected SQL receipt loss leaves an actual dispatched operation without an outcome after one acknowledged simulated addition; GUI does not automatically resend.",
+    "GUI recovery records original unknown outcome and separate current-human evidence without another provider mutation; deliberate30second settlement wait and fresh GUI review explicitly adopt current matching direct effect.",
+    "Original Source/request/permit hash/unknown outcome stay unchanged after review. Real local source revocation precedes a separately confirmed simulated removal; acknowledgement stays verifying until another independent observation confirms absence.",
+    "Exactly2 simulated external mutations (add/remove), zero global role assignments, matching original token IDs in actual human/workload audit events, one pending outbox receipt per event, final local used0/total2.",
+    "Final desktop and390px viewport inspected; panel/result scroll widths do not exceed their client widths. Stable accessible names are present on product/user/review controls with helper descriptions retained."
+  ],
+  "integrationFixes": [
+    "Normalize retained metadata history resources through the same public connection/pool/user serializer as live responses. Real SQL regression checks all three shapes.",
+    "Give nested selects and hinted UUID inputs unambiguous accessible names; retain hints via aria-describedby."
+  ],
+  "boundaries": [
+    "External Microsoft responses and password provider are explicit test fixtures; this is not a real Microsoft tenant/consent/Graph credential or license acceptance.",
+    "Receipt loss is a deliberate fixture-only SQL fault; production source does not gain a fault-injection switch.",
+    "The original unconfigured browser case remains separately recorded; full Linux62-case coverage is pending."
+  ],
+  "observedFailures": {
+    "historyWireShape": "First actual configured run found internal snake_case resource rows rejected by the strict public client; fixed in production API.",
+    "accessibleControlNames": "Next run found exact accessible names included nested option/helper text; fixed in production controls.",
+    "initialIsolatedHttpTransport": "One ECONNRESET occurred in the narrow mounted HTTP regression; the unchanged native code rerun passed both cases. Full final CI remains required."
+  },
+  "cleanup": {
+    "browserAndFixtureServersStopped": true,
+    "allFourSharedServiceSchemasDropped": true,
+    "temporaryPostgresStopped": true,
+    "temporaryNextBuildAndConfigRemoved": true
+  },
+  "screenshots": {
+    "recovery-desktop": {
+      "width": 1092,
+      "height": 923,
+      "sha256": "fcebc3abe3e70d683a9b5c58a9b2c860d1d9a455395d2d1fccbfca7f2c4c0956",
+      "visuallyInspected": true
+    },
+    "adopted-desktop": {
+      "width": 1092,
+      "height": 923,
+      "sha256": "d58abef80c287cce4cffd73a6d6a9a9e7fed8248fe3c37e63ba0a1b5d92ecbcc",
+      "visuallyInspected": true
+    },
+    "adopted-mobile": {
+      "width": 390,
+      "height": 1000,
+      "sha256": "4bba11eb328af9503106e886334341d258e804d34a194636c66e78029ffa385a",
+      "visuallyInspected": true
+    }
+  },
+  "remaining": [
+    "Full final Linux CI on the committed current source.",
+    "Actual selected Microsoft test tenant, reviewed targets and human authentication/observed effects.",
+    "Fresh backups, migration/release validation, Harbor build/deploy and live core checks."
+  ],
+  "sourceSha256": {
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "9e044e1ce275ae2e7b1d18212dd739e2dbf1611e6f39867685a65dbf45378f88",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftBridge.js": "5ad8a4a90cbdd539f634761f26497ee8fe7ed4316742bbe14a477b41d9335da0",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoft.integration.cjs": "e2a7f8e6a6e8364c5b089cf2e078b618b28eaa829586ded4e9d0fd6f270fce88",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "e0b3262289b13a2b4cea2e9be6cafd3e6869c2dfe4499b56821b00a018124cf1",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "06e363cfa643ebdd2992c967c1bbf113a1e821114a0c4dd2acea8a1ce475fd96"
+  },
+  "logSha256": {
+    "configuredBrowser": "2def2f10d595e0432a33ef4ea0384347df50aaee33df4d4587a5948f87276e4c",
+    "historyRegression": "dffb10b495bf86317da90fcb3a178160c2d874adc38b492fd2db2520f12c8699",
+    "targetedFrontend": "3c2036f40302f86ea1e8d0a81adb934b8ac396d00ef5cf2d5cf4bed8d5e4859b",
+    "typescript": "7cf910ab2ec972d4817443e4939b0688cb59143a73dcc3f34155923143f9b5f4"
+  }
+}

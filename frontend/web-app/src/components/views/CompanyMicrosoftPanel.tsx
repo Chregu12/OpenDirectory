@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { CompanyPool } from '@/lib/companyApplications';
 import { CompanyWorkflowContext, companyWorkflowError, companyWorkflowUnsafe } from '@/lib/companyAssignmentProtocol';
 import { CompanyMicrosoftClient, MicrosoftState, MicrosoftMappings, MicrosoftProducts, MicrosoftHistory, MicrosoftIntent, MicrosoftReceipt, MicrosoftPreview, MicrosoftSyncIntent, MicrosoftSyncReceipt, MicrosoftRecoveryPreview, MicrosoftRecoveryIntent, MicrosoftRecoveryReceipt, MicrosoftReviewPreview, MicrosoftReviewIntent, MicrosoftReviewReceipt } from '@/lib/companyMicrosoft';
@@ -15,6 +15,7 @@ const eventLabels = { ...actionLabels, sync_prepared: 'Lizenzabgleich vorbereite
 const resultLabels = { verifying: 'Anbieterbestätigung ausstehend', confirmed: 'Abgleich durch unabhängige Rückprüfung bestätigt', conflict: 'Konflikt im Lizenzabgleich', failed: 'Lizenzabgleich fehlgeschlagen oder vor Versand abgebrochen', unknown: 'Ausgang der Microsoft-Anfrage unklar' };
 
 export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: { context: CompanyWorkflowContext; pool: CompanyPool; onAccessError: (error: unknown) => void }) {
+  const controlId = useId();
   const client = useRef<CompanyMicrosoftClient | null>(null); const generation = useRef(0); const running = useRef(false);
   const [state, setState] = useState<MicrosoftState | null>(null); const [mappings, setMappings] = useState<MicrosoftMappings | null>(null);
   const [products, setProducts] = useState<MicrosoftProducts | null>(null); const [history, setHistory] = useState<MicrosoftHistory | null>(null);
@@ -117,7 +118,7 @@ export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: 
         {!mappings?.pool && <section aria-label="Microsoft-Produktverknüpfung" className="space-y-3">
           <h4 className="font-semibold">Produkt für {pool.name}</h4>
           <button className="fluent-btn-secondary" disabled={blocked} onClick={() => { setProducts(null); setSkuId(''); void run(current => current.products(), setProducts); }}>Microsoft-Produkte laden</button>
-              {products && <><label>Microsoft-Produkt auswählen<select className={inputClass} disabled={blocked} value={skuId} onChange={event => setSkuId(event.target.value)}><option value="">Produkt wählen …</option>{products.products.filter(row => row.appliesTo === 'User' && row.capabilityStatus === 'Enabled' && row.prepaidUnits.enabled > 0).map(row => <option key={row.skuId} value={row.skuId}>{row.skuPartNumber} · {row.prepaidUnits.enabled} aktive Einheiten · {row.consumedUnits} verbraucht</option>)}</select></label>
+              {products && <><label>Microsoft-Produkt auswählen<select aria-label="Microsoft-Produkt auswählen" className={inputClass} disabled={blocked} value={skuId} onChange={event => setSkuId(event.target.value)}><option value="">Produkt wählen …</option>{products.products.filter(row => row.appliesTo === 'User' && row.capabilityStatus === 'Enabled' && row.prepaidUnits.enabled > 0).map(row => <option key={row.skuId} value={row.skuId}>{row.skuPartNumber} · {row.prepaidUnits.enabled} aktive Einheiten · {row.consumedUnits} verbraucht</option>)}</select></label>
                 {!products.products.some(row => row.appliesTo === 'User' && row.capabilityStatus === 'Enabled' && row.prepaidUnits.enabled > 0) && <p>Keine aktiven Benutzerprodukte verfügbar.</p>}
                 <button className="fluent-btn-primary" disabled={blocked || !skuId || reason.trim().length < 10} onClick={() => prepare(current => current.bindPool(state, products, pool.id, skuId, reason))}>Microsoft-Produkt verknüpfen</button></>}
         </section>}
@@ -126,10 +127,10 @@ export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: 
           <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); setUserId(''); setObjectId(''); void run(current => current.users(1, search), value => { setUsers(value); setUsersLoaded(true); }); }}>
             <label>Firmenbenutzer suchen<input className={inputClass} maxLength={100} disabled={blocked} value={search} onChange={event => setSearch(event.target.value)} /></label><button className="fluent-btn-secondary" disabled={blocked}>Firmenbenutzer suchen</button>
           </form>
-          {usersLoaded && (users ? <><label>Firmenbenutzer auswählen<select className={inputClass} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }}><option value="">Mitarbeiter wählen …</option>{users.users.map(row => <option key={row.id} value={row.id}>{userName(row)} · {row.username}</option>)}</select></label>
+          {usersLoaded && (users ? <><label>Firmenbenutzer auswählen<select aria-label="Firmenbenutzer auswählen" className={inputClass} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }}><option value="">Mitarbeiter wählen …</option>{users.users.map(row => <option key={row.id} value={row.id}>{userName(row)} · {row.username}</option>)}</select></label>
             <nav aria-label="Microsoft-Firmenbenutzerseiten" className="flex gap-4"><button disabled={blocked || users.page <= 1} onClick={() => { setUserId(''); setObjectId(''); void run(current => current.users(users.page - 1, search), setUsers); }}>Zurück</button><span>Seite {users.page} · {users.total} Mitarbeiter</span><button disabled={blocked || users.page * 25 >= users.total} onClick={() => { setUserId(''); setObjectId(''); void run(current => current.users(users.page + 1, search), setUsers); }}>Weiter</button></nav></>
-            : <label>Bekannte Firmenbenutzer-ID<input className={inputClass} maxLength={36} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }} /><span>Keine Profil-Leseberechtigung. Der Server prüft die eigene Firmenzugehörigkeit.</span></label>)}
-          {userId && <><p>{selectedUser ? userName(selectedUser) : userId}</p><label>Microsoft-Benutzer-ID<input className={inputClass} maxLength={36} disabled={blocked} value={objectId} onChange={event => setObjectId(event.target.value)} /><span>Die Objekt-ID des zugehörigen Kontos aus dem oben angezeigten Microsoft-Verzeichnis.</span></label>
+            : <label>Bekannte Firmenbenutzer-ID<input aria-label="Bekannte Firmenbenutzer-ID" aria-describedby={controlId + '-directory-help'} className={inputClass} maxLength={36} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }} /><span id={controlId + '-directory-help'}>Keine Profil-Leseberechtigung. Der Server prüft die eigene Firmenzugehörigkeit.</span></label>)}
+          {userId && <><p>{selectedUser ? userName(selectedUser) : userId}</p><label>Microsoft-Benutzer-ID<input aria-label="Microsoft-Benutzer-ID" aria-describedby={controlId + '-microsoft-help'} className={inputClass} maxLength={36} disabled={blocked} value={objectId} onChange={event => setObjectId(event.target.value)} /><span id={controlId + '-microsoft-help'}>Die Objekt-ID des zugehörigen Kontos aus dem oben angezeigten Microsoft-Verzeichnis.</span></label>
             <button className="fluent-btn-primary" disabled={blocked || !objectId || reason.trim().length < 10} onClick={() => prepare(current => current.bindUser(state, userId, objectId.trim(), reason))}>Microsoft-Benutzer verknüpfen</button></>}
         </section>
       </>}
@@ -188,7 +189,7 @@ export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: 
         <details><summary>Ursprüngliche Begründung und Benutzer</summary><p>{reviewView.attempt.reason}</p><p className="break-all">{reviewView.attempt.actorUserId}</p></details>
         {Date.parse(reviewView.attempt.notBefore) > Date.now() && <p>Prüfung frühestens am {new Date(reviewView.attempt.notBefore).toLocaleString('de-CH')}. Danach den Bestand erneut prüfen.</p>}
         <button className="fluent-btn-secondary" disabled={blocked} onClick={() => { setReviewDecision(''); setReviewReason(''); void run(current => current.reviewPreview(pool.id, reviewView.userId), setReviewView); }}>Prüfung aktualisieren</button>
-        <label>Entscheidung zum unklaren Versuch<select className={inputClass} value={reviewDecision} disabled={blocked} onChange={event => setReviewDecision(event.target.value as '' | 'adopt' | 'release')}><option value="">Entscheidung wählen …</option>
+        <label>Entscheidung zum unklaren Versuch<select aria-label="Entscheidung zum unklaren Versuch" className={inputClass} value={reviewDecision} disabled={blocked} onChange={event => setReviewDecision(event.target.value as '' | 'adopt' | 'release')}><option value="">Entscheidung wählen …</option>
           {reviewView.decisions.includes('adopt') && <option value="adopt">{reviewView.local.desired ? 'Passende direkte Lizenz in die Verwaltung übernehmen' : 'Passende direkte Lizenz für kontrollierte Rückgabe übernehmen'}</option>}
           <option value="release">Unklaren Versuch schließen · Bestand beibehalten</option></select></label>
         {reviewDecision === 'adopt' && !reviewView.local.desired && <p>Es besteht kein aktueller lokaler Anspruch. Nach dieser Übernahme muss die Rückgabe separat geprüft und bestätigt werden.</p>}

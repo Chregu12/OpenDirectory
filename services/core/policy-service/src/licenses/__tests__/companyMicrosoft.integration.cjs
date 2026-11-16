@@ -498,6 +498,9 @@ test('company Microsoft metadata binds the operator-selected tenant, own pool an
   const current = await bridge.state(user, 'Bearer explicit-company-fixture'); assert.equal(current.state, 'connected'); assert.equal(current.connection.id, connected.connection.id);
   const mappings = await bridge.mappings(local.id, { page: '1' }, user, 'Bearer explicit-company-fixture'); assert.equal(mappings.users.length, 1); assert.equal(mappings.pool.skuId, sku.skuId);
   const history = await bridge.history({ page: '1' }, user, 'Bearer explicit-company-fixture'); assert.equal(history.events.length, 3); assert.ok(history.events.every(value => value.actorUserId === source.actorUserId));
+  assert.equal(history.events.find(event => event.type === 'connect').resource.microsoftTenantId, current.microsoftTenantId);
+  assert.equal(history.events.find(event => event.type === 'bind_pool').resource.poolId, local.id); assert.equal(history.events.find(event => event.type === 'bind_user').resource.userId, target);
+  assert.ok(history.events.every(event => event.resource.tenantId === source.tenant.id && !Object.hasOwn(event.resource, 'tenant_id')));
   const records = JSON.stringify((await pool.query('SELECT source,request,outcome FROM company_microsoft_operations')).rows);
   assert.equal(records.includes('explicit-fixture-secret'), false); assert.equal(records.includes('Bearer explicit-company-fixture'), false);
 });

@@ -191,9 +191,12 @@ class CompanyMicrosoftBridge {
         JOIN company_microsoft_outbox box ON box.id=event.id AND box.status='pending'
         JOIN company_microsoft_operations operation ON operation.id=event.operation_id
         WHERE event.tenant_id=$1 ORDER BY event.created_at DESC,event.id LIMIT 26 OFFSET $2`, [source.tenant.id, (page - 1) * 25])).rows;
-      return { ...envelope(source), events: rows.slice(0, 25).map(row => ({ id: row.id, operationId: row.operation_id, type: row.type,
-        actorKind: row.actor.kind, actorUserId: row.actor.kind === 'human' ? row.actor.userId : null,
-        reason: row.reason, createdAt: instant(row.created_at), resource: row.details.resource || null })), page, hasMore: rows.length > 25 };
+      return { ...envelope(source), events: rows.slice(0, 25).map(row => {
+        const kind = { connect: 'connection', renew: 'connection', disconnect: 'connection', bind_pool: 'pool', retire_pool: 'pool', bind_user: 'user', retire_user: 'user' }[row.type];
+        if (row.details.resource && !kind) fail(503, 'Known Microsoft history resource required');
+        return { id: row.id, operationId: row.operation_id, type: row.type, actorKind: row.actor.kind, actorUserId: row.actor.kind === 'human' ? row.actor.userId : null,
+          reason: row.reason, createdAt: instant(row.created_at), resource: row.details.resource ? bindingView(kind, row.details.resource) : null };
+      }), page, hasMore: rows.length > 25 };
     });
   }
 }
