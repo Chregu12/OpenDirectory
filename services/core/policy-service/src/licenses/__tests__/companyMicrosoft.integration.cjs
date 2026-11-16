@@ -96,6 +96,93 @@ async function interrupted(delivery, poolId, phase) {
   } finally { client.release(); }
 }
 const recoveryInput = review => ({ ...input(), fingerprint: review.fingerprint, interruptedOperationId: review.attempt.id, interruptedPhase: review.attempt.phase });
+const reviewInput = (review, decision) => ({ ...input(), fingerprint: review.fingerprint, uncertainOperationId: review.attempt.id, decision });
+async function unknownAddition(poolId, apply = true) {
+  const { ProviderError } = require('../fulfillment/transport'); const delivery = new CompanyMicrosoftDelivery(bridge);
+  writeHandler = async desired => {
+    if (apply) observed = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true };
+    throw new ProviderError('graph_write_unavailable', { uncertain: true });
+  };
+  const before = await delivery.preview(poolId, target, user, 'Bearer explicit-company-fixture'); const operation = randomUUID();
+  await sync(delivery, poolId, operation, before); return { delivery, before, operation };
+}
+async function settleReview(review) {
+  const delay = Math.max(0, Date.parse(review.attempt.notBefore) - Date.now() + 40); assert.ok(delay <= 31000);
+  if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+}
+
+test('explicit review adopts only its matching uncertain addition and keeps the original unknown outcome immutable', async () => {
+  const local = await mappedPool(); await manual(local.id); const { delivery, before, operation } = await unknownAddition(local.id);
+  const original = (await pool.query('SELECT * FROM company_microsoft_operations WHERE id=$1', [operation])).rows[0];
+  const review = await delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'); assert.deepEqual(review.decisions, ['adopt', 'release']);
+  await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 409); await settleReview(review);
+  const held = await pool.connect();
+  try {
+    await held.query('SELECT pg_advisory_lock(hashtextextended($1,0))', ['company-microsoft:' + review.target.id]);
+    await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 409);
+  } finally { await held.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', ['company-microsoft:' + review.target.id]); held.release(); }
+  observed.active = false;
+  await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 412); observed.active = true;
+  await pool.query("CREATE FUNCTION suppress_review_target() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$; CREATE TRIGGER suppress_review_target BEFORE UPDATE ON company_microsoft_targets FOR EACH ROW EXECUTE FUNCTION suppress_review_target()");
+  await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.code === '42501');
+  await pool.query('DROP TRIGGER suppress_review_target ON company_microsoft_targets; DROP FUNCTION suppress_review_target()');
+  const key = randomUUID(), body = reviewInput(review, 'adopt'); const adopted = await delivery.review(local.id, target, body, key, user, 'Bearer explicit-company-fixture');
+  assert.equal(adopted.result.status, 'confirmed'); assert.equal(adopted.result.owned, true); assert.equal(adopted.result.uncertainOperationIdAfter, null); assert.equal(adopted.result.uncertainOperationId, operation); assert.equal(writes.length, 1);
+  assert.deepEqual((await pool.query('SELECT * FROM company_microsoft_operations WHERE id=$1', [operation])).rows[0], original);
+  assert.equal((await sync(delivery, local.id, operation, before)).result.kind, 'unknown'); assert.equal((await sync(delivery, local.id)).result.status, 'confirmed'); assert.equal(writes.length, 1);
+  bridge.load = () => { throw new Error('Original review receipt needs no credentials'); };
+  assert.equal((await delivery.review(local.id, target, body, key, user, 'Bearer explicit-company-fixture')).historical, true);
+});
+
+test('adoption without a current local entitlement is explicit cleanup only and never performs an automatic removal', async () => {
+  const local = await mappedPool(); await manual(local.id); const { delivery } = await unknownAddition(local.id); await manual(local.id, true);
+  const review = await delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'); assert.equal(review.local.desired, false); await settleReview(review);
+  const result = await delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture');
+  assert.equal(result.result.status, 'conflict'); assert.equal(result.result.errorCode, 'review_adopted_for_cleanup'); assert.equal(result.result.owned, true); assert.equal(writes.length, 1);
+  writeHandler = null; const removal = await sync(delivery, local.id); assert.equal(removal.result.status, 'verifying'); assert.equal(writes.length, 2); assert.equal(writes[1].desired, false);
+  assert.equal((await sync(delivery, local.id)).result.owned, false);
+});
+
+test('release of an unknown attempt requires current commit authority and a later separately confirmed new dispatch', async () => {
+  const local = await mappedPool(); await manual(local.id); const { delivery, before, operation } = await unknownAddition(local.id, false); source.tenant.generation = '2';
+  const review = await delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'); assert.deepEqual(review.decisions, ['release']); await settleReview(review);
+  const key = randomUUID(), body = reviewInput(review, 'release'); source.validUntil = Math.floor(Date.now() / 1000) + 2;
+  delayCommit = () => new Promise(resolve => setTimeout(resolve, Math.max(0, source.validUntil * 1000 - Date.now() + 40)));
+  await assert.rejects(delivery.review(local.id, target, body, key, user, 'Bearer explicit-company-fixture'), error => error.code === '42501'); delayCommit = null;
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM company_microsoft_operations WHERE id=$1', [key])).rows[0].count, 0);
+  source.validUntil = Math.floor(Date.now() / 1000) + 300;
+  const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = user; next(); });
+  const options = Object.fromEntries(['tenantId', 'readFilename', 'writeFilename', 'load', 'createReader', 'createGraph'].map(name => [name, bridge[name]]));
+  app.use('/api/licenses/company', require('../companyRoutes').companyLicenseRoutes(companies.allocator, { authority: companies.authority, microsoft: options }));
+  const path = '/api/licenses/company/provider/microsoft/pools/' + local.id + '/users/' + target;
+  const preview = await request(app).post(path + '/review-preview').set('Authorization', 'Bearer explicit-company-fixture').send({}); assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  const released = await request(app).post(path + '/review').set('Authorization', 'Bearer explicit-company-fixture').set('Idempotency-Key', key).send(body); assert.equal(released.status, 200, JSON.stringify(released.body)); assert.equal(released.body.result.owned, false); assert.equal(released.body.result.status, 'conflict'); assert.equal(writes.length, 1);
+  assert.equal((await request(app).post(path + '/review').set('Authorization', 'Bearer explicit-company-fixture').set('Idempotency-Key', key).send(body)).body.historical, true);
+  await bridge.connect(connectionInput(), randomUUID(), user, 'Bearer explicit-company-fixture', await connectionVersion());
+  writeHandler = null; const added = await sync(delivery, local.id); assert.equal(added.result.kind, 'acknowledged'); assert.equal(writes.length, 2); assert.equal(writes[1].desired, true);
+  assert.equal((await sync(delivery, local.id, operation, before)).result.kind, 'unknown');
+});
+
+test('unrelated, inherited or plan-changed licenses cannot be adopted through an unknown review', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);
+  observed = { present: true, direct: true, active: true, plansMatch: true, inherited: false, accountEnabled: true }; await sync(delivery, local.id);
+  await assert.rejects(delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'), error => error.status === 409); assert.equal(writes.length, 0);
+  observed = { present: false, direct: false, active: false, plansMatch: false, inherited: false, accountEnabled: true };
+  const unknown = await unknownAddition(local.id, false);
+  for (const remote of [{ present: true, direct: false, active: false, plansMatch: false, inherited: true, accountEnabled: true }, { present: true, direct: true, active: true, plansMatch: false, inherited: false, accountEnabled: true }]) {
+    observed = remote; const review = await unknown.delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'); assert.deepEqual(review.decisions, ['release']);
+    await assert.rejects(unknown.delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 412);
+  }
+  assert.equal(writes.length, 1);
+});
+
+test('a changed or unavailable canonical group source cannot authorize an unknown review even with an overlapping manual claim', async () => {
+  const local = await mappedPool(); await manual(local.id); await unknownAddition(local.id); const group = await groupPool(local.id); const delivery = new CompanyMicrosoftDelivery(bridge, { groups: group.service });
+  const review = await delivery.reviewPreview(local.id, target, user, 'Bearer explicit-company-fixture'); assert.equal(review.local.groups[0].active, true); group.remove();
+  await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'adopt'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 412);
+  group.fail(); await assert.rejects(delivery.review(local.id, target, reviewInput(review, 'release'), randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 503);
+  assert.equal(writes.length, 1);
+});
 
 for (const phase of ['prepared', 'dispatched']) test(`explicit recovery of a ${phase} crash keeps the original source and never calls Microsoft`, async () => {
   const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);

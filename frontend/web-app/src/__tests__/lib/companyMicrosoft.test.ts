@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { CompanyMicrosoftClient } from '@/lib/companyMicrosoft';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftReviewPreview, microsoftReviewReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const clients: CompanyMicrosoftClient[] = []; const base = '/api/licenses/company/provider/microsoft';
 let state: ReturnType<typeof microsoftState>; let mappings: ReturnType<typeof microsoftMappings>; let products: ReturnType<typeof microsoftProducts>;
@@ -127,4 +127,34 @@ test('lost recovery replies do not retry automatically and explicit continuation
 test('an empty interrupted-operation check cannot produce a recovery intent', async () => {
   const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok({ ...microsoftRecoveryPreview(), attempt: null, target: null, fingerprint: null }));
   const view = await current.recoveryPreview(id(8), id(11)); expect(() => current.captureRecovery(view, 'Reviewed crash recovery')).toThrow(); expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test.each(['adopt', 'release'] as const)('unknown review captures the original uncertain attempt and explicit %s decision', async decision => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewPreview(decision)));
+  const view = await current.reviewPreview(id(8), id(11)); const intent = current.captureReview(view, decision, 'Reviewed unknown license effect');
+  expect(intent.body.uncertainOperationId).toBe(id(40)); expect(Object.isFrozen(intent.body)).toBe(true);
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewReceipt(intent.operationId, decision))); expect((await current.review(intent)).result.decision).toBe(decision);
+  expect(api.post).toHaveBeenLastCalledWith(base + '/pools/' + id(8) + '/users/' + id(11) + '/review', intent.body, expect.objectContaining({ headers: { 'Idempotency-Key': intent.operationId } }));
+});
+test.each(['company', 'original_operation', 'decision', 'revision', 'ownership', 'unresolved_pointer'])('an unknown-review receipt with a changed %s remains unconfirmed', async kind => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewPreview())); const intent = current.captureReview(await current.reviewPreview(id(8), id(11)), 'adopt', 'Reviewed unknown license effect'); const receipt = microsoftReviewReceipt(intent.operationId);
+  if (kind === 'company') receipt.tenantId = id(99); if (kind === 'original_operation') receipt.result.uncertainOperationId = id(99); if (kind === 'decision') receipt.result.decision = 'release';
+  if (kind === 'revision') receipt.result.targetRevision = '4'; if (kind === 'ownership') receipt.result.owned = false; if (kind === 'unresolved_pointer') receipt.result.uncertainOperationIdAfter = id(40);
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(receipt)); await expect(current.review(intent)).rejects.toThrow();
+});
+test('cleanup adoption cannot be represented as an active positive entitlement', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewPreview('adopt', true))); const intent = current.captureReview(await current.reviewPreview(id(8), id(11)), 'adopt', 'Reviewed controlled cleanup');
+  expect(intent.cleanup).toBe(true); expect(intent.canConfirm).toBe(false); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewReceipt(intent.operationId, 'adopt', true))); expect((await current.review(intent)).result.status).toBe('conflict');
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewReceipt(intent.operationId))); await expect(current.review(intent)).rejects.toThrow();
+});
+test('review waits for the original dispatch window and rejects adoption of a pre-existing license', async () => {
+  const current = client(); await current.state(); const early = microsoftReviewPreview(); early.attempt.finishedAt = new Date().toISOString(); early.attempt.notBefore = new Date(Date.now() + 30000).toISOString();
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(early)); const view = await current.reviewPreview(id(8), id(11)); expect(() => current.captureReview(view, 'adopt', 'Reviewed unknown license effect')).toThrow();
+  const external = microsoftReviewPreview(); external.attempt.before.present = true; (api.post as jest.Mock).mockResolvedValueOnce(ok(external)); await expect(current.reviewPreview(id(8), id(11))).rejects.toThrow();
+});
+test('lost review replies have no automatic retry and explicit continuation keeps the original frozen request', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftReviewPreview())); const intent = current.captureReview(await current.reviewPreview(id(8), id(11)), 'adopt', 'Reviewed unknown license effect');
+  (api.post as jest.Mock).mockRejectedValueOnce(new Error('lost review reply')); await expect(current.review(intent)).rejects.toThrow(); expect(api.post).toHaveBeenCalledTimes(2);
+  (api.post as jest.Mock).mockResolvedValueOnce(ok({ ...microsoftReviewReceipt(intent.operationId), historical: true })); expect((await current.review(intent)).historical).toBe(true);
+  const calls = (api.post as jest.Mock).mock.calls; expect(calls[2][1]).toBe(calls[1][1]); expect(calls[2][2].headers).toEqual(calls[1][2].headers);
 });

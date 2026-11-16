@@ -1,6 +1,6 @@
 # Firmen-Lizenzpools mit Microsoft 365 verknüpfen
 
-Dieser Entwicklungsstand ergänzt die vorhandene Bestandslesung um ausdrücklich bestätigte Verknüpfungen, einen manuell bestätigten Lizenzabgleich und die Wiederherstellung unterbrochener Vorgänge für eine eigene Firma. Er ist noch nicht produktiv ausgerollt. Die ausdrückliche Behandlung unbekannter Ergänzungen und die Abnahme mit einem echten Microsoft-Testtenant bleiben offen. Bis dahin ist dieser Schreibpfad nicht zur produktiven Aktivierung freigegeben.
+Dieser Entwicklungsstand ergänzt die vorhandene Bestandslesung um ausdrücklich bestätigte Verknüpfungen, einen manuell bestätigten Lizenzabgleich, die Wiederherstellung unterbrochener Vorgänge und die bewusste Prüfung unklarer Anbieterwirkungen für eine eigene Firma. Er ist noch nicht produktiv ausgerollt. Die konfigurierte Gesamtkette im Browser, die Abnahme mit einem echten Microsoft-Testtenant, die abschließende CI und der Rollout bleiben offen. Bis dahin ist dieser Schreibpfad nicht zur produktiven Aktivierung freigegeben.
 
 Unter **Apps & Lizenzen → Lizenzpool → Microsoft 365 · Verknüpfungen dieses Lizenzpools** lässt sich der aktuelle Stand laden. Ein berechtigter Firmenbenutzer bestätigt zunächst das angezeigte Microsoft-Verzeichnis und die vorgesehenen Anwendungen. Danach kann er ein aktuell aktives Benutzerprodukt auswählen und eigene Mitarbeitende anhand ihrer geprüften Microsoft-Objekt-ID zuordnen. Die Anwendung errät keine Zuordnung aus E-Mail-Adressen.
 
@@ -36,6 +36,21 @@ War der Versand noch nicht freigegeben, wird der alte Versuch als **nicht versen
 
 Der aktuelle Wiederherstellungsbenutzer wird separat protokolliert. Der alte Anmelde- und Änderungsnachweis wird nicht ersetzt, auch wenn dessen MFA inzwischen abgelaufen ist oder ein anderer Administrator übernimmt. Die Ergebnisquittung des alten Versuchs nennt den ursprünglichen Vorgang als Dienstakteur. Geht die Antwort auf die Wiederherstellung verloren, kann ihre ursprüngliche Vorgangs-ID ausdrücklich erneut geprüft werden; es entsteht keine automatische Wiederholung.
 
+## Unklare Anbieterwirkung entscheiden
+
+**Unklaren Lizenzversuch prüfen** zeigt den ursprünglichen unbekannten Schreibversuch, dessen Akteur und Begründung sowie den aktuell unabhängig gelesenen Microsoft-Bestand und lokalen Anspruch. Der Versuch muss zur gleichen gespeicherten Firma, Verbindung, Benutzer- und Produktverknüpfung gehören. Aktuelle Gruppenquellen werden erneut gelesen; geänderte oder nicht verfügbare Nachweise erlauben keine Entscheidung.
+
+Vor einer Entscheidung gilt eine Wartefrist von mindestens 30 Sekunden nach Abschluss des ursprünglichen Versuchs. Eine längere gemeldete Anbieterwartezeit bleibt wirksam. Die Wartefrist beendet keinen Anbieterauftrag; eine verspätete Wirkung ist weiter möglich. **Prüfung aktualisieren** liest den Stand ausdrücklich erneut.
+
+Es gibt zwei Entscheidungen:
+
+- **Passende direkte Lizenz in die Verwaltung übernehmen:** nur für eine ursprüngliche unklare Ergänzung bei vorher unabhängig bestätigter Abwesenheit, aktuell passender direkter Lizenz und unveränderter Benutzer-/SKU-/Serviceplanzuordnung. Fremde oder geerbte Gruppenlizenzen werden nicht übernommen. Bei einem positiven lokalen Anspruch müssen direkte Lizenz und Konto aktuell aktiv bestätigt sein. Die aktuelle Firmengeneration muss zur bestätigten Verbindung passen.
+- **Unklaren Versuch schließen · Bestand beibehalten:** beendet die ungeklärte Verwaltungssperre ohne neue Übernahme oder Anbieteränderung. Ein noch bestehender eigener Verwaltungsnachweis bleibt erhalten; unabhängig bestätigte direkte Abwesenheit gibt ihn frei. Eine neue Zuweisung oder Rückgabe erfordert anschließend einen neuen regulären Abgleich mit neuer Vorgangs-ID, aktueller Vorschau und eigener Bestätigung.
+
+Ohne aktuellen lokalen Anspruch kann eine passende direkte Lizenz ausdrücklich **für kontrollierte Rückgabe** übernommen werden. Das Ergebnis bleibt als Rückgabebedarf sichtbar; diese Entscheidung erteilt keinen positiven lokalen Anspruch und führt keine automatische Rückgabe aus. Bei geänderter Firmengeneration ist zunächst nur das Schließen des alten Versuchs erlaubt; die Verbindung kann danach mit aktueller Berechtigung erneut bestätigt werden.
+
+Beide Entscheidungen verlangen aktuelle Firmenberechtigung, tatsächliche frische MFA, eine eigene Begründung und eine zusätzliche Bestätigung. Der genau angezeigte Versuch, die Entscheidung und der aktuelle Stand bleiben gebunden. Der tatsächliche Datenbank-Commit prüft Berechtigung und lokale Nachweise erneut. Die Entscheidung erhält einen neuen menschlichen Audit-Beleg; der ursprüngliche unbekannte Ausgang bleibt unverändert und wird nicht nachträglich als erfolgreiche Anbieterantwort ausgegeben. Keine Prüfentscheidung versendet eine Lizenzanfrage. Eine verlorene Antwort wird ausschließlich über den ursprünglichen Entscheidungsnachweis ausdrücklich geprüft.
+
 ## Geschützte Konfiguration
 
 Die bestehende [Bestandslesung und Dateivorbereitung](../../services/connectors-rust/READ_PROVIDERS.md#show-the-selected-companys-microsoft-stock-in-the-gui) bleibt die Grundlage. Zusätzlich wird eine ausdrücklich geprüfte Konfiguration für die Benutzerprüfung und den späteren Schreibpfad benötigt:
@@ -66,4 +81,6 @@ Nativ geprüft sind Vorbereitung, einmaliger Versand, dauerhafter Originalnachwe
 
 Die [Wiederherstellungsprüfung](../testing/company-microsoft-recovery-2026-11-16.json) umfasst tatsächliche SQL-Vorgänge vor und nach der Versandfreigabe, einen abgelaufenen ursprünglichen Nachweis, unabhängige aktuelle Administratoren, unveränderte ältere Anbieterversuche und eine Ablaufkontrolle beim tatsächlichen Commit. Die Oberfläche prüft leeren Zustand, Grund, Bestätigung, Zielbindung und unveränderte ausdrückliche Wiederaufnahme. Die konfigurierte Gesamtkette im Browser bleibt separat offen.
 
-Offen sind die ausdrückliche Entscheidung zu unbekannten Ergänzungen, der konfigurierte Browserablauf, eine echte Microsoft-Tenant-Abnahme, die abschließende vollständige CI und der Rollout. Es wurden keine produktiven Anbieterzugänge, Zustimmungen oder Lizenzänderungen erzeugt. Dieser Entwicklungsstand allein schließt den Anbieterablauf des Kernumfangs nicht ab.
+Die [Prüfung unbekannter Ergebnisse](../testing/company-microsoft-review-2026-11-16.json) umfasst tatsächliche SQL-Transaktionen, die Wartefrist, unabhängige aktuelle Anbieterbeobachtung, bewusste Übernahme, negative lokale Berechtigung mit später separat bestätigter Rückgabe, Ablauf beim physischen Commit, geänderte Firmengeneration, Zielkonkurrenz, unterdrückte tatsächliche Zieleffekte und unveränderte Originalbelege. Externe Antworten sind ausdrücklich simuliert; die Microsoft-Tenant-Abnahme wird dadurch nicht ersetzt.
+
+Offen sind der konfigurierte Browserablauf, eine echte Microsoft-Tenant-Abnahme, die abschließende vollständige CI und der Rollout. Es wurden keine produktiven Anbieterzugänge, Zustimmungen oder Lizenzänderungen erzeugt. Dieser Entwicklungsstand allein schließt den Anbieterablauf des Kernumfangs nicht ab.

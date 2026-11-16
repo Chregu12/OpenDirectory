@@ -163,12 +163,17 @@ END $$;
 CREATE OR REPLACE FUNCTION company_microsoft_commit_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
  -- Delivery receipts can finish an already admitted operation after its human lease expires.
- IF (NEW.phase IN('prepared','dispatched') OR NEW.action NOT IN('sync','retry'))
+ IF (NEW.phase IN('prepared','dispatched') OR NEW.action<>'sync')
   AND NOT company_microsoft_source_valid(NEW.source,NEW.id,NEW.request->>'reason') THEN
   RAISE EXCEPTION 'Company Microsoft authority expired before commit' USING ERRCODE='42501';END IF;
  IF NEW.action='sync' AND NEW.phase IN('prepared','dispatched') THEN
   IF company_microsoft_admission(NEW.source,NEW.request,NEW.local_state,NEW.before_state->'capture') IS DISTINCT FROM NEW.desired THEN
    RAISE EXCEPTION 'Company Microsoft entitlement changed before commit' USING ERRCODE='42501';END IF;
+ END IF;
+ IF NEW.action IN('adopt','retry') THEN
+  IF company_microsoft_admission(NEW.source,(NEW.request-ARRAY['uncertainOperationId','decision'])||jsonb_build_object('action','review'),NEW.local_state,NEW.before_state->'capture',true) IS DISTINCT FROM NEW.desired
+   OR NEW.action='adopt' AND NEW.before_state#>>'{capture,connection,tenantGeneration}' IS DISTINCT FROM NEW.source#>>'{tenant,generation}' THEN
+   RAISE EXCEPTION 'Current human Microsoft review required at commit' USING ERRCODE='42501';END IF;
  END IF;
  IF NEW.phase='finished' AND NOT EXISTS(SELECT 1 FROM company_microsoft_events event JOIN company_microsoft_outbox box ON box.id=event.id
    WHERE event.operation_id=NEW.id AND box.status='pending') THEN RAISE EXCEPTION 'Company Microsoft receipt missing' USING ERRCODE='42501';END IF;

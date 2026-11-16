@@ -24,3 +24,15 @@ export const microsoftRecoveryPreview = (phase: 'prepared' | 'dispatched' = 'dis
 export const microsoftRecoveryReceipt = (operationId = microsoftId(100), phase: 'prepared' | 'dispatched' = 'dispatched') => ({ ...microsoftEnvelope, historical: false, result: { ...microsoftSyncReceipt(operationId).result, action: 'recover',
   status: phase === 'prepared' ? 'failed' : 'unknown', owned: false, pendingOperationId: null, uncertainOperationId: phase === 'prepared' ? null : microsoftId(40),
   errorCode: phase === 'prepared' ? 'process_recovered_before_send' : 'process_recovered_after_dispatch', kind: phase === 'prepared' ? 'not_sent' : 'unknown', interruptedOperationId: microsoftId(40), interruptedPhase: phase, originalEventId: microsoftId(41) } });
+export const microsoftReviewPreview = (decision: 'adopt' | 'release' = 'adopt', cleanup = false) => {
+  const { action: _action, ...value } = microsoftPreview(); const finished = Date.now() - 31000;
+  return { ...value, stock: null, fingerprint: 'c'.repeat(64), checkedAt: new Date().toISOString(), assignmentError: null,
+    local: { ...value.local, desired: !cleanup, raw: { ...value.local.raw, assignment: cleanup ? null : value.local.raw.assignment, origins: cleanup ? [] : value.local.raw.origins } },
+    remote: { present: true, direct: true, active: true, plansMatch: true, inherited: false, accountEnabled: true },
+    target: { ...microsoftRecoveryPreview().target, revision: '2', status: 'unknown', uncertainOperationId: microsoftId(40) },
+    attempt: { id: microsoftId(40), desired: true, actorUserId: microsoftId(1), reason: 'Original unknown license addition', createdAt: new Date(finished - 1000).toISOString(), finishedAt: new Date(finished).toISOString(), before: value.remote, notBefore: new Date(finished + 30000).toISOString() },
+    decisions: decision === 'adopt' ? ['adopt', 'release'] : ['release'] };
+};
+export const microsoftReviewReceipt = (operationId = microsoftId(100), decision: 'adopt' | 'release' = 'adopt', cleanup = false) => ({ ...microsoftEnvelope, historical: false,
+  result: { operationId, poolId: microsoftId(8), userId: microsoftId(11), action: 'review', decision, uncertainOperationId: microsoftId(40), targetId: microsoftId(30), targetRevision: '3', status: decision === 'adopt' && !cleanup ? 'confirmed' : 'conflict', owned: decision === 'adopt',
+    pendingOperationId: null, uncertainOperationIdAfter: null, errorCode: cleanup ? 'review_adopted_for_cleanup' : decision === 'release' ? 'unmanaged_assignment_retained' : null, eventId: microsoftId(31), kind: 'reviewed' } });

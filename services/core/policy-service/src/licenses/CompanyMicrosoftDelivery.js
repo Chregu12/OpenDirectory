@@ -117,6 +117,66 @@ class CompanyMicrosoftDelivery {
     return { ...envelope(source), poolId, userId: source.target.id, recipient: source.target,
       connection: bindingView('connection', bindings.connection), pool: bindingView('pool', bindings.product), user: bindingView('user', bindings.person), target: targetView(bindings.target), attempt };
   }
+  async reviewState(client, poolId, source, authorization, config) {
+    const bindings = await this.bindings(client, poolId, source);
+    if (config.read.tenantId !== bindings.connection.microsoft_tenant_id || config.write.tenantId !== bindings.connection.microsoft_tenant_id
+      || config.read.clientId !== bindings.connection.read_client_id || config.write.clientId !== bindings.connection.write_client_id) fail(409, 'Review requires the retained Microsoft connection identities');
+    const row = (await client.query('SELECT * FROM company_microsoft_operations WHERE id=$1 AND tenant_id=$2 AND resource_id=$3', [bindings.target?.uncertain_operation_id || null, source.tenant.id, bindings.id])).rows[0];
+    if (!row || row.action !== 'sync' || row.phase !== 'finished' || row.outcome?.kind !== 'unknown' || typeof row.desired !== 'boolean'
+      || row.connection_id !== bindings.connection.id || row.request.poolId !== poolId || row.request.userId !== source.target.id
+      || row.request.action !== (row.desired ? 'assign' : 'remove') || row.before_state?.capture?.pool?.id !== bindings.product.id || row.before_state?.capture?.user?.id !== bindings.person.id
+      || row.before_state.capture.pool.skuId !== bindings.product.sku_id || row.before_state.capture.user.objectId !== bindings.person.object_id
+      || !isDeepStrictEqual(row.before_state.capture.pool.disabledPlans, bindings.product.disabled_plans)
+      || bindings.target.status === 'processing' || bindings.target.pending_operation_id) fail(409, 'Matching original uncertain Microsoft write required');
+    const projection = await this.projection(client, poolId, source, authorization); const graph = this.bridge.createGraph(config.write);
+    let remote, assignmentError;
+    try { remote = await this.inspect(graph, bindings); assignmentError = graph.assignmentError; }
+    finally { graph.tokens?.clear?.(); }
+    const current = await this.projection(client, poolId, source, authorization);
+    if (!isDeepStrictEqual(this.stableProjection(current), this.stableProjection(projection))) fail(412, 'Current Microsoft review entitlement changed');
+    const before = observation(row.before_state.capture.remote), notBefore = new Date(Math.max(new Date(row.finished_at).getTime() + 30000, row.outcome.retryAt ? Date.parse(row.outcome.retryAt) : 0)).toISOString();
+    const attempt = { id: row.id, desired: row.desired, actorUserId: identifier(row.source.actorUserId), reason: row.request.reason, createdAt: new Date(row.created_at).toISOString(), finishedAt: new Date(row.finished_at).toISOString(), before, notBefore };
+    const decisions = ['release'];
+    if (row.desired && !bindings.target.owned && !before.present && remote.direct && remote.plansMatch
+      && String(bindings.connection.tenant_generation) === source.tenant.generation && (!projection.desired || remote.active && remote.accountEnabled && assignmentError === null)) decisions.unshift('adopt');
+    return { capture: { ...this.capture(source, bindings, projection, remote), assignmentError, attempt }, projection, bindings, decisions };
+  }
+  async reviewPreview(poolId, userId, user, authorization) {
+    identifier(poolId); identifier(userId);
+    return this.companies.read(user, authorization, async (client, source) => {
+      const config = this.bridge.requireConfiguration(source); const value = await this.reviewState(client, poolId, source, authorization, config); this.bridge.unchangedConfiguration(source, config);
+      return { ...value.capture, decisions: value.decisions, fingerprint: digest(value.capture), checkedAt: new Date().toISOString() };
+    }, userId);
+  }
+  async review(poolId, userId, input, operation, user, authorization) {
+    identifier(poolId); identifier(userId); identifier(operation); const reason = confirmation(input, ['fingerprint', 'uncertainOperationId', 'decision']); identifier(input.uncertainOperationId);
+    if (typeof input.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.fingerprint) || !['adopt', 'release'].includes(input.decision)) fail(400, 'Exact explicit Microsoft review decision required');
+    const source = await this.companies.authority.read(authorization, user, userId), action = input.decision === 'adopt' ? 'adopt' : 'retry';
+    const request = { poolId, userId, fingerprint: input.fingerprint, uncertainOperationId: input.uncertainOperationId, decision: input.decision, reason, confirm: true };
+    const prior = await this.recorded(source, operation, request, this.database, action);
+    if (prior) { await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: true, result: prior }; }
+    const config = this.bridge.requireConfiguration(source); const client = await this.database.getClient(); let locked = false, lockKey = null;
+    try {
+      const bindings = await this.bindings(client, poolId, source); lockKey = 'company-microsoft:' + bindings.id;
+      locked = (await client.query('SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked', [lockKey])).rows[0].locked;
+      if (!locked) fail(409, 'Microsoft target has an active operation');
+      const existing = await this.recorded(source, operation, request, client, action);
+      if (existing) { await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: true, result: existing }; }
+      const current = await this.reviewState(client, poolId, source, authorization, config);
+      if ('company-microsoft:' + current.bindings.id !== lockKey || current.capture.attempt.id !== input.uncertainOperationId || digest(current.capture) !== input.fingerprint || !current.decisions.includes(input.decision)) fail(412, 'Microsoft review decision or retained evidence changed');
+      if (Date.parse(current.capture.attempt.notBefore) > Date.now()) fail(409, 'Wait for the original Microsoft attempt before reviewing');
+      const result = await this.transaction(client, async () => {
+        await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config);
+        const value = (await client.query('SELECT company_microsoft_review($1::jsonb,$2::uuid,$3::text,$4::uuid,$5::jsonb,$6::jsonb,$7::jsonb) AS result', [source, operation, randomBytes(32).toString('hex'), current.bindings.id, request, current.projection, current.capture])).rows[0].result;
+        await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config); return value;
+      });
+      await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: false, result };
+    } finally {
+      let destroyed = false;
+      if (locked) { try { await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [lockKey]); } catch { client.release(true); destroyed = true; } }
+      if (!destroyed) client.release();
+    }
+  }
   async recoveryPreview(poolId, userId, user, authorization) {
     identifier(poolId); identifier(userId);
     return this.companies.read(user, authorization, async (client, source) => {

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within, waitFor } from '@testing-librar
 import CompanyMicrosoftPanel from '@/components/views/CompanyMicrosoftPanel';
 import { CompanyPool } from '@/lib/companyApplications';
 import { api } from '@/lib/api';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftReviewPreview, microsoftReviewReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const pool: CompanyPool = { id: id(8), tenantId: id(2), revision: '1', name: 'Büro-Lizenz', vendor: 'Microsoft', description: '', totalSeats: 2, usedSeats: 1, availableSeats: 1, licenseType: 'per_user', allocationMode: 'local-only', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z' };
 beforeEach(() => {
@@ -96,4 +96,18 @@ test.each(['prepared', 'dispatched'] as const)('a %s interruption requires a sep
   expect(within(result).getByRole('heading', { name: phase === 'prepared' ? 'Unterbrochenen Versuch vor Versand abgeschlossen' : 'Wiederhergestellt · Anbieterausgang weiterhin unklar' })).toBeInTheDocument();
   expect(api.post).toHaveBeenCalledTimes(2); expect((api.post as jest.Mock).mock.calls.every(([url]: [string]) => /\/(recovery-preview|recover)$/.test(url))).toBe(true);
   expect(pool.usedSeats).toBe(1); expect(screen.getByRole('button', { name: 'Unterbrochenen Lizenzvorgang prüfen' })).toBeDisabled();
+});
+
+test.each([['adopt', false], ['adopt', true], ['release', false]] as const)('review decision %s with cleanup=%s requires a separate original-attempt confirmation', async (decision, cleanup) => {
+  (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(microsoftState()) : url.endsWith('/mappings') ? ok({ ...microsoftMappings(), pool: microsoftPool() }) : ok(microsoftHistory()));
+  (api.post as jest.Mock).mockImplementation(async (url: string, _body: unknown, config: any) => url.endsWith('/review-preview') ? ok(microsoftReviewPreview(decision, cleanup)) : ok(microsoftReviewReceipt(config.headers['Idempotency-Key'], decision, cleanup)));
+  render(<CompanyMicrosoftPanel context={microsoftContext} pool={pool} onAccessError={jest.fn()} />); await load(); fireEvent.click(screen.getByRole('button', { name: 'Unklaren Lizenzversuch prüfen' }));
+  await screen.findByRole('region', { name: 'Prüfung des unklaren Microsoft-Lizenzversuchs' }); expect(screen.getByRole('button', { name: 'Entscheidung vorbereiten' })).toBeDisabled(); expect(api.post).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText('Entscheidung zum unklaren Versuch'), { target: { value: decision } }); fireEvent.change(screen.getByLabelText('Begründung der Lizenzprüfung'), { target: { value: 'Unklaren Vorgang und aktuellen Bestand geprüft' } }); fireEvent.click(screen.getByRole('button', { name: 'Entscheidung vorbereiten' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Lizenzentscheidung bestätigen' }); expect(within(dialog).getByRole('button', { name: 'Bestätigen' })).toBeDisabled();
+  if (cleanup) expect(within(dialog).getByText(/ausschließlich für eine separat bestätigte Rückgabe/)).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ich habe den ursprünglichen Versuch und den aktuellen Microsoft-Bestand geprüft und bestätige diese Entscheidung.' })); fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' }));
+  const result = await screen.findByRole('region', { name: 'Microsoft-Prüfentscheidung' }); expect(within(result).getByText(/Keine neue Lizenzanfrage ausgelöst/)).toBeInTheDocument();
+  expect(within(result).getByRole('heading')).toHaveTextContent(decision === 'release' ? 'Unklaren Versuch geschlossen' : cleanup ? 'Verwaltung für kontrollierte Rückgabe übernommen' : 'Verwaltung der beobachteten Lizenz übernommen');
+  expect(api.post).toHaveBeenCalledTimes(2); expect((api.post as jest.Mock).mock.calls.every(([url]: [string]) => /\/(review-preview|review)$/.test(url))).toBe(true); expect(pool.usedSeats).toBe(1);
 });

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T03:13:23.328435+00:00",
+  "status": "native-review-checkpoint-not-release-ready",
+  "baseCommit": "188ead711f7d15f8560c469af15e4ef8c3a7dcb9",
+  "branch": "codex/company-microsoft-bridge",
+  "productionChanged": false,
+  "checks": {
+    "policyUnit": {
+      "passed": 1529,
+      "suites": 48
+    },
+    "frontendUnit": {
+      "passed": 3321,
+      "suites": 163
+    },
+    "licensePostgres": {
+      "passed": 599,
+      "companySqlHttpCases": 40,
+      "newUnknownReviewCases": 5
+    },
+    "targetedFrontend": {
+      "passed": 65
+    },
+    "typescript": "passed",
+    "javascriptSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "verifiedBehavior": [
+    "Explicit adopt/release decisions bind the exact original finished unknown write, current own-company pair, local/group projection, independent remote observation, current authority, fingerprint, reason and new operation key.",
+    "At least30seconds after original finish plus any longer retained provider wait is required. This bounds local dispatch/connector overlap, not future provider effects; the UI makes that remaining ambiguity explicit.",
+    "Adoption requires original addition with prior absence and current matching direct plans. Inherited, unrelated or plan-changed assignments are not adopted. Current positive entitlement requires active direct effect/account and current connection generation.",
+    "Negative-entitlement adoption remains cleanup_required/conflict and sends no removal. A separately confirmed new normal sync performs the later removal.",
+    "Release creates no ownership or Graph write. Changed company generation permits release, then a separate current connection renewal and new confirmed sync; it does not permit adoption under the old generation.",
+    "Fresh authority/local evidence are checked again at physical SQL commit, including the previously reserved retry action. Expiry rolls back the complete decision and target change.",
+    "Active target lock, changed remote state, unavailable/changed group source and a suppressed physical target UPDATE prevent success. Original unknown Source/request/outcome stay immutable.",
+    "Mounted actual HTTP routes persist release and return only the original historical decision on repeated keys. Previous original sync keys retain their historical unknown result even after later adoption or successful new dispatch.",
+    "Client/UI bind decision/target/revision/ownership and original attempt; require a separate checkbox and reason; distinguish cleanup, adoption and release; lost replies never retry automatically.",
+    "Restricted legacy role cannot execute the two added delivery signatures; normal dispatch continues to require current generation and uses the non-retained admission wrapper."
+  ],
+  "providerBoundary": "All Graph responses, tokens and ordinary setup mutations are explicit in-process fixtures. Company sources, schema migrations, SQL transactions, deferred commit checks and mounted HTTP routes use actual disposable PostgreSQL. Current-authority fixture receipts are not a new real authenticator login or an actual Microsoft tenant acceptance.",
+  "browserBoundary": "Configured provider actual-browser coverage is still pending. The65 targeted client/React cases and prior unconfigured real-MFA browser case do not replace it.",
+  "remaining": [
+    "Configured provider real-browser flow using actual disposable services and an explicitly marked external provider fixture.",
+    "Actual Microsoft test tenant consent, target selection, user authentication and independently observed effects.",
+    "Final full Linux CI, fresh backups/migration/release validation and deployment."
+  ],
+  "sourceSha256": {
+    "services/core/policy-service/src/db/migrations/031_company_microsoft.sql": "ba2dfaebe513f4e43c0c01486a0024229cec73a80b738ebd9993c9e735b0da8f",
+    "services/core/policy-service/src/db/migrations/032_company_microsoft_delivery.sql": "2cf5187de4f344800cd6e547d40c3668a032f54c36d2e447788cb150e8cc8e17",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftDelivery.js": "52144b2e5b8ce30775ca833f4a64fd2f2680cac71073c77d16d34dad1837da55",
+    "services/core/policy-service/src/licenses/companyMicrosoftRoutes.js": "f1eb29c6ff10f94b7a30e09e5efe2605e4779fef9e8f0c6128d6a72b47b5559c",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoft.integration.cjs": "7e2e61a206d4a5cacd7a7e1b453bb405f4447983b8a536d26ae6aa7db005d63c",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoftRoutes.test.js": "c540039f5a1019c3a632ec3190e155cc8633047114afcb9c9d66d6224f63ad0c",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "06e363cfa643ebdd2992c967c1bbf113a1e821114a0c4dd2acea8a1ce475fd96",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "b6431b7f33682a14d1bc76e8461112c1cb94f86beaf1a21efc897c8d73626d09",
+    "frontend/web-app/src/__tests__/fixtures/companyMicrosoft.ts": "f842670dd60367e092bd05f005ba3b9279a6a46c347e3e1d93f995b297dafd44",
+    "frontend/web-app/src/__tests__/lib/companyMicrosoft.test.ts": "30845f9da7a15357a2873149151f9d4586ca4ea81dd4ea33b9f2bdf72dae77f6",
+    "frontend/web-app/src/__tests__/views/CompanyMicrosoftPanel.test.tsx": "67a3ede75bbc348c128bca8fd07442aa33868cf9c5745c76f99a936359e09ce1"
+  },
+  "logSha256": {
+    "policy": "4260983b19a6c004c79c614d04a159acbbe0c21de8b43b605d8b82e6782054a5",
+    "frontend": "5d7c4a2c76989afb061211d93f3441859cb47efe64c00b77cdd7a3f4acb3b1a1",
+    "licensePostgres": "83187629561ffe8224f6cae2a05728ac17b1af3aef2e090c16806956514e1072",
+    "typescript": "7cf910ab2ec972d4817443e4939b0688cb59143a73dcc3f34155923143f9b5f4",
+    "targetedFrontend": "f5f3a1ca1f64ead6a597f0bed007bda2ba82947123c3b8ff133577ad6b016fe3"
+  }
+}

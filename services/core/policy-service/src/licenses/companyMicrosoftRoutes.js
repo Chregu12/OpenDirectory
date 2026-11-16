@@ -42,6 +42,8 @@ function companyMicrosoftRoutes(companies, options) {
   router.post('/pools/:id/users/:userId/sync', route(async (req, res) => res.json(await delivery.sync(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
   router.post('/pools/:id/users/:userId/recovery-preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.recoveryPreview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
   router.post('/pools/:id/users/:userId/recover', route(async (req, res) => res.json(await delivery.recover(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
+  router.post('/pools/:id/users/:userId/review-preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.reviewPreview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
+  router.post('/pools/:id/users/:userId/review', route(async (req, res) => res.json(await delivery.review(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
   router.post('/connections', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization), 'connection', 'connection', 201)));
   router.post('/connections/:id/renew', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization,
     precondition(req.headers['if-match'], 'connection', identifier(req.params.id))), 'connection', 'connection')));

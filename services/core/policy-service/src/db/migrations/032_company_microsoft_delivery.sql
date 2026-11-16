@@ -29,7 +29,7 @@ END $$;
 CREATE OR REPLACE FUNCTION company_microsoft_delivery_receiving() RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM company_microsoft_receiving();
- IF (SELECT count(*) FROM company_microsoft_delivery_manifest)<>8 OR EXISTS(SELECT 1 FROM company_microsoft_delivery_manifest manifest
+ IF (SELECT count(*) FROM company_microsoft_delivery_manifest)<>10 OR EXISTS(SELECT 1 FROM company_microsoft_delivery_manifest manifest
   WHERE to_regprocedure(manifest.signature) IS NULL OR manifest.digest<>md5(pg_get_functiondef(to_regprocedure(manifest.signature)))) THEN
   RAISE EXCEPTION 'Company Microsoft delivery evidence unavailable' USING ERRCODE='42501';END IF;
 END $$;
@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION company_microsoft_observation_valid(value JSONB) RETU
  AND NOT(value->'inherited'='true'::jsonb AND value->'present'<>'true'::jsonb),false);
 $$;
 
-CREATE OR REPLACE FUNCTION company_microsoft_admission(authority JSONB,request JSONB,projection JSONB,capture JSONB) RETURNS BOOLEAN LANGUAGE plpgsql VOLATILE AS $$
+CREATE OR REPLACE FUNCTION company_microsoft_admission(authority JSONB,request JSONB,projection JSONB,capture JSONB,retained_generation BOOLEAN) RETURNS BOOLEAN LANGUAGE plpgsql VOLATILE AS $$
 DECLARE connection company_microsoft_connections;product company_microsoft_pools;person company_microsoft_users;raw JSONB;origin JSONB;proof JSONB;rule company_license_groups;
  eligible BOOLEAN;wanted BOOLEAN=false;required_groups UUID[]='{}';seen UUID[]='{}';
 BEGIN
@@ -61,7 +61,7 @@ BEGIN
  SELECT * INTO product FROM company_microsoft_pools WHERE id=(capture#>>'{pool,id}')::uuid AND connection_id=connection.id AND tenant_id=connection.tenant_id AND status='active' FOR SHARE;
  SELECT * INTO person FROM company_microsoft_users WHERE id=(capture#>>'{user,id}')::uuid AND connection_id=connection.id AND tenant_id=connection.tenant_id AND status='active' FOR SHARE;
  PERFORM 1 FROM license_catalog WHERE id=product.pool_id FOR SHARE;
- IF connection.id IS NULL OR product.id IS NULL OR person.id IS NULL OR connection.tenant_generation::text IS DISTINCT FROM authority#>>'{tenant,generation}'
+ IF connection.id IS NULL OR product.id IS NULL OR person.id IS NULL OR (retained_generation IS DISTINCT FROM true AND connection.tenant_generation::text IS DISTINCT FROM authority#>>'{tenant,generation}')
   OR connection.revision::text IS DISTINCT FROM capture#>>'{connection,revision}' OR connection.microsoft_tenant_id::text IS DISTINCT FROM capture#>>'{connection,microsoftTenantId}'
   OR connection.read_client_id::text IS DISTINCT FROM capture#>>'{connection,readClientId}' OR connection.write_client_id::text IS DISTINCT FROM capture#>>'{connection,writeClientId}'
   OR product.pool_id::text IS DISTINCT FROM request->>'poolId' OR product.revision::text IS DISTINCT FROM capture#>>'{pool,revision}'
@@ -107,6 +107,10 @@ BEGIN
   OR projection->'desired' IS DISTINCT FROM capture#>'{local,desired}' THEN RAISE EXCEPTION 'Complete current company entitlement proof required' USING ERRCODE='42501';END IF;
  RETURN wanted;
 END $$;
+
+CREATE OR REPLACE FUNCTION company_microsoft_admission(authority JSONB,request JSONB,projection JSONB,capture JSONB) RETURNS BOOLEAN LANGUAGE sql VOLATILE AS $$
+ SELECT company_microsoft_admission(authority,request,projection,capture,false);
+$$;
 
 CREATE OR REPLACE FUNCTION company_microsoft_prepare(authority JSONB,operation UUID,nonce TEXT,resource UUID,request JSONB,projection JSONB,capture JSONB) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $$
 DECLARE original company_microsoft_targets;desired_state BOOLEAN;known_owned BOOLEAN=false;prior company_microsoft_operations;
@@ -273,11 +277,62 @@ BEGIN
  RETURN result;
 END $$;
 
+CREATE OR REPLACE FUNCTION company_microsoft_review(authority JSONB,operation UUID,nonce TEXT,resource UUID,request JSONB,projection JSONB,capture JSONB) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $$
+DECLARE target company_microsoft_targets;original company_microsoft_operations;remote JSONB=capture->'remote';wanted BOOLEAN;known_owned BOOLEAN;
+ decision TEXT=request->>'decision';action_name TEXT;status_name TEXT;error_name TEXT;event_id UUID;result JSONB;ready_at TIMESTAMPTZ;
+BEGIN
+ PERFORM company_microsoft_delivery_receiving();
+ IF nonce IS NULL OR nonce !~ '^[a-f0-9]{64}$' OR NOT pg_try_advisory_xact_lock(hashtextextended('company-microsoft:'||resource::text,0)) THEN
+  RAISE EXCEPTION 'Exclusive Microsoft review target required' USING ERRCODE='55000';END IF;
+ IF NOT license_company_exact(request,ARRAY['poolId','userId','fingerprint','uncertainOperationId','decision','reason','confirm']) OR decision IS NULL OR decision NOT IN('adopt','release')
+  OR capture->'assignmentError' IS DISTINCT FROM 'null'::jsonb AND capture->>'assignmentError' IS DISTINCT FROM 'graph_assignment_error' THEN
+  RAISE EXCEPTION 'Exact explicit Microsoft review decision required' USING ERRCODE='42501';END IF;
+ wanted=company_microsoft_admission(authority,(request-ARRAY['uncertainOperationId','decision'])||jsonb_build_object('action','review'),projection,capture,true);
+ SELECT * INTO target FROM company_microsoft_targets WHERE id=resource AND tenant_id=(authority#>>'{tenant,id}')::uuid FOR UPDATE;
+ SELECT * INTO original FROM company_microsoft_operations WHERE id=target.uncertain_operation_id AND tenant_id=target.tenant_id AND resource_id=resource AND connection_id=target.connection_id;
+ IF target.id IS NULL OR target.status='processing' OR target.pending_operation_id IS NOT NULL OR original.id IS NULL OR original.action<>'sync' OR original.phase<>'finished'
+  OR original.outcome->>'kind' IS DISTINCT FROM 'unknown' OR original.desired IS NULL
+  OR original.request->>'action' IS DISTINCT FROM (CASE WHEN original.desired THEN 'assign' ELSE 'remove' END)
+  OR original.id::text IS DISTINCT FROM request->>'uncertainOperationId' OR original.id::text IS DISTINCT FROM capture#>>'{attempt,id}'
+  OR target.id::text IS DISTINCT FROM capture#>>'{target,id}' OR target.revision::text IS DISTINCT FROM capture#>>'{target,revision}'
+  OR target.pool_binding_id::text IS DISTINCT FROM capture#>>'{pool,id}' OR target.user_binding_id::text IS DISTINCT FROM capture#>>'{user,id}'
+  OR original.before_state#>>'{capture,pool,id}' IS DISTINCT FROM target.pool_binding_id::text OR original.before_state#>>'{capture,user,id}' IS DISTINCT FROM target.user_binding_id::text
+  OR original.before_state#>>'{capture,pool,skuId}' IS DISTINCT FROM capture#>>'{pool,skuId}' OR original.before_state#>'{capture,pool,disabledPlans}' IS DISTINCT FROM capture#>'{pool,disabledPlans}'
+  OR original.before_state#>>'{capture,user,objectId}' IS DISTINCT FROM capture#>>'{user,objectId}'
+  OR NOT company_microsoft_observation_valid(original.before_state#>'{capture,remote}') THEN
+  RAISE EXCEPTION 'Original matching uncertain Microsoft attempt required' USING ERRCODE='40001';END IF;
+ -- Local dispatch/connector windows are bounded; a later provider effect remains possible and requires an explicit human decision.
+ ready_at=GREATEST(original.finished_at+interval '30 seconds',(original.outcome->>'retryAt')::timestamptz);
+ IF ready_at>clock_timestamp() THEN RAISE EXCEPTION 'Uncertain Microsoft attempt must settle before human review' USING ERRCODE='55000';END IF;
+ IF decision='adopt' AND (NOT original.desired OR target.owned OR original.before_state#>'{capture,remote,present}' IS DISTINCT FROM 'false'::jsonb
+  OR remote->'direct' IS DISTINCT FROM 'true'::jsonb OR remote->'plansMatch' IS DISTINCT FROM 'true'::jsonb
+  OR capture#>>'{connection,tenantGeneration}' IS DISTINCT FROM authority#>>'{tenant,generation}'
+  OR wanted AND (remote->'active' IS DISTINCT FROM 'true'::jsonb OR remote->'accountEnabled' IS DISTINCT FROM 'true'::jsonb OR capture->'assignmentError' IS DISTINCT FROM 'null'::jsonb)) THEN
+  RAISE EXCEPTION 'Only the reviewed matching direct uncertain addition may be adopted' USING ERRCODE='42501';END IF;
+ known_owned=decision='adopt' OR target.owned AND remote->'direct'='true'::jsonb;action_name=CASE WHEN decision='adopt' THEN 'adopt' ELSE 'retry' END;
+ IF wanted AND known_owned AND remote->'direct'='true'::jsonb AND remote->'active'='true'::jsonb AND remote->'plansMatch'='true'::jsonb AND remote->'accountEnabled'='true'::jsonb
+  OR NOT wanted AND remote->'present'='false'::jsonb THEN status_name='confirmed';error_name=NULL;
+ ELSE status_name='conflict';error_name=CASE WHEN decision='adopt' AND NOT wanted THEN 'review_adopted_for_cleanup' WHEN NOT known_owned AND remote->'present'='true'::jsonb THEN 'unmanaged_assignment_retained' ELSE 'review_recheck_required' END;END IF;
+ IF wanted AND capture->>'assignmentError'='graph_assignment_error' THEN status_name='failed';error_name='graph_assignment_error';END IF;
+ PERFORM set_config('opendirectory.company_microsoft_operation',operation::text,true);PERFORM set_config('opendirectory.company_microsoft_permit',nonce,true);PERFORM set_config('opendirectory.company_microsoft_purpose','prepare',true);
+ INSERT INTO company_microsoft_operations(id,tenant_id,connection_id,resource_id,action,source,request,permit_hash,phase,desired,local_state,before_state)
+  VALUES(operation,target.tenant_id,target.connection_id,resource,action_name,authority,request,encode(sha256(convert_to(nonce,'UTF8')),'hex'),'prepared',wanted,projection,jsonb_build_object('capture',capture));
+ UPDATE company_microsoft_targets SET revision=revision+1,status=status_name,owned=known_owned,last_operation_id=operation,pending_operation_id=NULL,uncertain_operation_id=NULL,
+  observation=remote,checked_at=clock_timestamp(),error_code=error_name,updated_at=clock_timestamp() WHERE id=resource RETURNING * INTO target;
+ IF NOT FOUND OR target.last_operation_id<>operation OR target.uncertain_operation_id IS NOT NULL THEN RAISE EXCEPTION 'Actual Microsoft review target effect required' USING ERRCODE='42501';END IF;
+ event_id=company_microsoft_audit(operation,'review',jsonb_build_object('kind','human','userId',authority->>'actorUserId'),jsonb_build_object('source',authority,'decision',decision,'uncertainOperationId',original.id,'capture',capture));
+ result=jsonb_build_object('operationId',operation,'poolId',request->>'poolId','userId',request->>'userId','action','review','decision',decision,'uncertainOperationId',original.id,
+  'targetId',resource,'targetRevision',target.revision::text,'status',status_name,'owned',known_owned,'pendingOperationId',NULL,'uncertainOperationIdAfter',NULL,'errorCode',error_name,'eventId',event_id,'kind','reviewed');
+ PERFORM set_config('opendirectory.company_microsoft_purpose','change',true);
+ UPDATE company_microsoft_operations SET phase='finished',outcome=result,finished_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=operation;RETURN result;
+END $$;
+
 INSERT INTO company_microsoft_delivery_manifest(signature,digest)
  SELECT signature,md5(pg_get_functiondef(to_regprocedure(signature))) FROM unnest(ARRAY[
  'company_microsoft_local(uuid,jsonb)','company_microsoft_delivery_receiving()','company_microsoft_observation_valid(jsonb)',
  'company_microsoft_admission(jsonb,jsonb,jsonb,jsonb)','company_microsoft_prepare(jsonb,uuid,text,uuid,jsonb,jsonb,jsonb)',
- 'company_microsoft_dispatch(uuid,text)','company_microsoft_finish(uuid,text,jsonb)','company_microsoft_recover(jsonb,uuid,text,uuid,jsonb,jsonb)']) signature
+ 'company_microsoft_dispatch(uuid,text)','company_microsoft_finish(uuid,text,jsonb)','company_microsoft_recover(jsonb,uuid,text,uuid,jsonb,jsonb)',
+ 'company_microsoft_admission(jsonb,jsonb,jsonb,jsonb,boolean)','company_microsoft_review(jsonb,uuid,text,uuid,jsonb,jsonb,jsonb)']) signature
  ON CONFLICT(signature) DO UPDATE SET digest=EXCLUDED.digest;
 DO $$ DECLARE signature TEXT;BEGIN
  FOR signature IN SELECT manifest.signature FROM company_microsoft_delivery_manifest manifest LOOP
