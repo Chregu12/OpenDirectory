@@ -55,7 +55,7 @@ function operator(roles=['license-provider-administrator']) {
   return { principal,user:{ iss:principal.issuer,sub:principal.subject,actor_type:'user',roles,identity_authorization:{ userId,revision:'1',linkRevision:'1',rolesRevision:'a'.repeat(64) },
     auth_time:authTime,amr:['pwd','otp'],mfa_authorization:{ schemaVersion:1,userId,revision:'1',authTime,methods:['pwd','otp'] } } };
 }
-async function fixture({ assign=true,enable=true,capacityReview=true,capacityUnits=100,readEngine='javascript' }={}) {
+async function fixture({ assign=true,enable=true,capacityReview=true,capacityUnits=100,readEngine='javascript',writeEngine='javascript' }={}) {
   const targetUser=randomUUID(); let snapshot={ schemaVersion:1,userId:targetUser,revision:'1',enabled:true,deleted:false };
   const identity={ user:async userId=>({...structuredClone(snapshot),userId}) }; const source={ user:async userId=>({...structuredClone(snapshot),userId}),snapshot:async groupId=>groupSnapshot({groupId,name:'Owned provider group',revision:'1',memberIds:[targetUser]}) };
   const allocator=new LicenseAllocator(database,{ source });new GroupLicenseAllocator({allocator,source}); const store=new ProviderStore(allocator,{ revalidate:async()=>{} }); const actor=operator(); const reason='Reviewed exclusive direct Microsoft license management';
@@ -69,9 +69,18 @@ async function fixture({ assign=true,enable=true,capacityReview=true,capacityUni
     spawnImpl:(_binary,args,options)=>{
       assert.deepEqual(args,[]); assert.deepEqual(options.env,{});
       // Process-contract fixture; Rust's fixed-host HTTP parsing is tested in cargo.
-      const script=`let input='';process.stdin.on('data',part=>input+=part);process.stdin.on('end',async()=>{const request=JSON.parse(input);if(request.operation!=='microsoft.user'||request.objectId!==${JSON.stringify(remote.id)})process.exit(2);const response=await fetch(${JSON.stringify(origin)}+'/v1.0/users/'+request.objectId+'?$select=id,accountEnabled,assignedLicenses,licenseAssignmentStates',{headers:{Authorization:'Bearer '+request.accessToken}});process.stdout.write(JSON.stringify({ok:true,user:await response.json()}));});`;
+      const script=`let input='';process.stdin.on('data',part=>input+=part);process.stdin.on('end',async()=>{
+        const request=JSON.parse(input);if(!['microsoft.user','microsoft.assignLicense'].includes(request.operation)||request.objectId!==${JSON.stringify(remote.id)})process.exit(2);
+        const writing=request.operation==='microsoft.assignLicense';
+        try{
+          const url=${JSON.stringify(origin)}+'/v1.0/users/'+request.objectId+(writing?'/assignLicense':'?$select=id,accountEnabled,assignedLicenses,licenseAssignmentStates');
+          const response=await fetch(url,{method:writing?'POST':'GET',headers:{Authorization:'Bearer '+request.accessToken,...(writing?{'Content-Type':'application/json','client-request-id':request.attemptId}:{})},...(writing?{body:JSON.stringify({addLicenses:request.desired?[{skuId:request.skuId,disabledPlans:request.disabledPlans}]:[],removeLicenses:request.desired?[]:[request.skuId]})}:{})});
+          if(response.status!==200)return process.stdout.write(JSON.stringify({ok:false,code:(writing?'graph_write_':'graph_read_')+'http_'+response.status,...(writing?{uncertain:![400,401,403,404,405,410,412,415,422,429].includes(response.status)}:{})}));
+          const body=await response.json();process.stdout.write(JSON.stringify(writing?{ok:true,result:{id:body.id}}:{ok:true,user:body}));
+        }catch{process.stdout.write(JSON.stringify({ok:false,code:writing?'graph_write_unavailable':'graph_read_unavailable',...(writing?{uncertain:true}:{})}));}
+      });`;
       return spawn(process.execPath,['-e',script],options);
-    } },readEngine);
+    } },readEngine,writeEngine);
   const worker=()=>new FulfillmentWorker({ store,identity,graph:graph(),connectorId:connector.id,tenantId:connector.tenantId,sourceClientId:'owned-workload-client' });
   const target=()=>store.lookup(license.id,targetUser,actor.user);
   let capacity;
@@ -81,7 +90,8 @@ async function fixture({ assign=true,enable=true,capacityReview=true,capacityUni
 const writes=()=>calls.filter(call=>call.method==='POST' && call.url.endsWith('/assignLicense'));
 
 test('legacy provider readers and workers exclude an injected company-owned pool without checkpoint, error or Graph effects',async()=>{
- const context=await fixture();const view=await context.target();const row=await context.store.row(view.id);
+ for(const engines of [{},{readEngine:'rust',writeEngine:'rust'}]){
+ const context=await fixture(engines);const view=await context.target();const row=await context.store.row(view.id);
  const client=await pool.connect();
  try{await client.query('BEGIN');await client.query('ALTER TABLE license_catalog DISABLE TRIGGER USER');await client.query('UPDATE license_catalog SET business_tenant_id=$2,business_revision=1 WHERE id=$1',[context.license.id,randomUUID()]);await client.query('ALTER TABLE license_catalog ENABLE TRIGGER USER');await client.query('COMMIT');}
  catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
@@ -105,6 +115,7 @@ test('legacy provider readers and workers exclude an injected company-owned pool
  assert.equal((await pool.query('SELECT count(*)::text AS count FROM license_fulfillment_events')).rows[0].count,events);
  }finally{
   const cleanup=await pool.connect();try{await cleanup.query('BEGIN');await cleanup.query('ALTER TABLE license_catalog DISABLE TRIGGER USER');await cleanup.query('UPDATE license_catalog SET business_tenant_id=NULL,business_revision=NULL WHERE id=$1',[context.license.id]);await cleanup.query('ALTER TABLE license_catalog ENABLE TRIGGER USER');await cleanup.query('COMMIT');}catch(error){await cleanup.query('ROLLBACK');throw error;}finally{cleanup.release();}
+ }
  }
 });
 
@@ -185,8 +196,8 @@ test('a real dedicated worker database identity can fulfill but cannot create lo
     } finally { if(child && child.exitCode===null && child.signalCode===null) { const stopped=new Promise(resolve=>child.once('exit',resolve)); child.kill('SIGKILL'); await stopped; } fs.rmSync(directory,{ recursive:true,force:true }); }
   } finally { if (limited) await limited.end(); await pool.query(`DROP OWNED BY ${role}`); await admin.query(`DROP ROLE ${role}`); }
 });
-for(const readEngine of ['javascript','rust']) test(`${readEngine}: transactional desired state drives only the mapped Graph user and SKU; successful mutation alone is not provisioned`,async()=>{
-  const context=await fixture({readEngine}); const target=await context.target(); assert.equal(target.desired,true);
+for(const [readEngine,writeEngine] of [['javascript','javascript'],['rust','javascript'],['rust','rust']]) test(`${writeEngine==='rust'?'rust-write':readEngine}: transactional desired state drives only the mapped Graph user and SKU; successful mutation alone is not provisioned`,async()=>{
+  const context=await fixture({readEngine,writeEngine}); const target=await context.target(); assert.equal(target.desired,true);
   await context.worker().target(target.id); assert.equal((await context.target()).status,'verifying'); assert.equal(writes().length,1);
   assert.deepEqual(JSON.parse(writes()[0].body),{ addLicenses:[{ skuId:context.product.skuId,disabledPlans:[] }],removeLicenses:[] });
   assert.equal(writes()[0].url,`/v1.0/users/${context.subject.objectId}/assignLicense`);
@@ -197,6 +208,14 @@ for(const readEngine of ['javascript','rust']) test(`${readEngine}: transactiona
   assert.deepEqual(JSON.parse(writes()[1].body),{ addLicenses:[],removeLicenses:[context.product.skuId] });
   const evidence=JSON.stringify((await pool.query('SELECT actor,details FROM license_fulfillment_events')).rows);
   assert.equal(evidence.includes('isolated-graph-token')||evidence.includes('isolated-provider-secret'),false);
+});
+test('a Rust write with a lost reply retains durable uncertainty and cannot repeat or claim ownership',async()=>{
+  const context=await fixture({readEngine:'rust',writeEngine:'rust'});const target=await context.target();
+  writeBehavior=async(_req,res,input)=>{
+    const entry=input.addLicenses[0];remote.assignedLicenses=[entry];remote.licenseAssignmentStates=[{...entry,assignedByGroup:null,state:'Active',error:null}];res.destroy();
+  };
+  await context.worker().target(target.id);assert.equal((await context.target()).status,'unknown');assert.equal((await context.target()).owned,false);assert.equal(writes().length,1);
+  writeBehavior=null;await context.worker().target(target.id);assert.equal((await context.target()).status,'unknown');assert.equal((await context.target()).owned,false);assert.equal(writes().length,1);
 });
 test('overlapping local sources preserve one vendor assignment until the final effective entitlement disappears',async()=>{
   const context=await fixture(); const target=await context.target(); await context.worker().target(target.id); await context.worker().target(target.id);

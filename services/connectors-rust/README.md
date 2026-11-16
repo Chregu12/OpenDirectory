@@ -4,8 +4,9 @@ The Rust readers cover Microsoft Graph `subscribedSkus`, the license state of
 one explicitly mapped Microsoft user, Google Workspace license assignments and
 GitHub Copilot seats, Adobe product-profile members, Slack SCIM users, Atlassian directory users and
 GitLab.com billable group members.
-They do not assign
-licenses, change users, import billing, infer identity matches, or perform JML.
+These read operations do not assign licenses, change users, import billing,
+infer identity matches, or perform JML. A separately selected Microsoft write
+transport is described below; it retains the existing worker's reviewed scope.
 The existing capacity observer remains the only writer of capacity observations
 and still requires its reviewed connection, protected credential file, dedicated
 database role and explicit enablement. The existing JavaScript token client obtains
@@ -48,7 +49,7 @@ connection lifecycle and business inventory informed the design:
 An attribution comment alone is not a substitute for the applicable license if
 source is copied or adapted later. In particular, Nango's license places limits
 on providing its software as a hosted service. This project does not bundle it.
-General tenant-wide user discovery, provider writes in Rust, connection
+General tenant-wide user discovery, writes for the other providers, connection
 UI, cross-provider reconciliation and SaaSLens-style contract/cost management
 are not implemented by this connector. They require their own contracts,
 permissions, persistence, review and tests.
@@ -84,8 +85,48 @@ user endpoint. The separately configured capacity collector only requires
 [Assignment-state semantics](https://learn.microsoft.com/en-us/graph/api/resources/licenseassignmentstate?view=graph-rest-1.0)
 provide the direct/group source and provisioning errors. A successful read does
 not grant permission to assign licenses or prove that a commercial quota exists.
-The existing fulfillment application's separately reviewed write consent applies
-to its Node write path; selecting Rust adds no write capability.
+Selecting Rust reads alone retains the Node write path. Rust writes require the
+separate explicit selection below and the existing reviewed fulfillment consent.
+
+## Bound Microsoft license writes
+
+Set both `LICENSE_FULFILLMENT_READ_ENGINE=rust` and
+`LICENSE_FULFILLMENT_WRITE_ENGINE=rust` in the existing license worker to use Rust
+for reads and reviewed writes. The write engine defaults to `javascript`; Rust
+reads alone retain their previous behavior. An unknown engine or selecting Rust
+writes without Rust reads fails closed. In Helm, override these keys under
+`apps.license-fulfillment-worker.env`. Both workers remain disabled by default.
+
+The fixed operation performs one `POST /v1.0/users/{objectId}/assignLicense` with
+one SKU to add or remove. Only a canonical object ID is accepted; no email lookup,
+alternate host or arbitrary URL is supported. The access token travels only over
+private stdin. Writes allow up to 32 KiB of input to accommodate the existing
+16 KiB token and 128-plan limits; read requests retain their 20 KiB limit.
+
+```json
+{"operation":"microsoft.assignLicense","accessToken":"<private token>","objectId":"<bound canonical UUID>","skuId":"<bound SKU UUID>","disabledPlans":[],"desired":true,"attemptId":"<durable dispatch UUID>"}
+```
+
+`desired:false` removes that SKU. The attempt ID is a correlation header, not a
+provider deduplication guarantee. An acknowledged response is only
+`{"ok":true,"result":{"id":"<bound object UUID>"}}`; it does not prove license
+provisioning. The worker still requires a separate observation before confirming.
+All existing eligibility, ownership, capacity, durable intent and single-use
+dispatch checks remain in force. Company-owned pools remain excluded from this
+legacy worker; this transport does not supply the still-missing company bridge.
+
+Recognized write-operation errors include a boolean `uncertain`. Generic invalid
+input retains the legacy error format and is treated conservatively by the Node
+write adapter. Connection loss, deadline expiry,
+malformed success replies and unexpected status codes preserve an unknown outcome;
+they never become automatic retries or ownership. Explicit rejections preserve
+their bounded `Retry-After` where applicable. No response body is included in an
+error. Rust does not repeat a write after an ambiguous outcome.
+
+[Microsoft's assignLicense contract](https://learn.microsoft.com/en-us/graph/api/user-assignlicense?view=graph-rest-1.0)
+requires application `LicenseAssignment.ReadWrite.All`. Read-only probe consent is
+not expanded for this operation. Native HTTP tests use local fixtures; no real
+tenant assignment or production worker enablement is claimed.
 
 For a real **read-only** smoke test, use a one-off container from the policy-service
 image with the existing reviewed fulfillment configuration mounted at mode 0600,

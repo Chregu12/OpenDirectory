@@ -1,0 +1,45 @@
+{
+  "checkedAt": "2026-11-15T23:54:42.598064+00:00",
+  "baseCommit": "7e050d983d145b0c00135177bb7835d9df7d16ff",
+  "status": "targeted-native-browser-passed-full-linux-ci-required",
+  "productionChanged": false,
+  "previousCi": {
+    "run": 43770792608,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43770792608",
+    "head": "7e050d983d145b0c00135177bb7835d9df7d16ff",
+    "passedJobs": 13,
+    "totalJobs": 15,
+    "browserJob": 132986022580,
+    "failure": "Case55 reached its completed business actions but failed the final four-minute total business-flow assertion. The integration aggregate consequently failed.",
+    "caseDurationMilliseconds": 256223.133509
+  },
+  "correction": {
+    "caseName": "real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding",
+    "realPasswordAndTotpReauthenticationBeforeOffboarding": true,
+    "newSessionAndLaterAuthTimeRequired": true,
+    "actualOffboardingUiBearerMustUseNewSession": true,
+    "originalCapturedAssignmentBearersVerifiedAgainstTheirOwnSession": true,
+    "jwtSignatureIssuerAudienceIdentityRolesAndMfaChecksRetained": true,
+    "perBusinessPhaseBudgetMilliseconds": 240000,
+    "outerTestBudgetMilliseconds": 360000,
+    "productionMfaFreshnessChanged": false,
+    "httpAndResponseTimeoutsChanged": false,
+    "allBusinessSqlAuditOwnershipAndNoMdmAssertionsRetained": true
+  },
+  "validation": {
+    "environment": "Native disposable PostgreSQL, actual Identity/OAuth/password services, production API Gateway and production-built Next.js with Chrome. Explicit password fixtures retained. No personal production account or external Microsoft tenant used.",
+    "finalCasePass": 1,
+    "finalCaseFail": 0,
+    "finalCaseSkipped": 0,
+    "finalCaseDurationMilliseconds": 169895.798417,
+    "totalDurationMilliseconds": 171118.156208,
+    "servicesAndSchemasCleaned": true,
+    "sourceFile": "services/core/oauth-provider/src/__tests__/browser.postgres.cjs",
+    "sourceSha256": "a49aace4b647bf32e408e83f5851ea944af293f529f07d5642cd8133de4bb5c4",
+    "full15JobLinuxCi": "required on pushed head before merge"
+  },
+  "limits": [
+    "This is a test correction; it does not configure a personal production authenticator.",
+    "Real company Microsoft mapping/delivery and tenant acceptance remain outside this transport PR."
+  ]
+}

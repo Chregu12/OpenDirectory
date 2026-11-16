@@ -194,7 +194,7 @@ fn required_nullable<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<S
     Option::<String>::deserialize(de)
 }
 
-fn canonical_id(value: &str) -> Option<String> {
+pub(crate) fn canonical_id(value: &str) -> Option<String> {
     let parsed = Uuid::parse_str(value).ok()?.hyphenated().to_string();
     (value.to_ascii_lowercase() == parsed).then_some(parsed)
 }

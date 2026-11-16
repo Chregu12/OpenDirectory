@@ -14,10 +14,10 @@ const assignment = (extra = {}) => ({ skuId, disabledPlans: [], assignedByGroup:
 let folder;
 beforeEach(() => { folder = fs.mkdtempSync(path.join(os.tmpdir(), 'od-rust-user-')); });
 afterEach(() => fs.rmSync(folder, { recursive: true, force: true }));
-function fixture(reply, { source, fetchImpl } = {}) {
+function fixture(reply, { source, fetchImpl, writeEngine = 'javascript', operation = 'microsoft.user', desired = true } = {}) {
   const binary = path.join(folder, 'connector');
-  fs.writeFileSync(binary, `#!${process.execPath}\nlet input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const request=JSON.parse(input);if(request.operation!=='microsoft.user'||request.objectId!==${JSON.stringify(objectId)}||request.accessToken!=='private.fixture.token'||process.argv.length!==2||process.env.HOME||process.env.DATABASE_URL||process.env.LICENSE_FULFILLMENT_CONFIG_FILE)process.exit(2);${source || `process.stdout.write(${JSON.stringify(JSON.stringify(reply))});`}});`, { mode: 0o700 });
-  const graph = new RustGraphLicenseClient({ ...config, binary, fetchImpl });
+  fs.writeFileSync(binary, `#!${process.execPath}\nlet input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const request=JSON.parse(input);if(request.operation!==${JSON.stringify(operation)}||request.objectId!==${JSON.stringify(objectId)}||request.accessToken!=='private.fixture.token'||process.argv.length!==2||process.env.HOME||process.env.DATABASE_URL||process.env.LICENSE_FULFILLMENT_CONFIG_FILE)process.exit(2);if(request.operation==='microsoft.assignLicense'&&(request.skuId!==${JSON.stringify(skuId)}||JSON.stringify(request.disabledPlans)!=='[]'||request.desired!==${desired}||request.attemptId!==${JSON.stringify(config.clientId)}||Object.keys(request).sort().join(',')!=='accessToken,attemptId,desired,disabledPlans,objectId,operation,skuId'))process.exit(3);${source || `process.stdout.write(${JSON.stringify(JSON.stringify(reply))});`}});`, { mode: 0o700 });
+  const graph = new RustGraphLicenseClient({ ...config, binary, fetchImpl, writeEngine });
   graph.tokens.get = jest.fn().mockResolvedValue('private.fixture.token'); graph.tokens.clear = jest.fn();
   return graph;
 }
@@ -47,6 +47,7 @@ test.each([
   { ok: true, user: state(), extra: 'private error' },
   { ok: false, code: 'graph_read_http_429', retryAfter: 3601 },
   { ok: false, code: 'graph_write_http_429', retryAfter: 30 },
+  { ok: false, code: 'graph_read_http_403', uncertain: false },
 ])('rejects malformed, mismatched or unexpected process replies', async reply => {
   const graph = fixture(reply);
   await expect(graph.inspect(objectId, skuId, [])).rejects.toMatchObject({ code: 'graph_read_invalid_response' });
@@ -86,4 +87,45 @@ test('writes use the existing Graph contract and remain uncertain after an ambig
   const graph = fixture({ ok: true, user: state() }, { fetchImpl });
   await expect(graph.mutate(objectId, skuId, [], true, 'reviewed.write.token', config.clientId)).rejects.toMatchObject({ code: 'graph_write_http_500', uncertain: true });
   expect(fetchImpl.mock.calls[0][0]).toBe(`https://graph.microsoft.com/v1.0/users/${objectId}/assignLicense`);
+});
+
+test.each([true, false])('explicit Rust writes receive one complete private request: %s', async desired => {
+  const fetchImpl = jest.fn();
+  const graph = fixture({ ok: true, result: { id: objectId } }, { writeEngine: 'rust', operation: 'microsoft.assignLicense', desired, fetchImpl });
+  await expect(graph.mutate(objectId, skuId, [], desired, 'private.fixture.token', config.clientId)).resolves.toBeUndefined();
+  expect(fetchImpl).not.toHaveBeenCalled();
+  expect(graph.tokens.get).not.toHaveBeenCalled();
+});
+
+test.each([
+  [{ ok: false, code: 'graph_write_http_429', uncertain: false, retryAfter: 90 }, { code: 'graph_write_http_429', uncertain: false, retryAfter: 90 }],
+  [{ ok: false, code: 'graph_write_http_403', uncertain: false }, { code: 'graph_write_http_403', uncertain: false }],
+  [{ ok: false, code: 'graph_write_http_500', uncertain: true }, { code: 'graph_write_http_500', uncertain: true }],
+  [{ ok: false, code: 'graph_write_http_500', uncertain: false }, { code: 'graph_write_http_500', uncertain: true }],
+  [{ ok: false, code: 'graph_write_unavailable', uncertain: false }, { code: 'graph_write_unavailable', uncertain: true }],
+  [{ ok: false, code: 'graph_write_http_429' }, { code: 'graph_write_invalid_response', uncertain: true }],
+  [{ ok: false, code: 'graph_write_http_429', uncertain: false, retryAfter: 3601 }, { code: 'graph_write_invalid_response', uncertain: true }],
+  [{ ok: false, code: 'graph_read_http_403', uncertain: false }, { code: 'graph_write_invalid_response', uncertain: true }],
+  [{ ok: true, result: { id: skuId } }, { code: 'graph_write_invalid_response', uncertain: true }],
+  [{ ok: true, result: { id: objectId, extra: 'not trusted' } }, { code: 'graph_write_invalid_response', uncertain: true }],
+])('Rust write failures retain uncertainty and bounded backoff: %j', async (reply, expected) => {
+  const graph = fixture(reply, { writeEngine: 'rust', operation: 'microsoft.assignLicense' });
+  await expect(graph.mutate(objectId, skuId, [], true, 'private.fixture.token', config.clientId)).rejects.toMatchObject(expected);
+});
+
+test('a stopped write child has an unknown outcome and cannot be silently retried', async () => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  try {
+    const graph = fixture(null, { source: 'setTimeout(()=>{},30000);', writeEngine: 'rust', operation: 'microsoft.assignLicense' });
+    const check = expect(graph.mutate(objectId, skuId, [], true, 'private.fixture.token', config.clientId)).rejects.toMatchObject({ code: 'graph_write_incomplete', uncertain: true });
+    await jest.advanceTimersByTimeAsync(10001); await check;
+  } finally { jest.useRealTimers(); }
+});
+
+test('Rust write selection is separate, explicit and requires the Rust read adapter', () => {
+  expect(fulfillmentClient(config, 'rust', 'javascript').writeEngine).toBe('javascript');
+  expect(fulfillmentClient(config, 'rust', 'rust').writeEngine).toBe('rust');
+  expect(() => fulfillmentClient(config, 'javascript', 'rust')).toThrow('Rust writes require the Rust read connector');
+  expect(() => fulfillmentClient(config, 'rust', 'automatic')).toThrow('Unknown fulfillment write connector engine');
+  expect(() => new RustGraphLicenseClient({ ...config, writeEngine: false })).toThrow('Unknown fulfillment write connector engine');
 });

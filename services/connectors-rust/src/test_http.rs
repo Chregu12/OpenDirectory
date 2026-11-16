@@ -37,6 +37,9 @@ pub fn server(responses: Vec<String>) -> (String, thread::JoinHandle<Vec<String>
                 }
             }
             requests.push(String::from_utf8_lossy(&request).to_string());
+            if reply.is_empty() {
+                continue;
+            }
             let resolved = reply.replace("{ORIGIN}", &response_origin);
             let (headers, body) = resolved.split_once("\r\n\r\n").unwrap();
             let headers = headers

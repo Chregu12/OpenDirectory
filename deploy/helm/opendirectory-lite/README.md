@@ -206,6 +206,11 @@ license assignments, selected by `LICENSE_FULFILLMENT_READ_ENGINE=rust`. The
 existing observation parser and reviewed Node write path remain authoritative.
 k3s pins both disabled license workers to this image and selects Rust reads;
 neither worker is enabled and no provider connection or consent is created.
+The separately selectable `LICENSE_FULFILLMENT_WRITE_ENGINE=rust` also requires
+Rust reads and explicitly enables the Rust write transport. Its default remains
+`javascript`, preserving the existing behavior. Capacity, eligibility and durable
+dispatch checks still apply; this adds no company-pool cloud bridge. See the
+[write contract](../../../services/connectors-rust/README.md#bound-microsoft-license-writes).
 The read-only probe and live-test procedure are documented in
 [the Rust connector README](../../../services/connectors-rust/README.md#bound-microsoft-user-reads-8-november-2026).
 

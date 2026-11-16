@@ -2841,8 +2841,8 @@ test('real recurring review UI separates configuration, independent MFA voting a
   }
 });
 
-// Registration and two first-factor enrollments precede the four-minute
-// fresh-owner business-flow assertion below; include their setup in this budget.
+// Include registration, first-factor enrollment and two real MFA logins in the
+// outer budget; each business phase keeps its own four-minute freshness check.
 test('real own-company Owner UI assigns pinned blueprints and displays actual license origins through negative offboarding', { timeout: 360000 }, async () => {
   const ownerUsername = 'company-assignment-owner'; const reviewerUsername = 'company-assignment-reviewer';
   const isolated = await context({ onboarded: false }); const page = await isolated.newPage();
@@ -2886,13 +2886,17 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     await page.getByLabel('Aktuelles Passwort', { exact: true }).fill('disposable-password'); const reconciling = page.waitForResponse(response => new URL(response.url()).pathname === '/api/company-registration/status'); await page.getByRole('button', { name: 'Bestehenden Status prüfen', exact: true }).click(); assert.equal((await reconciling).status(), 200);
     await page.getByLabel('Aktuelles Passwort', { exact: true }).fill('disposable-password'); await page.getByLabel('Ich bestätige die Aktivierung meiner freigegebenen Firma mit Pflicht-MFA und ohne globale Adminrechte.', { exact: true }).check();
     const activating = page.waitForResponse(response => new URL(response.url()).pathname === '/api/company-registration/activate'); await page.getByRole('button', { name: 'Freigegebene Firma aktivieren', exact: true }).click(); const activated = await activating; assert.equal(activated.status(), 200, await activated.text()); assert.equal((await activated.json()).status, 'active');
-    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const ownerSession = await mediated(page); assert.equal(ownerSession.status, 200); const token = ownerSession.body.access_token;
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const ownerSession = await mediated(page); assert.equal(ownerSession.status, 200); let token = ownerSession.body.access_token;
     const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')); assert.deepEqual(claims.roles, []); assert.equal(claims.identity_authorization.userId, registration.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(claims), true); const startedAt = Date.now();
+    // BFF reads can issue a new JWT for the same original browser session.
+    const originalBrowserClaims = new Map([[claims.sid, claims]]);
     const verifyBrowserAuthorization = authorization => {
       assert.ok(/^Bearer [A-Za-z0-9._~-]+$/u.test(authorization || ''));
       const actual = jwt.verify(authorization.slice(7), require('node:crypto').createPublicKey(fs.readFileSync(path.join(directory, 'signing.pem'))), { algorithms: ['RS256'], issuer: logicalIssuer, audience: 'opendirectory-api' });
-      assert.equal(actual.sub, claims.sub); assert.equal(actual.sid, claims.sid); assert.deepEqual(actual.identity_authorization, claims.identity_authorization);
-      assert.deepEqual(actual.roles, []); assert.equal(actual.auth_time, claims.auth_time); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(actual), true);
+      const expected = originalBrowserClaims.get(actual.sid); assert.ok(expected, 'Gateway bearer must belong to an original authenticated BFF session');
+      assert.equal(actual.sub, claims.sub); assert.equal(actual.sid, expected.sid); assert.deepEqual(actual.identity_authorization, expected.identity_authorization); assert.equal(actual.identity_authorization.userId, registration.administratorId);
+      assert.deepEqual(actual.roles, []); assert.equal(actual.auth_time, expected.auth_time); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(actual), true);
+      return actual;
     };
     const api = async (route, { method = 'GET', body, headers = {} } = {}, expectedStatus = 200) => {
       const response = await fetch(gatewayOrigin + route, { method, headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -2956,10 +2960,15 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     await page.getByRole('region', { name: 'Gespeicherte Blueprint-Zuweisungen', exact: true }).getByRole('listitem').filter({ hasText: 'Blueprint ' + first.id + ' · Version 1 · Aktiv' }).getByRole('button', { name: 'Zuweisung entfernen', exact: true }).click(); const removingDialog = page.getByRole('alertdialog'); await removingDialog.getByLabel('Ich bestätige diese lokale Zuweisung.', { exact: true }).check();
     const removing = page.waitForResponse(response => new URL(response.url()).pathname === assignmentBase + '/' + firstBinding.assignmentId + '/remove' && response.request().method() === 'POST'); await removingDialog.getByRole('button', { name: 'Bestätigen', exact: true }).click(); const removed = await removing; assert.equal(removed.status(), 200, await removed.text()); const removal = await removed.json(); assert.equal(removal.pools[0].sourceRemoved, true); assert.equal(removal.pools[0].seatReleased, false); assert.equal(removal.pools[0].effectiveAssignmentRetained, true);
     assert.equal((await api(appV2 + '/pools/' + pool.id + '/assignments')).body.assignments[0].sources.length, 2); await page.getByRole('heading', { name: 'Lokale Rücknahme bestätigt', exact: true }).waitFor(); await page.screenshot({ path: '/tmp/od-business22-blueprint-removal.png', fullPage: true });
+    assert.ok(Date.now() - startedAt < 240000, 'Assignment phase must finish within its real MFA freshness budget');
+    await login(page, ownerUsername); const offboardingSession = await mediated(page); assert.equal(offboardingSession.status, 200); token = offboardingSession.body.access_token;
+    const offboardingClaims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')); assert.notEqual(offboardingClaims.sid, claims.sid); assert.ok(offboardingClaims.auth_time > claims.auth_time);
+    originalBrowserClaims.set(offboardingClaims.sid, offboardingClaims); verifyBrowserAuthorization('Bearer ' + token); const offboardingStartedAt = Date.now();
     await page.goto(origin + '/applications'); await page.getByRole('button', { name: 'Offboarding mit Blueprint-Rückgabe', exact: true }).click();
     await page.getByLabel('Blueprint-Offboarding Mitarbeiter-ID', { exact: true }).fill(employee.id); const checking = page.waitForResponse(response => new URL(response.url()).pathname === appV2 + '/users/' + employee.id + '/offboarding-preview'); await page.getByRole('button', { name: 'Blueprint-Offboarding-Vorschau laden', exact: true }).click(); const checked = await checking; assert.equal(checked.status(), 200, await checked.text()); const preview = await checked.json(); assert.equal(preview.licenseCount, 1); assert.equal(preview.bindingCount, 2);
     await page.getByLabel('Begründung des Blueprint-Offboardings', { exact: true }).fill('Actual browser confirms the original account disable and every license origin plus zero-app binding'); await page.getByRole('button', { name: 'Blueprint-Offboarding starten', exact: true }).click();
     const offboardingDialog = page.getByRole('alertdialog'); await offboardingDialog.getByLabel('Ich bestätige diesen Blueprint-Offboarding-Schritt.', { exact: true }).check(); const offboardingRequest = page.waitForResponse(response => new URL(response.url()).pathname === appV2 + '/offboarding-workflows' && response.request().method() === 'POST', { timeout: 65000 }); await offboardingDialog.getByRole('button', { name: 'Bestätigen', exact: true }).click(); const offboarded = await offboardingRequest; assert.equal(offboarded.status(), 201, await offboarded.text()); const result = await offboarded.json();
+    assert.equal(verifyBrowserAuthorization(offboarded.request().headers().authorization).sid, offboardingClaims.sid);
     assert.equal(result.workflow.phase, 'completed_local'); assert.equal(result.workflow.totalLicenses, 1); assert.equal(result.workflow.completedLicenses, 1); assert.equal(result.workflow.totalBindings, 2); assert.equal(result.workflow.completedBindings, 2); assert.equal(result.workflow.checkpoint.action, 'disabled'); assert.equal(Object.keys(result.workflow.checkpoint).length, 13); assert.equal(result.currentTarget.enabled, false);
     await page.getByRole('article', { name: 'Blueprint-Offboarding-Arbeitsstand', exact: true }).waitFor(); await page.screenshot({ path: '/tmp/od-business22-negative-offboarding.png', fullPage: true });
     assert.equal((await api(appV2 + '/pools/' + pool.id + '/assignments')).body.total, 0); assert.equal((await api('/api/licenses/company/pools/' + pool.id)).body.usedSeats, 0);
@@ -2967,9 +2976,9 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     const originalNegative = (await identityDb.query('SELECT receipt.*,outbox.status FROM identity_company_offboarding_receipts receipt JOIN identity_company_offboarding_outbox outbox USING(tenant_id,workflow_id) WHERE receipt.workflow_id=$1', [result.workflow.id])).rows; assert.equal(originalNegative.length, 1); assert.equal(originalNegative[0].operation_id, result.workflow.checkpoint.operationId); assert.equal(originalNegative[0].status, 'pending'); assert.equal(originalNegative[0].source.subject, claims.sub);
     assert.equal(assignmentWrites.length, 4); const assignmentGatewayRequests = gatewayRequests.filter(request => request.path.startsWith(assignmentBase)); assert.ok(assignmentGatewayRequests.length >= 10);
     for (const request of assignmentGatewayRequests) { verifyBrowserAuthorization(request.authorization); assert.ok(request.status < 400); }
-    assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM identity_role_assignments WHERE user_id=$1', [registration.administratorId])).rows[0].count, 0); assert.ok(Date.now() - startedAt < 240000);
+    assert.equal((await identityDb.query('SELECT count(*)::integer AS count FROM identity_role_assignments WHERE user_id=$1', [registration.administratorId])).rows[0].count, 0); assert.ok(Date.now() - offboardingStartedAt < 240000, 'Offboarding phase must finish within its new real MFA freshness budget');
     for (const table of ['mdm_commands', 'policy_device_operations']) assert.equal((await issuerDb.query('SELECT count(*)::integer AS count FROM ' + table)).rows[0].count, 0);
-    process.stdout.write('Slice22 actual Chrome: independently registered roleless Owner with original fresh BFF bearer through production gateway; actual UI pinned assignments A+B plus manual consume one seat; full origin display; source-only A removal; original045 negative workflow retires all remaining origins and zero-app binding; no MDM claim.\n');
+    process.stdout.write('Slice22 actual Chrome: independently registered roleless Owner with two original BFF sessions from real password/TOTP logins through production gateway; actual UI pinned assignments A+B plus manual consume one seat; full origin display; source-only A removal; original045 negative workflow retires all remaining origins and zero-app binding; no MDM claim.\n');
   } finally {
     await isolated.unrouteAll({ behavior: 'ignoreErrors' });
     await isolated.close();

@@ -28,6 +28,8 @@ Die [MFA-/2FA-Prüfung](testing/mfa-integration-2026-11-15.json) bestätigt 199 
 
 Der erste [Microsoft-365-Verbindungstest](../services/connectors-rust/READ_PROVIDERS.md) ist als lesender CLI-Aufruf und als firmenspezifischer Anbieterbestand unter `/applications` vorbereitet. Er prüft die bestehende Firmen-Lizenzberechtigung, trennt lokale Bestände von tatsächlichen Microsoft-SKUs und bleibt ohne explizite Operator-Konfiguration deaktiviert. Eine echte Tenant-Abnahme, lokale Benutzer-/SKU-Verknüpfungen und Cloud-Zuweisungen für Firmenpools sind weiterhin offen; der lesende Abruf schliesst den Anbieterablauf nicht ab.
 
+Als nächster Baustein ist der [separat aktivierbare Microsoft-Schreibtransport in Rust](testing/microsoft-rust-writes-2026-11-15.json) lokal geprüft: Zuweisung und Rückgabe, unbekannte Ergebnisse ohne Wiederholung sowie unveränderte Eignungs-/Kapazitäts-/Dispatch-Prüfungen des vorhandenen Workers. Die bestehende Grenze zu Firmenpools bleibt durchgesetzt. Dieser Baustein ist noch nicht produktiv aktiviert und ersetzt die weiterhin erforderliche Firmenanbindung nicht.
+
 ## Späteres Backlog
 
 Nicht Voraussetzung für den Abschluss dieses Ziels sind eine vollständige Entra-Parität, sämtliche Authentifizierungs-/Lizenzanbieter, allgemeines SCIM, umfassende Conditional-Access-/Governance-Prozesse, vollständiges MDM mit Remote-Wipe/Lock, Blueprint-Deployment/Drift, Mail-/Kalender-Provisionierung, Standorte, Marketing, Billing und Support/ITSM. Diese Bereiche werden nur mit einer neuen konkreten Priorisierung Teil der Umsetzung. Die begrenzten Eintritts-/Austrittsaktionen des Kerns bleiben enthalten; ein vollständiger unternehmensweiter JML-Prozess ist eine spätere Ausbaustufe.

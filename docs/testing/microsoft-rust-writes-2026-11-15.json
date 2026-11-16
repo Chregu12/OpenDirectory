@@ -1,0 +1,78 @@
+{
+  "checkedAt": "2026-11-15T22:38:29.873873+00:00",
+  "baseCommit": "bb7fccaed742890651d7b0fed553c2f143f6468a",
+  "status": "local-transport-and-worker-validation-passed",
+  "productionChanged": false,
+  "newDependencies": false,
+  "protocol": {
+    "operation": "microsoft.assignLicense",
+    "method": "POST",
+    "fixedHost": "https://graph.microsoft.com",
+    "boundObjectAndSkuOnly": true,
+    "singlePostNoApplicationRetry": true,
+    "responseIsAcknowledgementNotProvisioning": true,
+    "unknownOutcomePreserved": true,
+    "legacyReadErrorShapeAnd20KiBLimitRetained": true,
+    "writeRequestLimitBytes": 32768,
+    "tokenLimitBytes": 16384,
+    "maximumDisabledPlans": 128,
+    "privateStdinAndEmptyChildEnvironment": true
+  },
+  "activation": {
+    "readEngine": "rust",
+    "writeEngine": "rust",
+    "defaultWriteEngine": "javascript",
+    "readSelectionAlonePreservesExistingWrites": true,
+    "workersRemainDisabledByDefault": true,
+    "companyPoolsStillRejectedByLegacyWorker": true
+  },
+  "validation": {
+    "rustHttpAndUnitTests": 46,
+    "actualBinaryProtocolCases": 3,
+    "cargoTestFailed": 0,
+    "cargoClippyWarnings": 0,
+    "rustToolchainLocal": "1.99.0 (Homebrew)",
+    "rustToolchainCiRequired": "1.95.0",
+    "policyTests": 1517,
+    "policySuites": 47,
+    "fullLicensePostgresCases": 559,
+    "fullLicensePostgresDurationMilliseconds": 217399.339667,
+    "additionalPostChangeCompanyExclusionCases": 1,
+    "companyExclusionModes": [
+      "javascript/javascript",
+      "rust/rust"
+    ],
+    "companyExclusionDurationMilliseconds": 1033.226584,
+    "actionlint": "1.7.12 passed",
+    "workflowPrettier": "passed",
+    "existingProductionManifestUnchanged": true,
+    "explicitHelmWorkerFlagRender": "passed"
+  },
+  "coverageBoundary": {
+    "nativeRust": "Real local HTTP, exact POST/header/body, permission/status errors, redirects, throttling, lost replies, malformed/oversized success and maximum token/plan limits. Real executable validates input envelopes and legacy error compatibility.",
+    "postgresWorker": "Real disposable PostgreSQL and HTTP. The process boundary uses the existing explicit JavaScript executable fixture; native Rust HTTP is covered separately.",
+    "newCases": [
+      "rust-write: transactional desired state drives only the mapped Graph user and SKU; successful mutation alone is not provisioned",
+      "a Rust write with a lost reply retains durable uncertainty and cannot repeat or claim ownership"
+    ]
+  },
+  "ci": {
+    "expectedJobs": 15,
+    "nativeRustJobAdded": true,
+    "stableIntegrationAggregateRequiresNativeRust": true,
+    "fiveOriginalIntegrationCommandsExactlyOnce": true,
+    "completeLinuxRun": "required on corrected pushed head before merge",
+    "initialCompleteLinuxRun": {
+      "run": 43770792608,
+      "passedJobs": 13,
+      "totalJobs": 15,
+      "conclusion": "failure",
+      "failure": "Browser case55 four-minute total business-flow assertion; integration aggregate consequently failed."
+    },
+    "browserCorrection": "ci-browser-mfa-phases-2026-11-16.json"
+  },
+  "remaining": [
+    "Company-owned pool/user/SKU binding and GUI cloud-assignment flow remain to implement.",
+    "Real Microsoft tenant acceptance has not been performed; no provider credentials, grants or worker enablement were created in production."
+  ]
+}

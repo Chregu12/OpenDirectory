@@ -5,6 +5,7 @@ mod gitlab;
 mod google;
 mod http;
 mod microsoft;
+mod microsoft_write;
 mod slack;
 #[cfg(test)]
 mod test_http;
@@ -21,6 +22,15 @@ struct CapacityRequest {
 #[derive(Deserialize)]
 #[serde(tag = "operation", deny_unknown_fields)]
 enum Operation {
+    #[serde(rename = "microsoft.assignLicense", rename_all = "camelCase")]
+    AssignLicense {
+        access_token: String,
+        object_id: String,
+        sku_id: String,
+        disabled_plans: Vec<String>,
+        desired: bool,
+        attempt_id: String,
+    },
     #[serde(rename = "microsoft.user", rename_all = "camelCase")]
     User {
         access_token: String,
@@ -76,6 +86,10 @@ enum Request {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum Reply {
+    Assignment {
+        ok: bool,
+        result: microsoft_write::AssignmentResponse,
+    },
     Capacity {
         ok: bool,
         rows: Vec<microsoft::Sku>,
@@ -113,6 +127,8 @@ enum Reply {
         code: String,
         #[serde(rename = "retryAfter", skip_serializing_if = "Option::is_none")]
         retry_after: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        uncertain: Option<bool>,
     },
 }
 
@@ -120,15 +136,39 @@ fn main() {
     let mut input = Vec::new();
     let result = (|| {
         io::stdin()
-            .take(20_001)
+            .take(32_769)
             .read_to_end(&mut input)
             .map_err(|_| http::Error::new("graph_capacity_invalid_request"))?;
-        if input.len() > 20_000 {
+        if input.len() > 32_768 {
             return Err(http::Error::new("graph_capacity_invalid_request"));
         }
         let request: Request = serde_json::from_slice(&input)
             .map_err(|_| http::Error::new("graph_capacity_invalid_request"))?;
+        if input.len() > 20_000
+            && !matches!(
+                &request,
+                Request::Operation(Operation::AssignLicense { .. })
+            )
+        {
+            return Err(http::Error::new("graph_capacity_invalid_request"));
+        }
         match request {
+            Request::Operation(Operation::AssignLicense {
+                access_token,
+                object_id,
+                sku_id,
+                disabled_plans,
+                desired,
+                attempt_id,
+            }) => microsoft_write::assign(
+                &access_token,
+                &object_id,
+                &sku_id,
+                &disabled_plans,
+                desired,
+                &attempt_id,
+            )
+            .map(|result| Reply::Assignment { ok: true, result }),
             Request::Capacity(request) => microsoft::inspect(&request.access_token)
                 .map(|rows| Reply::Capacity { ok: true, rows }),
             Request::Operation(Operation::User {
@@ -186,6 +226,7 @@ fn main() {
         ok: false,
         code: error.code,
         retry_after: error.retry_after,
+        uncertain: error.uncertain,
     });
     if serde_json::to_writer(io::stdout().lock(), &reply).is_err() {
         std::process::exit(1);
@@ -202,6 +243,7 @@ mod tests {
             Request::Capacity(_)
         ));
         for raw in [
+            r#"{"operation":"microsoft.assignLicense","accessToken":"fixture","objectId":"11111111-1111-4111-8111-111111111111","skuId":"22222222-2222-4222-8222-222222222222","disabledPlans":[],"desired":true,"attemptId":"33333333-3333-4333-8333-333333333333"}"#,
             r#"{"operation":"microsoft.user","accessToken":"fixture","objectId":"11111111-1111-4111-8111-111111111111"}"#,
             r#"{"operation":"google.licenseAssignments","accessToken":"fixture","customerId":"C123","productId":"Google-Apps","skuId":"1010020027"}"#,
             r#"{"operation":"github.copilotSeats","accessToken":"fixture","organization":"fixture-org"}"#,
