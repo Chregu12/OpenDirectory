@@ -18,6 +18,18 @@ const mappingsSchema = z.object({ ...envelope, poolId: uuid, pool: pool.nullable
 const productsSchema = z.object({ ...envelope, microsoftTenantId: uuid, checkedAt: timestamp, products: z.array(companyProviderProductSchema).max(1000) }).strict();
 const event = z.object({ id: uuid, operationId: uuid, type: z.enum(['connect', 'renew', 'disconnect', 'bind_pool', 'retire_pool', 'bind_user', 'retire_user']), actorKind: z.literal('human'), actorUserId: uuid, reason: z.string().min(10).max(500), createdAt: timestamp, resource: z.union([connection, pool, person]) }).strict();
 const historySchema = z.object({ ...envelope, events: z.array(event).max(25), page: z.number().int().min(1).max(10000), hasMore: z.boolean() }).strict();
+const targetState = z.object({ id: uuid, revision: revision.nullable(), eligibilityRevision: revision, enabled: z.boolean(), deleted: z.boolean() }).strict().refine(value => value.deleted ? !value.enabled && value.revision === null : value.revision !== null);
+const originSchema = z.object({ sourceType: z.enum(['direct', 'blueprint']), sourceId: z.union([z.literal('direct'), uuid]), grantId: uuid,
+  eligibilityRevision: revision, live: z.boolean(), deadline: timestamp.nullable(), bindingValid: z.literal(true),
+  rule: z.object({ id: uuid, groupId: uuid, revision, status: z.enum(['active', 'unlinked']) }).strict().nullable() }).strict().refine(value => value.sourceType === 'direct' ? value.sourceId === 'direct' && value.rule === null : value.sourceId !== 'direct');
+const groupProof = z.object({ ruleId: uuid, groupId: uuid, revision, hash: z.string().regex(/^[a-f0-9]{64}$/), active: z.boolean(), membershipId: uuid.nullable(), eligibilityRevision: revision.nullable(), reviewDeadlineAt: timestamp.nullable() }).strict();
+const previewSchema = z.object({ ...envelope, poolId: uuid, userId: uuid, connection, pool, user: person,
+  target: z.object({ id: uuid, revision, status: z.enum(['processing', 'verifying', 'confirmed', 'conflict', 'failed', 'unknown']), owned: z.boolean(), lastOperationId: uuid, uncertainOperationId: uuid.nullable(), errorCode: z.string().max(120).nullable(), checkedAt: timestamp.nullable() }).strict().nullable(),
+  local: z.object({ raw: z.object({ poolId: uuid, poolRevision: revision, target: targetState,
+    assignment: z.object({ id: uuid, eligibilityRevision: revision }).strict().nullable(), origins: z.array(originSchema).max(10000) }).strict(), groups: z.array(groupProof).max(10000), desired: z.boolean() }).strict(),
+  remote: z.object({ present: z.boolean(), direct: z.boolean(), active: z.boolean(), plansMatch: z.boolean(), inherited: z.boolean(), accountEnabled: z.boolean() }).strict(), stock: companyProviderProductSchema.nullable(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/), action: z.enum(['assign', 'remove', 'confirmed', 'conflict', 'review', 'recover', 'verify', 'external_retained']), checkedAt: timestamp }).strict();
+export type MicrosoftPreview = CompanyWire<z.infer<typeof previewSchema>>;
 export type MicrosoftState = CompanyWire<z.infer<typeof stateSchema>>;
 export type MicrosoftMappings = CompanyWire<z.infer<typeof mappingsSchema>>;
 export type MicrosoftProducts = CompanyWire<z.infer<typeof productsSchema>>;
@@ -66,6 +78,25 @@ export class CompanyMicrosoftClient {
   async users(page = 1, search = '') {
     return this.session.run(async (signal, check) => {
       this.session.require(); await this.people.access(signal); check(); const value = await this.people.users(page, search, signal); check(); await this.session.fresh(signal, check); return value;
+    });
+  }
+  preview(poolId: string, userId: string): Promise<MicrosoftPreview> {
+    uuid.parse(poolId); uuid.parse(userId);
+    return this.session.run(async (signal, check) => {
+      this.session.require(); const response = await api.post(base + '/pools/' + poolId + '/users/' + userId + '/preview', {}, { signal }); check();
+      if (response.status !== 200) companyUnconfirmed(); const value = previewSchema.parse(response.data) as MicrosoftPreview; this.session.bind(value); await this.session.fresh(signal, check);
+      const state = this.session.require();
+      if (value.poolId !== poolId || value.pool.poolId !== poolId || value.local.raw.poolId !== poolId || value.userId !== userId || value.user.userId !== userId || value.local.raw.target.id !== userId
+        || [value.connection, value.pool, value.user].some(row => row.tenantId !== value.tenantId) || value.connection.id !== state.connection?.id || value.connection.revision !== state.connection.revision
+        || value.pool.connectionId !== value.connection.id || value.user.connectionId !== value.connection.id || value.connection.microsoftTenantId !== state.microsoftTenantId
+        || value.connection.readClientId !== state.readClientId || value.connection.writeClientId !== state.writeClientId || [value.connection, value.pool, value.user].some(row => row.status !== 'active')
+        || value.action === 'assign' && !value.local.desired || value.action === 'remove' && value.local.desired
+        || value.stock && value.stock.skuId !== value.pool.skuId || value.action === 'assign' && (!value.stock || value.stock.appliesTo !== 'User' || value.stock.capabilityStatus !== 'Enabled' || value.stock.prepaidUnits.enabled <= value.stock.consumedUnits)
+        || value.local.desired && (!value.local.raw.target.enabled || value.local.raw.target.deleted || value.local.raw.assignment?.eligibilityRevision !== value.local.raw.target.eligibilityRevision)
+        || value.remote.direct && !value.remote.present || value.remote.active && !value.remote.direct || value.remote.plansMatch && !value.remote.direct || value.remote.inherited && !value.remote.present
+        || value.local.groups.some(row => row.active && (!row.membershipId || row.eligibilityRevision !== value.local.raw.target.eligibilityRevision))
+        || new Set(value.local.raw.origins.map(row => row.grantId)).size !== value.local.raw.origins.length || new Set(value.local.groups.map(row => row.ruleId)).size !== value.local.groups.length) companyUnconfirmed(true);
+      return this.session.own(value);
     });
   }
   private intent(state: MicrosoftState, values: Omit<MicrosoftIntent, 'operationId' | 'body'>, body: Record<string, unknown>, reason: string) {

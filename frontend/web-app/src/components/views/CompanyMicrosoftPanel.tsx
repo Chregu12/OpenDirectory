@@ -3,22 +3,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CompanyPool } from '@/lib/companyApplications';
 import { CompanyWorkflowContext, companyWorkflowError, companyWorkflowUnsafe } from '@/lib/companyAssignmentProtocol';
-import { CompanyMicrosoftClient, MicrosoftState, MicrosoftMappings, MicrosoftProducts, MicrosoftHistory, MicrosoftIntent, MicrosoftReceipt } from '@/lib/companyMicrosoft';
+import { CompanyMicrosoftClient, MicrosoftState, MicrosoftMappings, MicrosoftProducts, MicrosoftHistory, MicrosoftIntent, MicrosoftReceipt, MicrosoftPreview } from '@/lib/companyMicrosoft';
 import { UserPage, userName } from '@/lib/directoryUsers';
 import { DirectoryConfirmation } from './UserDetailPanel';
 
 const inputClass = 'mt-1 block w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
 const actionLabels = { connect: 'Microsoft-Verbindung bestätigen', renew: 'Microsoft-Verbindung neu prüfen', bind_pool: 'Microsoft-Produkt verknüpfen', bind_user: 'Microsoft-Benutzer verknüpfen', disconnect: 'Microsoft-Verbindung trennen', retire_pool: 'Produktverknüpfung entfernen', retire_user: 'Benutzerverknüpfung entfernen' };
+const previewLabels = { assign: 'Microsoft-Lizenz zuweisen', remove: 'Verwaltete Microsoft-Lizenz zurückgeben', confirmed: 'Aktueller Stand stimmt überein', conflict: 'Abweichung prüfen', review: 'Unklaren Schreibversuch prüfen', recover: 'Unterbrochenen Vorgang prüfen', verify: 'Ausstehende Anbieterwirkung prüfen', external_retained: 'Externe Zuweisung erhalten' };
+const stockStatusLabels = { Enabled: 'Aktiv', Warning: 'Warnung', Suspended: 'Ausgesetzt', Deleted: 'Gelöscht', LockedOut: 'Gesperrt' };
 
 export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: { context: CompanyWorkflowContext; pool: CompanyPool; onAccessError: (error: unknown) => void }) {
   const client = useRef<CompanyMicrosoftClient | null>(null); const generation = useRef(0); const running = useRef(false);
   const [state, setState] = useState<MicrosoftState | null>(null); const [mappings, setMappings] = useState<MicrosoftMappings | null>(null);
   const [products, setProducts] = useState<MicrosoftProducts | null>(null); const [history, setHistory] = useState<MicrosoftHistory | null>(null);
+  const [preview, setPreview] = useState<MicrosoftPreview | null>(null);
   const [users, setUsers] = useState<UserPage | null>(null); const [usersLoaded, setUsersLoaded] = useState(false);
   const [userId, setUserId] = useState(''); const [objectId, setObjectId] = useState(''); const [skuId, setSkuId] = useState(''); const [search, setSearch] = useState(''); const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState<MicrosoftIntent | null>(null); const [confirmed, setConfirmed] = useState(false); const [intent, setIntent] = useState<MicrosoftIntent | null>(null); const [receipt, setReceipt] = useState<MicrosoftReceipt | null>(null);
   const [busy, setBusy] = useState(false); const [needsReload, setNeedsReload] = useState(false); const [error, setError] = useState(''); const [formError, setFormError] = useState('');
-  const clear = () => { setState(null); setMappings(null); setProducts(null); setHistory(null); setUsers(null); setUsersLoaded(false); setUserId(''); setObjectId(''); setSkuId(''); setSearch(''); setReason(''); setConfirmation(null); setConfirmed(false); setIntent(null); setReceipt(null); };
+  const clear = () => { setState(null); setMappings(null); setProducts(null); setHistory(null); setUsers(null); setUsersLoaded(false); setUserId(''); setObjectId(''); setSkuId(''); setSearch(''); setReason(''); setConfirmation(null); setConfirmed(false); setIntent(null); setReceipt(null); setPreview(null); };
   const run = async <Value,>(operation: (current: CompanyMicrosoftClient) => Promise<Value>, apply: (value: Value) => void) => {
     if (!client.current || running.current) return;
     const current = client.current; const expected = generation.current; running.current = true; setBusy(true); setError(''); setFormError('');
@@ -42,7 +45,7 @@ export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: 
   };
   const prepare = (capture: (current: CompanyMicrosoftClient) => MicrosoftIntent) => {
     if (blocked || !client.current) return;
-    try { setConfirmation(capture(client.current)); setConfirmed(false); setFormError(''); }
+    try { setPreview(null); setConfirmation(capture(client.current)); setConfirmed(false); setFormError(''); }
     catch { setFormError('Bitte den aktuellen Stand, die ausgewählten IDs und eine Begründung mit 10 bis 500 Zeichen prüfen.'); }
   };
   const write = () => {
@@ -91,8 +94,20 @@ export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: 
       </>}
       {state?.connection && mappings && <section aria-label="Gespeicherte Microsoft-Benutzerverknüpfungen" className="space-y-3">
         <h4 className="font-semibold">Gespeicherte Kontozuordnungen</h4>{!mappings.users.length && <p>Keine Benutzerverknüpfungen auf dieser Seite.</p>}
-        <ul className="space-y-3">{mappings.users.map(row => <li key={row.id} className="rounded border border-[var(--border)] p-3 space-y-2"><p className="break-all">Firmenbenutzer {row.userId}</p><p className="break-all">Microsoft-Konto {row.objectId}</p><button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'user', row, reason))}>Benutzerverknüpfung entfernen</button></li>)}</ul>
+        <ul className="space-y-3">{mappings.users.map(row => <li key={row.id} className="rounded border border-[var(--border)] p-3 space-y-2"><p className="break-all">Firmenbenutzer {row.userId}</p><p className="break-all">Microsoft-Konto {row.objectId}</p><div className="flex flex-wrap gap-3">
+          {state.state === 'connected' && mappings.pool && <button className="fluent-btn-secondary" disabled={blocked} onClick={() => { setPreview(null); void run(current => current.preview(pool.id, row.userId), setPreview); }}>Microsoft-Lizenzabgleich prüfen</button>}
+          <button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'user', row, reason))}>Benutzerverknüpfung entfernen</button></div></li>)}</ul>
         <nav aria-label="Microsoft-Verknüpfungsseiten" className="flex gap-4"><button disabled={blocked || mappings.page <= 1} onClick={() => void run(current => current.mappings(pool.id, mappings.page - 1), setMappings)}>Zurück</button><span>Seite {mappings.page}</span><button disabled={blocked || !mappings.hasMore} onClick={() => void run(current => current.mappings(pool.id, mappings.page + 1), setMappings)}>Weiter</button></nav>
+      </section>}
+      {preview && <section aria-label="Microsoft-Lizenzabgleich-Vorschau" className="rounded border border-[var(--border)] p-3 space-y-3">
+        <h4 className="font-semibold">{previewLabels[preview.action]}</h4><p className="break-all">Firmenbenutzer {preview.userId} · Microsoft-Konto {preview.user.objectId}</p>
+        <p>Lokaler Anspruch: {preview.local.desired ? 'vorhanden' : 'nicht vorhanden'} · {preview.local.raw.origins.length} gespeicherte Quellen.</p>
+        <p>Microsoft: {preview.remote.direct ? 'direkte Lizenz beobachtet' : preview.remote.inherited ? 'Gruppenlizenz beobachtet' : preview.remote.present ? 'Zuweisung noch nicht eindeutig' : 'keine Lizenz beobachtet'}{preview.remote.inherited && preview.remote.direct ? ' und zusätzliche Gruppenlizenz' : ''} · Konto {preview.remote.accountEnabled ? 'aktiv' : 'gesperrt'}.</p>
+        {preview.stock && <p>Microsoft-Bestand: {preview.stock.prepaidUnits.enabled} aktive Einheiten · {preview.stock.consumedUnits} verbraucht · {stockStatusLabels[preview.stock.capabilityStatus]}.</p>}
+        {preview.local.desired && !preview.remote.present && preview.action === 'conflict' && <p>Microsoft bestätigt derzeit keinen passenden verfügbaren Benutzer-Lizenzbestand für eine neue Zuweisung.</p>}
+        <p>{preview.target?.owned ? 'Der Verwaltungsnachweis gehört zu OpenDirectory.' : 'Keine bestehende Microsoft-Zuweisung als eigene übernommen.'} Noch keine Cloud-Änderung ausgelöst.</p>
+        {preview.local.groups.length > 0 && <ul>{preview.local.groups.map(row => <li key={row.ruleId}>Gruppe {row.groupId} · {row.active ? 'aktuelle berechtigte Mitgliedschaft' : 'keine aktuelle berechtigte Mitgliedschaft'}</li>)}</ul>}
+        <p>Geprüft am {new Date(preview.checkedAt).toLocaleString('de-CH')}.</p>
       </section>}
       {state?.connection && <button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'connection', state.connection, reason))}>Microsoft-Verbindung trennen</button>}
       {receipt && <p role="status">{actionLabels[receipt.action]} · {receipt.historical ? 'Ursprünglicher Vorgang bereits gespeichert' : 'Vorgang gespeichert'} · {receipt.operationId}. Aktuellen Stand neu laden.</p>}

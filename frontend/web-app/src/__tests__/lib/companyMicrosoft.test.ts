@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { CompanyMicrosoftClient } from '@/lib/companyMicrosoft';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const clients: CompanyMicrosoftClient[] = []; const base = '/api/licenses/company/provider/microsoft';
 let state: ReturnType<typeof microsoftState>; let mappings: ReturnType<typeof microsoftMappings>; let products: ReturnType<typeof microsoftProducts>;
@@ -65,4 +65,15 @@ test('a session change while a read is pending prevents late results and any wri
   (api.get as jest.Mock).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
   const pending = current.products(); window.dispatchEvent(new Event('od:session-error')); resolve(ok(products)); await expect(pending).rejects.toThrow();
   await expect(current.write(intent)).rejects.toThrow(); expect(api.post).not.toHaveBeenCalled();
+});
+test('cloud preview is a read-only POST for exact bound targets and preserves its server fingerprint', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValue(ok(microsoftPreview()));
+  const value = await current.preview(id(8), id(11)); expect(value.local.desired).toBe(true); expect(value.action).toBe('assign'); expect(value.target).toBeNull(); expect(Object.isFrozen(value.local.raw.origins)).toBe(true);
+  expect(api.post).toHaveBeenCalledTimes(1); expect(api.post).toHaveBeenCalledWith(base + '/pools/' + id(8) + '/users/' + id(11) + '/preview', {}, { signal: expect.any(AbortSignal) });
+});
+test.each(['user', 'pool', 'company', 'connection', 'plan', 'generation', 'observation'])('a mismatched %s cloud preview never becomes usable', async kind => {
+  const current = client(); await current.state(); const value = microsoftPreview();
+  if (kind === 'user') value.user.userId = id(99); if (kind === 'pool') value.local.raw.poolId = id(99); if (kind === 'company') value.pool.tenantId = id(99);
+  if (kind === 'connection') value.connection.revision = '1'; if (kind === 'plan') value.action = 'remove'; if (kind === 'generation') value.local.raw.assignment.eligibilityRevision = '2'; if (kind === 'observation') value.remote.direct = true;
+  (api.post as jest.Mock).mockResolvedValue(ok(value)); await expect(current.preview(id(8), id(11))).rejects.toThrow(); expect(api.post).toHaveBeenCalledTimes(1);
 });

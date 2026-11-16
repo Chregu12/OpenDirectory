@@ -5,6 +5,8 @@ const { randomUUID } = require('node:crypto');
 const { identifier } = require('../../../../../packages/company-license-contract');
 const { validRevision } = require('../../../../../packages/identity-authorization-contract');
 const { CompanyMicrosoftBridge } = require('./CompanyMicrosoftBridge');
+const { CompanyMicrosoftDelivery } = require('./CompanyMicrosoftDelivery');
+const { exact } = require('../../../../../packages/company-license-contract');
 
 function etag(kind, row) { return `"company-microsoft-${kind}-${row.id}-${row.revision}"`; }
 function precondition(value, kind, id = null) {
@@ -15,7 +17,7 @@ function precondition(value, kind, id = null) {
   return { id: match[1], revision: match[2] };
 }
 function companyMicrosoftRoutes(companies, options) {
-  const router = Router(); const bridge = new CompanyMicrosoftBridge(companies, options);
+  const router = Router(); const bridge = new CompanyMicrosoftBridge(companies, options); const delivery = new CompanyMicrosoftDelivery(bridge, options?.delivery);
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store'); res.set('X-Correlation-ID', randomUUID());
     if (!['GET', 'POST'].includes(req.method)) return res.status(404).json({ error: 'Microsoft operation unsupported' });
@@ -36,6 +38,7 @@ function companyMicrosoftRoutes(companies, options) {
   }));
   router.get('/pools/:id/mappings', route(async (req, res) => res.json(await bridge.mappings(req.params.id, req.query, req.user, req.headers.authorization))));
   router.get('/history', route(async (req, res) => res.json(await bridge.history(req.query, req.user, req.headers.authorization))));
+  router.post('/pools/:id/users/:userId/preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.preview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
   router.post('/connections', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization), 'connection', 'connection', 201)));
   router.post('/connections/:id/renew', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization,
     precondition(req.headers['if-match'], 'connection', identifier(req.params.id))), 'connection', 'connection')));

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within, waitFor } from '@testing-librar
 import CompanyMicrosoftPanel from '@/components/views/CompanyMicrosoftPanel';
 import { CompanyPool } from '@/lib/companyApplications';
 import { api } from '@/lib/api';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const pool: CompanyPool = { id: id(8), tenantId: id(2), revision: '1', name: 'Büro-Lizenz', vendor: 'Microsoft', description: '', totalSeats: 2, usedSeats: 1, availableSeats: 1, licenseType: 'per_user', allocationMode: 'local-only', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z' };
 beforeEach(() => {
@@ -62,4 +62,12 @@ test.each(['session', 'company'])('a late connection read cannot restore a previ
   else view.rerender(<CompanyMicrosoftPanel context={{ ...microsoftContext, tenantId: id(99) }} pool={{ ...pool, tenantId: id(99) }} onAccessError={jest.fn()} />);
   expect(signal.aborted).toBe(true); await act(async () => resolve(ok(microsoftState())));
   expect(screen.queryByRole('region', { name: 'Microsoft-Produktverknüpfung' })).not.toBeInTheDocument(); expect(api.post).not.toHaveBeenCalled();
+});
+test('a real local entitlement is presented as a proposed cloud action without dispatch or ownership', async () => {
+  (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(microsoftState()) : url.endsWith('/mappings') ? ok({ ...microsoftMappings(), pool: microsoftPool() }) : ok(microsoftHistory()));
+  (api.post as jest.Mock).mockResolvedValue(ok(microsoftPreview())); render(<CompanyMicrosoftPanel context={microsoftContext} pool={pool} onAccessError={jest.fn()} />); await load();
+  fireEvent.click(screen.getByRole('button', { name: 'Microsoft-Lizenzabgleich prüfen' })); const preview = await screen.findByRole('region', { name: 'Microsoft-Lizenzabgleich-Vorschau' });
+  expect(within(preview).getByRole('heading', { name: 'Microsoft-Lizenz zuweisen' })).toBeInTheDocument(); expect(within(preview).getByText(/Lokaler Anspruch: vorhanden/)).toBeInTheDocument();
+  expect(within(preview).getByText(/Noch keine Cloud-Änderung ausgelöst/)).toBeInTheDocument(); expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(); expect(api.post).toHaveBeenCalledTimes(1);
+  expect((api.post as jest.Mock).mock.calls[0][0]).toMatch(/\/preview$/);
 });

@@ -8,6 +8,14 @@ Jede Änderung benötigt eine Begründung, ausdrückliche Bestätigung und einen
 
 Eine Verknüpfung allein vergibt oder entzieht **keine** Microsoft-Lizenz. Der globale Legacy-Worker darf Firmenpools weiterhin nicht übernehmen. Die neue Oberfläche zeigt keine Cloud-Zuweisung als bestätigt an. Ein Verbindungsfehler löscht keine lokalen Lizenzplätze; eine ungültige eigene Sitzung räumt die privaten Ansichten auf.
 
+## Aktuellen Lizenzabgleich prüfen
+
+Bei einem verknüpften Benutzer lässt sich **Microsoft-Lizenzabgleich prüfen** öffnen. Die Vorschau vergleicht die aktuelle kanonische Benutzerberechtigung und alle tatsächlichen lokalen Quellen mit der beobachteten Microsoft-Zuweisung. Bei Lizenzgruppen wird die aktuelle berechtigte Mitgliedschaft erneut von Identity gelesen; ein veralteter materialisierter Gruppenplatz genügt nicht. Eine zusätzliche gültige manuelle Quelle kann den Anspruch aufrechterhalten.
+
+Für eine vorgeschlagene neue Zuweisung wird außerdem der aktuelle Microsoft-SKU-Bestand gelesen. Fehlende, inaktive oder ausgeschöpfte Benutzerprodukte führen zu einem Konflikt. Bestandszahlen sind Anbieterbeobachtungen und werden nicht in lokale Plätze umgerechnet. Bestehende direkte oder gruppenbasierte Microsoft-Lizenzen werden durch die Vorschau nicht als eigene übernommen. Geänderte oder nicht erreichbare Gruppenquellen geben keine Änderung frei.
+
+Die Vorschau ist rein lesend. Eine angezeigte mögliche Zuweisung oder Rückgabe ist noch kein Versand und keine Bestätigung einer Anbieterwirkung. Der anschließende dauerhaft protokollierte Schreibpfad mit gesonderter Rückbestätigung bleibt in Arbeit.
+
 ## Geschützte Konfiguration
 
 Die bestehende [Bestandslesung und Dateivorbereitung](../../services/connectors-rust/READ_PROVIDERS.md#show-the-selected-companys-microsoft-stock-in-the-gui) bleibt die Grundlage. Zusätzlich wird eine ausdrücklich geprüfte Konfiguration für die Benutzerprüfung und den späteren Schreibpfad benötigt:

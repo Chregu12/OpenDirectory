@@ -224,7 +224,7 @@ before(async () => {
   Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase,
     LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'',LICENSE_COMPANY_PROVIDER_WRITE_CONFIG_FILE:'' });
   policyDb=require('../../../policy-service/src/db/postgres');
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|03[01])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|03[0-2])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
   process.env.OAUTH_POLICY_SOURCE_URL=policyBase;
   process.env.DATABASE_URL=identityDatabaseUrl.toString();
