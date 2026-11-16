@@ -1,6 +1,6 @@
 # Firmen-Lizenzpools mit Microsoft 365 verknüpfen
 
-Dieser Entwicklungsstand ergänzt die vorhandene Bestandslesung um ausdrücklich bestätigte Verknüpfungen, einen manuell bestätigten Lizenzabgleich, die Wiederherstellung unterbrochener Vorgänge und die bewusste Prüfung unklarer Anbieterwirkungen für eine eigene Firma. Er ist noch nicht produktiv ausgerollt. Die konfigurierte Browser-Gesamtkette mit ausdrücklich simulierter Microsoft-Grenze ist geprüft. Die Abnahme mit einem echten Microsoft-Testtenant, die abschließende CI und der Rollout bleiben offen. Bis dahin ist dieser Schreibpfad nicht zur produktiven Aktivierung freigegeben.
+Mit [Release 1.0.55](../deployment/core-1.0.55-2026-11-16.json) sind ausdrücklich bestätigte Verknüpfungen, ein manuell bestätigter Lizenzabgleich, die Wiederherstellung unterbrochener Vorgänge und die bewusste Prüfung unklarer Anbieterwirkungen für die eigene Firma in der GUI ausgeliefert. Die vollständige Linux-CI und die konfigurierte Browser-Gesamtkette mit ausdrücklich simulierter Microsoft-Grenze bestehen. Ohne die unten beschriebene geschützte Firmenkonfiguration bleibt die Verbindung deaktiviert. Die Abnahme mit einem echten Microsoft-Testtenant steht noch aus.
 
 Unter **Apps & Lizenzen → Lizenzpool → Microsoft 365 · Verknüpfungen dieses Lizenzpools** lässt sich der aktuelle Stand laden. Ein berechtigter Firmenbenutzer bestätigt zunächst das angezeigte Microsoft-Verzeichnis und die vorgesehenen Anwendungen. Danach kann er ein aktuell aktives Benutzerprodukt auswählen und eigene Mitarbeitende anhand ihrer geprüften Microsoft-Objekt-ID zuordnen. Die Anwendung errät keine Zuordnung aus E-Mail-Adressen.
 
@@ -18,7 +18,7 @@ Die Vorschau ist rein lesend. Eine angezeigte mögliche Zuweisung oder Rückgabe
 
 ## Einen geprüften Lizenzabgleich bestätigen
 
-Der anschließende Entwicklungsablauf verlangt einen eigenen Grund und eine Bestätigung der genau angezeigten Aktion. Zwischen Vorschau, dauerhafter Vorbereitung und Versand werden ursprüngliche Firmenberechtigung, frische MFA, lokale Quellen, Gruppenzugehörigkeit, Verknüpfungen und Anbieterbeobachtung erneut geprüft. Änderungen verhindern den Versand. Eine Sperre pro zugeordnetem Benutzer und Lizenzprodukt verhindert parallele Doppelaufrufe; Datenbanktransaktionen bleiben vor dem Anbieteraufruf abgeschlossen.
+Der bestätigte Lizenzabgleich verlangt einen eigenen Grund und eine Bestätigung der genau angezeigten Aktion. Zwischen Vorschau, dauerhafter Vorbereitung und Versand werden ursprüngliche Firmenberechtigung, frische MFA, lokale Quellen, Gruppenzugehörigkeit, Verknüpfungen und Anbieterbeobachtung erneut geprüft. Änderungen verhindern den Versand. Eine Sperre pro zugeordnetem Benutzer und Lizenzprodukt verhindert parallele Doppelaufrufe; Datenbanktransaktionen bleiben vor dem Anbieteraufruf abgeschlossen.
 
 Microsoft erhält höchstens einen Schreibaufruf für den zugelassenen Vorgang. Eine verlorene HTTP-Antwort führt nicht zu einer automatischen Wiederholung. Dieselbe Vorgangs-ID liefert ausschließlich den vorhandenen Originalnachweis; eine noch offene Vorbereitung oder ein unterbrochener Versand verlangt eine gesonderte Wiederherstellung. Token und unverschlüsselte Versandberechtigung werden nicht im Vorgang gespeichert.
 
@@ -83,4 +83,4 @@ Die [Wiederherstellungsprüfung](../testing/company-microsoft-recovery-2026-11-1
 
 Die [Prüfung unbekannter Ergebnisse](../testing/company-microsoft-review-2026-11-16.json) umfasst tatsächliche SQL-Transaktionen, die Wartefrist, unabhängige aktuelle Anbieterbeobachtung, bewusste Übernahme, negative lokale Berechtigung mit später separat bestätigter Rückgabe, Ablauf beim physischen Commit, geänderte Firmengeneration, Zielkonkurrenz, unterdrückte tatsächliche Zieleffekte und unveränderte Originalbelege. Externe Antworten sind ausdrücklich simuliert; die Microsoft-Tenant-Abnahme wird dadurch nicht ersetzt.
 
-Offen sind eine echte Microsoft-Tenant-Abnahme, die abschließende vollständige CI und der Rollout. Es wurden keine produktiven Anbieterzugänge, Zustimmungen oder Lizenzänderungen erzeugt. Dieser Entwicklungsstand allein schließt den Anbieterablauf des Kernumfangs nicht ab.
+Die vollständige Linux-CI mit allen 15 Jobs und der live geprüfte Rollout 1.0.55 sind abgeschlossen. Die echte Microsoft-Tenant-Abnahme bleibt offen; produktive Anbieterzugänge, Zustimmungen oder Lizenzänderungen wurden nicht erzeugt. Der ausgelieferte, noch unkonfigurierte Stand allein schließt den Anbieterablauf des Kernumfangs nicht ab.

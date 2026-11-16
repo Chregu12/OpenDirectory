@@ -20,7 +20,7 @@ apps:
   license-management:
     imageTag: "1.0.17"
   policy-service:
-    imageTag: "1.0.32"
+    imageTag: "1.0.55-core-bc4fafa@sha256:2fc3630b0bf8cdae9d9788d1da04dbba69dc9469dcb08e25f687c62a42667d3c"
   license-fulfillment:
     imageTag: "1.0.26"
     env:
@@ -39,7 +39,7 @@ apps:
     env:
       OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
   web-app:
-    imageTag: "1.0.53-pim-c08aa46-r2"
+    imageTag: "1.0.55-core-bc4fafa@sha256:fbab3d7f483cdb3298df123e7fd94c4f8771c94ab7fe174157bdb9e4da0e9b19"
   api-backend:
     imageTag: "1.0.10"
   device-service:

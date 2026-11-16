@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T05:00:21.873887+00:00",
+  "status": "deployed-and-verified-external-acceptance-open",
+  "release": {
+    "version": "1.0.55",
+    "chartVersion": "0.1.58",
+    "helmRevisionBefore": 87,
+    "helmRevisionAfter": 88,
+    "namespace": "opendirectory",
+    "automaticRollbackEnabled": true,
+    "automaticRollbackUsed": false,
+    "newSqlMigrations": [
+      "031_company_microsoft.sql",
+      "032_company_microsoft_delivery.sql"
+    ]
+  },
+  "source": {
+    "applicationImages": "bc4fafaa48dbdb440b1d3633ba3bfda5a7df2334",
+    "testedCiHead": "bc4fafaa48dbdb440b1d3633ba3bfda5a7df2334",
+    "mergeCommit": "213f820024ca52ac60dfb69f573fe5b64b58d8ea",
+    "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/11",
+    "mergeTreeEqualsTestedTree": true,
+    "testedAndMergedTree": "8d6c8a1a68874dc2397217e2acc0327f40de37b3",
+    "checkpointChangesRuntimeSources": false,
+    "postImageChanges": [
+      "deploy/helm/opendirectory-lite/Chart.yaml",
+      "deploy/helm/opendirectory-lite/values.k3s.yaml",
+      "deploy/helm/opendirectory-lite/README.md",
+      "docs/deployment/core-1.0.55-2026-11-16.json",
+      "docs/features/company-microsoft-connections.md",
+      "docs/implementation-worklist.md"
+    ]
+  },
+  "ci": {
+    "run": 43802336013,
+    "headSha": "bc4fafaa48dbdb440b1d3633ba3bfda5a7df2334",
+    "status": "completed",
+    "conclusion": "success",
+    "successfulJobs": 15,
+    "totalJobs": 15,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/43802336013",
+    "licenseCases": 599,
+    "identityCases": 816,
+    "oauthCasesIncludingSixNestedCases": 306,
+    "actualBrowserCases": 62,
+    "actualBrowserUniqueNames": 62,
+    "browserFixtureGroupsCleaned": 9,
+    "policyUnitTests": 1529,
+    "frontendUnitTests": 3321,
+    "frontendPlaywrightCases": 112
+  },
+  "images": {
+    "web-app": {
+      "reference": "harbor.heusser.local/opendirectory/web-app:1.0.55-core-bc4fafa",
+      "digest": "sha256:fbab3d7f483cdb3298df123e7fd94c4f8771c94ab7fe174157bdb9e4da0e9b19",
+      "configurationDigest": "sha256:84fd30ad352ba9b4a74071e5b9ffe95548dd191d71c3e157d4b8205710068666",
+      "verifiedRuntimeSourceFiles": 292,
+      "imageUid": 1001,
+      "runtimeSourceHashesMatch": true
+    },
+    "policy-service": {
+      "reference": "harbor.heusser.local/opendirectory/policy-service:1.0.55-core-bc4fafa",
+      "digest": "sha256:2fc3630b0bf8cdae9d9788d1da04dbba69dc9469dcb08e25f687c62a42667d3c",
+      "configurationDigest": "sha256:ac4cef00087143a2f3ab965eab7cb747792dba6925e4dfc77e658b1912059cfa",
+      "verifiedRuntimeSourceFiles": 186,
+      "imageUid": 100,
+      "runtimeSourceHashesMatch": true
+    }
+  },
+  "rollout": {
+    "changedDeployments": [
+      "opendirectory-policy-service",
+      "opendirectory-web-app"
+    ],
+    "otherDeploymentSpecsUnchanged": 9,
+    "allOtherResourceBodiesUnchanged": true,
+    "resourcesCompared": 49,
+    "preparedManifestSha256": "3b98aa6e48790de550a77271a880ba004788020744d8b4af63da94179454c0df",
+    "liveManifestMatchesPrepared": true,
+    "readyDeployments": 11,
+    "matchedRunningImageDigests": 2,
+    "publicK3sProfilePinsBothImagesByDigest": true,
+    "publicProfileLintPassed": true,
+    "repositoryChartRendersExactDeployedManifest": true
+  },
+  "liveChecks": {
+    "certificateVerifiedHttps": {
+      "/login": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/mfa": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/provider/microsoft/state": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/provider/microsoft/history": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/.well-known/openid-configuration": {
+        "status": 200,
+        "certificateVerified": true
+      },
+      "/api/identity/access": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/capabilities": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/devices/fleet": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/identity/company-pim": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/pools": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/licenses/company/provider": {
+        "status": 401,
+        "certificateVerified": true
+      },
+      "/api/auth/oidc/session (POST)": {
+        "status": 401,
+        "cacheControl": "no-store",
+        "certificateVerified": true
+      }
+    },
+    "internalNewImageHealth": {
+      "opendirectory-web-app": {
+        "status": 200
+      },
+      "opendirectory-policy-service": {
+        "status": 200
+      }
+    },
+    "identityReceivers": {
+      "identity_company_role_receiving": true,
+      "identity_company_group_rule_live_receiving": true,
+      "identity_company_activation_receiving": true,
+      "identity_company_pim_approval_receiving": true
+    },
+    "policyReceivers": {
+      "license_company_receiving": true,
+      "license_company_edit_receiving": true,
+      "company_offboarding_receiving": true,
+      "company_license_group_receiving": true,
+      "company_blueprint_receiving": true,
+      "company_blueprint_assignment_receiving": true,
+      "company_blueprint_assignment_automation_receiving": true,
+      "company_blueprint_assignment_retirement_receiving": true,
+      "company_microsoft_receiving": true,
+      "company_microsoft_delivery_receiving": true
+    },
+    "companyMicrosoftReceiving": {
+      "metadataManifest": 9,
+      "deliveryManifest": 10,
+      "connections": 0,
+      "operations": 0
+    },
+    "credentialValidator": {
+      "validShapeAccepted": true,
+      "invalidShapeRejected": true,
+      "pureReadOnlyInputs": true,
+      "noUserRecordsCreated": true
+    },
+    "companyMicrosoftDefaultConfiguration": {
+      "companyScopeConfigured": false,
+      "companyReadFileConfigured": false,
+      "companyWriteFileConfigured": false
+    }
+  },
+  "backups": {
+    "completedAt": "2026-11-16T04:58:11.141264+00:00",
+    "databaseArchives": {
+      "auth": {
+        "bytes": 83919,
+        "sha256": "ca834ef559aad4006ae4b6e1583041defc607ff77a4c7ad011ddcbc29a60775b",
+        "tocEntries": 150
+      },
+      "oauth": {
+        "bytes": 176209,
+        "sha256": "b65958de8cfc45f7aa150baf1cc4e27c8508913c762f0eb7713d6deac9387dd4",
+        "tocEntries": 270
+      },
+      "identity": {
+        "bytes": 3741834,
+        "sha256": "3edd8a3aec9a6b1eecabfa9817cf8b1ea81ab107ec09bfd863f803b06edcddf7",
+        "tocEntries": 6235
+      },
+      "devices": {
+        "bytes": 180853,
+        "sha256": "aadf76717e82452f8095181ef2eabaa59f7a7fcf74b1172eb9232eb6b66e725f",
+        "tocEntries": 209
+      },
+      "app_store": {
+        "bytes": 19939,
+        "sha256": "21226ec2fc8eb86d1b033d54368373aa49d800c4a98bcbab10e1393d7632c6f6",
+        "tocEntries": 39
+      },
+      "policy": {
+        "bytes": 882249,
+        "sha256": "16f2215f8a5e439bb469a40f8c734ff19e9f8b5eb1d602cd15483a86b42c3d8b",
+        "tocEntries": 1076
+      }
+    },
+    "uploads": {
+      "bytes": 173,
+      "sha256": "ed7b28fe437624aa4e51e23bd3adbe1c667015ff3f26fe2ff739f271f1a9e68d",
+      "members": 3
+    },
+    "privateDirectoryMode": "0700",
+    "privateFilesOutsideGit": true,
+    "consistentAcrossDatabases": false,
+    "archiveValidation": "PostgreSQL16 pg_restore --list for each fresh PostgreSQL15 archive. This is TOC validation, not a full restore of these six fresh archives."
+  },
+  "migrationAndRestore": {
+    "postgresMajor": 15,
+    "verifiedProductionSnapshotArchiveSha256": "26b60a0dd71e3bdf732adf9b930494f8108f2466f6e90e3801854b0679f470d4",
+    "originalTables": 87,
+    "sharedSnapshotCountsAndSha256MatchRestoredCopy": true,
+    "actualMigrationRunnerAppliedTwice": true,
+    "migrationFiles": 31,
+    "all87OriginalTableRowsAndHashesUnchanged": true,
+    "receiversPassed": 10,
+    "functionManifestCounts": {
+      "metadata": 9,
+      "delivery": 10
+    },
+    "finishedImageUpgradeRollbackUpgradePhases": [
+      {
+        "phase": "upgrade",
+        "imageId": "sha256:ac4cef00087143a2f3ab965eab7cb747792dba6925e4dfc77e658b1912059cfa",
+        "actualImageMigrationRunnerPassed": true,
+        "allTenReceiversPassed": true,
+        "all87OriginalTableRowsAndHashesUnchanged": true,
+        "newConnectionAndOperationTablesEmpty": true
+      },
+      {
+        "phase": "rollback",
+        "imageId": "sha256:55f7f91f5803de6377457e4dc20ca191d7eaa0f2e842510a4f8e1e77d8e6efe7",
+        "actualImageMigrationRunnerPassed": true,
+        "allTenReceiversPassed": true,
+        "all87OriginalTableRowsAndHashesUnchanged": true,
+        "newConnectionAndOperationTablesEmpty": true
+      },
+      {
+        "phase": "upgrade-again",
+        "imageId": "sha256:ac4cef00087143a2f3ab965eab7cb747792dba6925e4dfc77e658b1912059cfa",
+        "actualImageMigrationRunnerPassed": true,
+        "allTenReceiversPassed": true,
+        "all87OriginalTableRowsAndHashesUnchanged": true,
+        "newConnectionAndOperationTablesEmpty": true
+      }
+    ],
+    "matchingRehearsalAndImageDatabaseSourceFiles": 32,
+    "isolatedContainersAndNetworksRemoved": true
+  },
+  "imageBrowserValidation": {
+    "actualProductionWebImage": true,
+    "cases": 4,
+    "passed": 4,
+    "backend": "Explicit local API fixtures.",
+    "temporaryContainerAndDependencyLinksRemoved": true
+  },
+  "boundaries": {
+    "realMicrosoftTenantAcceptance": false,
+    "realMicrosoftLicenseMutationsExecuted": false,
+    "personalProductionMfaSigninConfirmed": false,
+    "physicalDeviceAcceptanceConfirmed": false,
+    "companyProviderCredentialsConfigured": false,
+    "productionRoleOrMfaFactorsCreatedForTests": false
+  },
+  "limits": [
+    "Microsoft responses and password provider in the configured end-to-end browser case are explicit fixtures; actual OpenDirectory JWT/BFF/central TOTP/MFA/authority/SQL evidence is exercised.",
+    "A real Microsoft test tenant with protected operator credentials, selected SKU/test account and explicit human confirmation is still needed for provider acceptance.",
+    "Personal production authenticator sign-in and physical-device acceptance remain unconfirmed.",
+    "The fresh six-database archives are individually consistent pg_dump backups; no cross-database atomic snapshot is claimed.",
+    "Optional device OU PRs and other providers are outside this core release."
+  ]
+}
