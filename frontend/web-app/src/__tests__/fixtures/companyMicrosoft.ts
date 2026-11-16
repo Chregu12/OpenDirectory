@@ -17,3 +17,10 @@ export const microsoftPreview = () => ({ ...microsoftEnvelope, poolId: microsoft
 export const microsoftResponse = (data: unknown, status = 200, headers = {}) => ({ data, status, headers });
 export const microsoftSyncReceipt = (operationId = microsoftId(100)) => ({ ...microsoftEnvelope, historical: false, result: { operationId, poolId: microsoftId(8), userId: microsoftId(11), action: 'assign', targetId: microsoftId(30), targetRevision: '2',
   status: 'verifying', owned: true, pendingOperationId: operationId, uncertainOperationId: null, errorCode: 'provider_verification_pending', eventId: microsoftId(31), kind: 'acknowledged', retryAfter: null, retryAt: null } });
+export const microsoftRecoveryPreview = (phase: 'prepared' | 'dispatched' = 'dispatched') => ({ ...microsoftEnvelope, poolId: microsoftId(8), userId: microsoftId(11), connection: microsoftConnection(), pool: microsoftPool(), user: microsoftPerson(),
+  recipient: { id: microsoftId(11), revision: '1', eligibilityRevision: '1', enabled: true, deleted: false },
+  target: { id: microsoftId(30), revision: '1', status: 'processing', owned: false, lastOperationId: microsoftId(40), pendingOperationId: null, uncertainOperationId: null, errorCode: null, retryAt: null, checkedAt: time },
+  attempt: { id: microsoftId(40), phase, desired: true, actorUserId: microsoftId(1), reason: 'Original confirmed license operation', createdAt: time }, fingerprint: 'b'.repeat(64), checkedAt: time });
+export const microsoftRecoveryReceipt = (operationId = microsoftId(100), phase: 'prepared' | 'dispatched' = 'dispatched') => ({ ...microsoftEnvelope, historical: false, result: { ...microsoftSyncReceipt(operationId).result, action: 'recover',
+  status: phase === 'prepared' ? 'failed' : 'unknown', owned: false, pendingOperationId: null, uncertainOperationId: phase === 'prepared' ? null : microsoftId(40),
+  errorCode: phase === 'prepared' ? 'process_recovered_before_send' : 'process_recovered_after_dispatch', kind: phase === 'prepared' ? 'not_sent' : 'unknown', interruptedOperationId: microsoftId(40), interruptedPhase: phase, originalEventId: microsoftId(41) } });

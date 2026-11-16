@@ -37,9 +37,9 @@ function plan(projected, observed, target) {
 
 class CompanyMicrosoftDelivery {
   constructor(bridge, { groups = new CompanyLicenseGroups(bridge.companies) } = {}) { this.bridge = bridge; this.companies = bridge.companies; this.database = bridge.database; this.groups = groups; }
-  async bindings(client, poolId, source, config) {
+  async bindings(client, poolId, source, config = null) {
     await client.query('SELECT company_microsoft_delivery_receiving()'); await this.companies.ownPool(client, poolId, source.tenant.id);
-    const connection = await this.bridge.connection(client, source); this.bridge.matchingConnection(source, connection, config);
+    const connection = await this.bridge.connection(client, source); if (config) this.bridge.matchingConnection(source, connection, config);
     const product = (await client.query("SELECT * FROM company_microsoft_pools WHERE pool_id=$1 AND tenant_id=$2 AND connection_id=$3 AND status='active'", [poolId, source.tenant.id, connection.id])).rows[0];
     const person = (await client.query("SELECT * FROM company_microsoft_users WHERE user_id=$1 AND tenant_id=$2 AND connection_id=$3 AND status='active'", [source.target.id, source.tenant.id, connection.id])).rows[0];
     if (!product || !person) fail(409, 'Current own Microsoft pool and user mappings required');
@@ -106,17 +106,55 @@ class CompanyMicrosoftDelivery {
       return { ...value, fingerprint: digest(value), action, checkedAt: new Date().toISOString() };
     }, userId);
   }
+  async recoveryState(client, poolId, source) {
+    const bindings = await this.bindings(client, poolId, source); let attempt = null;
+    if (bindings.target?.status === 'processing') {
+      const original = (await client.query('SELECT * FROM company_microsoft_operations WHERE id=$1 AND tenant_id=$2 AND resource_id=$3', [bindings.target.last_operation_id, source.tenant.id, bindings.id])).rows[0];
+      if (!original || original.action !== 'sync' || !['prepared', 'dispatched'].includes(original.phase) || original.connection_id !== bindings.connection.id
+        || original.request.poolId !== poolId || original.request.userId !== source.target.id || original.before_state?.capture?.pool?.id !== bindings.product.id || original.before_state?.capture?.user?.id !== bindings.person.id) fail(503, 'Retained interrupted Microsoft operation required');
+      attempt = { id: original.id, phase: original.phase, desired: original.desired, actorUserId: identifier(original.source.actorUserId), reason: original.request.reason, createdAt: new Date(original.created_at).toISOString() };
+    }
+    return { ...envelope(source), poolId, userId: source.target.id, recipient: source.target,
+      connection: bindingView('connection', bindings.connection), pool: bindingView('pool', bindings.product), user: bindingView('user', bindings.person), target: targetView(bindings.target), attempt };
+  }
+  async recoveryPreview(poolId, userId, user, authorization) {
+    identifier(poolId); identifier(userId);
+    return this.companies.read(user, authorization, async (client, source) => {
+      const value = await this.recoveryState(client, poolId, source);
+      return { ...value, fingerprint: value.attempt ? digest(value) : null, checkedAt: new Date().toISOString() };
+    }, userId);
+  }
+  async recover(poolId, userId, input, operation, user, authorization) {
+    identifier(poolId); identifier(userId); identifier(operation); const reason = confirmation(input, ['fingerprint', 'interruptedOperationId', 'interruptedPhase']);
+    identifier(input.interruptedOperationId);
+    if (typeof input.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.fingerprint) || !['prepared', 'dispatched'].includes(input.interruptedPhase)) fail(400, 'Exact interrupted Microsoft review required');
+    const source = await this.companies.authority.read(authorization, user, userId);
+    const request = { poolId, userId, fingerprint: input.fingerprint, interruptedOperationId: input.interruptedOperationId, interruptedPhase: input.interruptedPhase, reason, confirm: true };
+    const previous = await this.recorded(source, operation, request, this.database, 'recover');
+    if (previous) { await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: true, result: previous }; }
+    const client = await this.database.getClient(); let result;
+    try {
+      result = await this.transaction(client, async () => {
+        const capture = await this.recoveryState(client, poolId, source);
+        if (!capture.attempt || capture.attempt.id !== input.interruptedOperationId || capture.attempt.phase !== input.interruptedPhase || digest(capture) !== input.fingerprint) fail(412, 'Interrupted Microsoft review changed');
+        await this.companies.unchanged(source, user, authorization);
+        const value = (await client.query('SELECT company_microsoft_recover($1::jsonb,$2::uuid,$3::text,$4::uuid,$5::jsonb,$6::jsonb) AS result', [source, operation, randomBytes(32).toString('hex'), capture.target.id, request, capture])).rows[0].result;
+        await this.companies.unchanged(source, user, authorization); return value;
+      });
+    } finally { client.release(); }
+    await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: false, result };
+  }
   async transaction(client, operation) {
     try {
       await client.query('BEGIN'); await client.query("SET LOCAL lock_timeout='3s'; SET LOCAL statement_timeout='5s'");
       const result = await operation(); await client.query('COMMIT'); return result;
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   }
-  async recorded(source, operation, request, client = this.database) {
+  async recorded(source, operation, request, client = this.database, action = 'sync') {
     const row = (await client.query('SELECT * FROM company_microsoft_operations WHERE id=$1 AND tenant_id=$2', [operation, source.tenant.id])).rows[0];
     if (!row) return null;
     await client.query('SELECT company_microsoft_delivery_receiving()');
-    if (row.action !== 'sync' || row.source.actorUserId !== source.actorUserId || !isDeepStrictEqual(row.request, request)) fail(409, 'Microsoft operation key belongs to another original request');
+    if (row.action !== action || row.source.actorUserId !== source.actorUserId || !isDeepStrictEqual(row.request, request)) fail(409, 'Microsoft operation key belongs to another original request');
     if (row.phase !== 'finished') fail(409, 'Original Microsoft operation requires recovery; no repeat dispatch');
     return row.outcome;
   }

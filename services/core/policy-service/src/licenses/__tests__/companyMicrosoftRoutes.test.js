@@ -3,7 +3,7 @@ const { randomUUID } = require('node:crypto');
 const express = require('express'); const request = require('supertest');
 jest.mock('../CompanyMicrosoftBridge', () => ({ CompanyMicrosoftBridge: jest.fn() }));
 jest.mock('../CompanyMicrosoftDelivery', () => ({ CompanyMicrosoftDelivery: jest.fn() }));
-const preview = jest.fn(), sync = jest.fn(); require('../CompanyMicrosoftDelivery').CompanyMicrosoftDelivery.mockImplementation(() => ({ preview, sync }));
+const preview = jest.fn(), sync = jest.fn(), recoveryPreview = jest.fn(), recover = jest.fn(); require('../CompanyMicrosoftDelivery').CompanyMicrosoftDelivery.mockImplementation(() => ({ preview, sync, recoveryPreview, recover }));
 const methods = Object.fromEntries(['state', 'products', 'mappings', 'history', 'connect', 'bindPool', 'bindUser', 'retire'].map(name => [name, jest.fn()]));
 require('../CompanyMicrosoftBridge').CompanyMicrosoftBridge.mockImplementation(() => methods);
 const { companyMicrosoftRoutes } = require('../companyMicrosoftRoutes');
@@ -12,7 +12,7 @@ const version = `"company-microsoft-connection-${id}-7"`;
 const body = { reason: 'Explicit Microsoft binding review', confirm: true };
 let app;
 beforeEach(() => {
-  jest.clearAllMocks(); preview.mockResolvedValue({ fingerprint: 'a'.repeat(64) }); sync.mockResolvedValue({ historical: false, result: {} });
+  jest.clearAllMocks(); preview.mockResolvedValue({ fingerprint: 'a'.repeat(64) }); sync.mockResolvedValue({ historical: false, result: {} }); recoveryPreview.mockResolvedValue({ attempt: null }); recover.mockResolvedValue({ historical: false, result: {} });
   for (const method of Object.values(methods)) method.mockResolvedValue({ connection: { id, revision: '7' }, pool: { id, revision: '1' }, user: { id, revision: '1' }, binding: { id, revision: '8' } });
   app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { sub: 'original' }; next(); }); app.use('/microsoft', companyMicrosoftRoutes({}));
 });
@@ -54,4 +54,16 @@ test('sync forwards only the explicit original operation and body to the indepen
   const input = { ...body, fingerprint: 'a'.repeat(64), action: 'assign' };
   const result = await request(app).post('/microsoft/pools/' + id + '/users/' + target + '/sync').set('Authorization', 'Bearer original').set('Idempotency-Key', operation).send(input);
   expect(result.status).toBe(200); expect(sync).toHaveBeenCalledWith(id, target, input, operation, { sub: 'original' }, 'Bearer original');
+});
+test('recovery preview is bodyless and forwards only the canonical pair and original human', async () => {
+  const path = '/microsoft/pools/' + id + '/users/' + target + '/recovery-preview';
+  expect((await request(app).post(path).set('Authorization', 'Bearer original').send({})).status).toBe(200);
+  expect(recoveryPreview).toHaveBeenCalledWith(id, target, { sub: 'original' }, 'Bearer original'); recoveryPreview.mockClear();
+  expect((await request(app).post(path).send({ desired: true })).status).toBe(400); expect(recoveryPreview).not.toHaveBeenCalled();
+});
+test('recover requires its own operation key and cannot inherit a caller-selected authority', async () => {
+  const path = '/microsoft/pools/' + id + '/users/' + target + '/recover';
+  expect((await request(app).post(path).send(body)).status).toBe(400); expect(recover).not.toHaveBeenCalled();
+  expect((await request(app).post(path).set('Authorization', 'Bearer original').set('Idempotency-Key', operation).send(body)).status).toBe(200);
+  expect(recover).toHaveBeenCalledWith(id, target, body, operation, { sub: 'original' }, 'Bearer original');
 });

@@ -33,12 +33,14 @@ CREATE TABLE IF NOT EXISTS company_microsoft_targets (
 );
 CREATE TABLE IF NOT EXISTS company_microsoft_operations (
  id UUID PRIMARY KEY,tenant_id UUID NOT NULL,connection_id UUID NOT NULL REFERENCES company_microsoft_connections(id) DEFERRABLE INITIALLY DEFERRED,
- resource_id UUID NOT NULL,action TEXT NOT NULL CHECK(action IN('connect','renew','disconnect','bind_pool','retire_pool','bind_user','retire_user','sync','adopt','retry')),
+ resource_id UUID NOT NULL,action TEXT NOT NULL CHECK(action IN('connect','renew','disconnect','bind_pool','retire_pool','bind_user','retire_user','sync','adopt','retry','recover')),
  source JSONB NOT NULL,request JSONB NOT NULL,permit_hash TEXT NOT NULL CHECK(permit_hash ~ '^[a-f0-9]{64}$'),
  phase TEXT NOT NULL CHECK(phase IN('prepared','dispatched','finished')),desired BOOLEAN,local_state JSONB,before_state JSONB,outcome JSONB,
  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),finished_at TIMESTAMPTZ,
  CHECK((phase='finished')=(outcome IS NOT NULL AND finished_at IS NOT NULL))
 );
+ALTER TABLE company_microsoft_operations DROP CONSTRAINT IF EXISTS company_microsoft_operations_action_check;
+ALTER TABLE company_microsoft_operations ADD CONSTRAINT company_microsoft_operations_action_check CHECK(action IN('connect','renew','disconnect','bind_pool','retire_pool','bind_user','retire_user','sync','adopt','retry','recover'));
 ALTER TABLE company_microsoft_targets ADD COLUMN IF NOT EXISTS pending_operation_id UUID;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='company_microsoft_targets'::regclass AND conname='company_microsoft_target_operation') THEN
@@ -67,16 +69,25 @@ CREATE OR REPLACE FUNCTION company_microsoft_source_valid(source JSONB,operation
   'assignmentId',CASE WHEN source->'target'='null'::jsonb THEN NULL ELSE operation END));
 $$;
 CREATE OR REPLACE FUNCTION company_microsoft_scope() RETURNS company_microsoft_operations LANGUAGE plpgsql STABLE AS $$
-DECLARE original company_microsoft_operations;nonce TEXT=current_setting('opendirectory.company_microsoft_permit',true);
+DECLARE original company_microsoft_operations;recovery company_microsoft_operations;nonce TEXT=current_setting('opendirectory.company_microsoft_permit',true);
 BEGIN
  IF nonce IS NULL OR nonce !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Original company Microsoft permit required' USING ERRCODE='42501';END IF;
  SELECT * INTO original FROM company_microsoft_operations WHERE id=current_setting('opendirectory.company_microsoft_operation',true)::uuid;
- IF NOT FOUND OR original.permit_hash<>encode(sha256(convert_to(nonce,'UTF8')),'hex') THEN
-  RAISE EXCEPTION 'Original company Microsoft operation required' USING ERRCODE='42501';END IF;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Original company Microsoft operation required' USING ERRCODE='42501';END IF;
+ IF original.permit_hash<>encode(sha256(convert_to(nonce,'UTF8')),'hex') THEN
+  SELECT * INTO recovery FROM company_microsoft_operations WHERE id=NULLIF(current_setting('opendirectory.company_microsoft_recovery',true),'')::uuid;
+  IF recovery.id IS NULL OR recovery.action<>'recover' OR recovery.phase<>'prepared' OR original.action<>'sync' OR original.phase NOT IN('prepared','dispatched')
+   OR current_setting('opendirectory.company_microsoft_purpose',true) IS DISTINCT FROM 'finish'
+   OR recovery.permit_hash<>encode(sha256(convert_to(nonce,'UTF8')),'hex') OR recovery.tenant_id<>original.tenant_id OR recovery.resource_id<>original.resource_id
+   OR recovery.connection_id<>original.connection_id OR recovery.request->>'interruptedOperationId' IS DISTINCT FROM original.id::text
+   OR recovery.request->>'interruptedPhase' IS DISTINCT FROM original.phase OR recovery.source#>>'{target,id}' IS DISTINCT FROM original.source#>>'{target,id}'
+   OR NOT company_microsoft_source_valid(recovery.source,recovery.id,recovery.request->>'reason') THEN
+   RAISE EXCEPTION 'Fresh exact recovery may only finish its interrupted Microsoft operation' USING ERRCODE='42501';END IF;
+ END IF;
  RETURN original;
 END $$;
 CREATE OR REPLACE FUNCTION company_microsoft_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE original company_microsoft_operations;purpose TEXT=current_setting('opendirectory.company_microsoft_purpose',true);payload JSONB=to_jsonb(NEW);old_data JSONB=to_jsonb(OLD);nonce TEXT;
+DECLARE original company_microsoft_operations;purpose TEXT=current_setting('opendirectory.company_microsoft_purpose',true);payload JSONB=to_jsonb(NEW);old_data JSONB=to_jsonb(OLD);nonce TEXT;recovering BOOLEAN;
 BEGIN
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Company Microsoft history is retained' USING ERRCODE='42501';END IF;
  IF TG_TABLE_NAME='company_microsoft_operations' AND TG_OP='INSERT' THEN
@@ -89,15 +100,21 @@ BEGIN
   RETURN NEW;
  END IF;
  original=company_microsoft_scope();
+ recovering=original.permit_hash<>encode(sha256(convert_to(current_setting('opendirectory.company_microsoft_permit',true),'UTF8')),'hex');
  IF payload->>'tenant_id' IS DISTINCT FROM original.tenant_id::text THEN RAISE EXCEPTION 'Company Microsoft tenant mismatch' USING ERRCODE='42501';END IF;
  IF TG_TABLE_NAME='company_microsoft_operations' THEN
   IF NEW.id<>original.id OR TG_OP<>'UPDATE' OR OLD.phase='finished'
    OR (payload-ARRAY['phase','outcome','updated_at','finished_at']) IS DISTINCT FROM (old_data-ARRAY['phase','outcome','updated_at','finished_at'])
    OR NOT (OLD.phase='prepared' AND NEW.phase='dispatched' AND purpose='dispatch' OR NEW.phase='finished' AND purpose IN('change','finish')) THEN
    RAISE EXCEPTION 'Exact company Microsoft operation transition required' USING ERRCODE='42501';END IF;
+  IF recovering AND (NEW.phase<>'finished' OR NEW.outcome->>'kind' IS DISTINCT FROM (CASE WHEN OLD.phase='prepared' THEN 'not_sent' ELSE 'unknown' END)
+   OR NEW.outcome->>'errorCode' IS DISTINCT FROM (CASE WHEN OLD.phase='prepared' THEN 'process_recovered_before_send' ELSE 'process_recovered_after_dispatch' END)) THEN
+   RAISE EXCEPTION 'Recovery cannot acknowledge or repeat an interrupted Microsoft write' USING ERRCODE='42501';END IF;
  ELSIF TG_TABLE_NAME IN('company_microsoft_events','company_microsoft_outbox') THEN
   IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Company Microsoft evidence is append only' USING ERRCODE='42501';END IF;
   IF TG_TABLE_NAME='company_microsoft_events' THEN
+   IF recovering AND NEW.actor IS DISTINCT FROM jsonb_build_object('kind','workload','operationId',original.id) THEN
+    RAISE EXCEPTION 'Recovery cannot invent the original human actor' USING ERRCODE='42501';END IF;
    IF NEW.operation_id<>original.id OR NEW.sequence IS DISTINCT FROM (SELECT COALESCE(max(sequence),0)+1 FROM company_microsoft_events WHERE operation_id=original.id)
     THEN RAISE EXCEPTION 'Original Microsoft event sequence required' USING ERRCODE='42501';END IF;
    IF NOT (license_company_exact(NEW.actor,ARRAY['kind','userId']) AND NEW.actor->>'kind'='human' AND NEW.actor->>'userId'=original.source->>'actorUserId'
@@ -110,6 +127,11 @@ BEGIN
  ELSE
   IF payload->>'id' IS DISTINCT FROM original.resource_id::text OR original.phase='finished' THEN RAISE EXCEPTION 'Original Microsoft resource required' USING ERRCODE='42501';END IF;
   IF TG_TABLE_NAME='company_microsoft_targets' THEN
+   IF recovering AND (TG_OP<>'UPDATE' OR NEW.owned IS DISTINCT FROM OLD.owned OR NEW.last_operation_id IS DISTINCT FROM original.id
+    OR NEW.pending_operation_id IS DISTINCT FROM OLD.pending_operation_id OR NEW.observation IS DISTINCT FROM OLD.observation
+    OR NEW.status IS DISTINCT FROM (CASE WHEN original.phase='prepared' THEN 'failed' ELSE 'unknown' END)
+    OR NEW.uncertain_operation_id IS DISTINCT FROM (CASE WHEN original.phase='prepared' THEN OLD.uncertain_operation_id ELSE original.id END)) THEN
+    RAISE EXCEPTION 'Recovery must retain ownership and the original unresolved attempt' USING ERRCODE='42501';END IF;
    IF original.action NOT IN('sync','adopt','retry') OR purpose NOT IN('prepare','finish')
     OR payload->>'connection_id' IS DISTINCT FROM original.connection_id::text
     OR TG_OP='UPDATE' AND (payload-ARRAY['revision','status','owned','last_operation_id','pending_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at']) IS DISTINCT FROM (old_data-ARRAY['revision','status','owned','last_operation_id','pending_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at'])

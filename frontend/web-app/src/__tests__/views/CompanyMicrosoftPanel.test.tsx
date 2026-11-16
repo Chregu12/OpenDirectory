@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within, waitFor } from '@testing-librar
 import CompanyMicrosoftPanel from '@/components/views/CompanyMicrosoftPanel';
 import { CompanyPool } from '@/lib/companyApplications';
 import { api } from '@/lib/api';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftSyncReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const pool: CompanyPool = { id: id(8), tenantId: id(2), revision: '1', name: 'Büro-Lizenz', vendor: 'Microsoft', description: '', totalSeats: 2, usedSeats: 1, availableSeats: 1, licenseType: 'per_user', allocationMode: 'local-only', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z' };
 beforeEach(() => {
@@ -80,4 +80,20 @@ test('cloud sync requires its own reason and explicit confirmation and reports a
   fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ich bestätige diesen Microsoft-Lizenzabgleich.' })); fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' }));
   const result = await screen.findByRole('region', { name: 'Microsoft-Lizenzabgleich-Ergebnis' }); expect(within(result).getByRole('heading', { name: 'Anbieterbestätigung ausstehend' })).toBeInTheDocument(); expect(within(result).getByText(/tatsächliche Wirkung muss/)).toBeInTheDocument(); expect(api.post).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('button', { name: 'Microsoft-Lizenzabgleich prüfen' })).toBeDisabled();
+});
+
+test.each(['prepared', 'dispatched'] as const)('a %s interruption requires a separate confirmed recovery and remains distinct from cloud success', async phase => {
+  const state = phase === 'prepared' ? { ...microsoftEnvelope, state: 'configuration_unavailable', microsoftTenantId: null, connection: microsoftState().connection } : microsoftState();
+  (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(state) : url.endsWith('/mappings') ? ok({ ...microsoftMappings(), pool: microsoftPool() }) : ok(microsoftHistory()));
+  (api.post as jest.Mock).mockImplementation(async (url: string, _body: unknown, config: any) => url.endsWith('/recovery-preview') ? ok(microsoftRecoveryPreview(phase)) : ok(microsoftRecoveryReceipt(config.headers['Idempotency-Key'], phase)));
+  render(<CompanyMicrosoftPanel context={microsoftContext} pool={pool} onAccessError={jest.fn()} />); open(); fireEvent.click(screen.getByRole('button', { name: 'Microsoft-Verknüpfungen laden' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Unterbrochenen Lizenzvorgang prüfen' })); await screen.findByRole('region', { name: 'Unterbrochener Microsoft-Lizenzvorgang' });
+  expect(api.post).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: 'Wiederherstellung vorbereiten' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Begründung der Wiederherstellung'), { target: { value: 'Unterbrochenen Versuch ausdrücklich geprüft' } }); fireEvent.click(screen.getByRole('button', { name: 'Wiederherstellung vorbereiten' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Lizenzvorgang wiederherstellen' }); expect(within(dialog).getByRole('button', { name: 'Bestätigen' })).toBeDisabled();
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ich bestätige diese Wiederherstellung ohne neue Lizenzanfrage.' })); fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' }));
+  const result = await screen.findByRole('region', { name: 'Microsoft-Wiederherstellungsergebnis' });
+  expect(within(result).getByRole('heading', { name: phase === 'prepared' ? 'Unterbrochenen Versuch vor Versand abgeschlossen' : 'Wiederhergestellt · Anbieterausgang weiterhin unklar' })).toBeInTheDocument();
+  expect(api.post).toHaveBeenCalledTimes(2); expect((api.post as jest.Mock).mock.calls.every(([url]: [string]) => /\/(recovery-preview|recover)$/.test(url))).toBe(true);
+  expect(pool.usedSeats).toBe(1); expect(screen.getByRole('button', { name: 'Unterbrochenen Lizenzvorgang prüfen' })).toBeDisabled();
 });

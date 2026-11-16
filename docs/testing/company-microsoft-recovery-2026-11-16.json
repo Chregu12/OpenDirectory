@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T02:38:45.250246+00:00",
+  "status": "native-recovery-checkpoint-not-release-ready",
+  "baseCommit": "62e05ab90ed9ba73a1436f94442184fe0982140c",
+  "branch": "codex/company-microsoft-bridge",
+  "productionChanged": false,
+  "checks": {
+    "policyUnit": {
+      "passed": 1527,
+      "suites": 48
+    },
+    "frontendUnit": {
+      "passed": 3307,
+      "suites": 163
+    },
+    "licensePostgres": {
+      "passed": 594,
+      "companySqlHttpCases": 35,
+      "newRecoveryCases": 8
+    },
+    "targetedFrontend": {
+      "passed": 51
+    },
+    "typescript": "passed",
+    "javascriptSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "verifiedBehavior": [
+    "POST recovery-preview reads only the retained own-company mapped pair and interrupted original operation; no provider configuration, token or Graph request.",
+    "POST recover binds fingerprint, original operation and phase, current canonical recipient, reason and separate idempotency key; original source/request/permit hash are retained.",
+    "A prepared original becomes not_sent/failed; an originally dispatched operation becomes unknown with its original uncertain-operation pointer. Recovery never confirms or repeats the cloud write.",
+    "An expired original source does not prevent recovery with fresh current human authority; a different actual authorized fixture administrator is separately audited.",
+    "Fresh recovery authority is checked at physical SQL commit. Expiry rolls back the original workload outcome, target update, recovery operation and audit together.",
+    "An active target advisory lock or changed reviewed phase blocks recovery. A recovery permit cannot dispatch or acknowledge an unknown operation.",
+    "Recovery retains original ownership and older pending attempts; a later independent ordinary observation can resolve the older acknowledgement.",
+    "Mounted actual HTTP recovery routes work without provider files, reject caller authority, return immutable historical receipts and expose distinct human/workload audit actors.",
+    "The dedicated legacy role cannot execute the new receiver function; migrations still reapply and receipt guards remain enforced.",
+    "Client/UI require captured own-company pair, exact result binding, reason and checkbox; distinguish no interruption, no-send completion and unknown effect; explicit lost-response continuation retains the original key and body."
+  ],
+  "providerBoundary": "The new recovery path makes zero external provider calls. Native setup/ordinary license responses are explicit in-process fixtures; retained sources, schema migrations, transactions, deferred commit guards and mounted HTTP routes use actual disposable PostgreSQL. This is not an actual Microsoft tenant acceptance.",
+  "browserBoundary": "Configured provider browser coverage was not run for this checkpoint. React/client tests do not replace it; the previous actual unconfigured central-TOTP browser case is recorded separately.",
+  "remaining": [
+    "Explicit current human review/adoption/retry bound to the original uncertain addition; no automatic ownership acquisition.",
+    "Configured provider browser flow and actual Microsoft test tenant consent, mapped targets and independently observed effects.",
+    "Final full Linux CI, backup/migration/release validation and deployment."
+  ],
+  "sourceSha256": {
+    "services/core/policy-service/src/db/migrations/031_company_microsoft.sql": "a189566704f46be2c18ffa376a8eff28917819d9f07a84bf05d3dd4579bb9868",
+    "services/core/policy-service/src/db/migrations/032_company_microsoft_delivery.sql": "6c67d9078ecdf99e2dc25eb3e2519d80f80cfcbb97a75dce4e0c377779baf5df",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftDelivery.js": "fef1265070b76533b33c44a4d5cb991789a254cae5d2af52bd11ae3e24e2b2fc",
+    "services/core/policy-service/src/licenses/companyMicrosoftRoutes.js": "a0a6ddf168fc4b3423de8a5fc61b905f312e48814d60cc13525457f679a7b9b8",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoft.integration.cjs": "c34cfb9431cb77e4bd2a96d38685a38321c9e161e5840d49be92c1e4bdc15a2b",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoftRoutes.test.js": "ad302340fbc590753c4e731b14668272a0033ea08ac4c16e8cfd0fb90d638fb1",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "78c2a3660b21a6e6af43df77642fb97842570657edc203a5afe9f438762a5616",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "cb33e10f932f8b016c98de25389c6f5e62cfc1f2b11b79ef08f669c491c8527c",
+    "frontend/web-app/src/__tests__/fixtures/companyMicrosoft.ts": "c91c1d8b482a5ca87116863d5085ffed383f5cc9354833c22f0240df6cd67bad",
+    "frontend/web-app/src/__tests__/lib/companyMicrosoft.test.ts": "32731067af2e3445e2face1224f2facfa365af323a6854c4b723e980b47492ab",
+    "frontend/web-app/src/__tests__/views/CompanyMicrosoftPanel.test.tsx": "9ab3a78e0f52a539260e1a0f0f1a1751509377e1a1641a3db525129f99ce0475"
+  },
+  "logSha256": {
+    "policy": "ae9f5a7438b0c69fa322859a585829be903c931e58839c02e210b6f0466c7de9",
+    "frontend": "0a1e8a183f13aa721b22471286ee99e68c457d910726e0ab22757249b8a5fe8d",
+    "licensePostgres": "3b323aee44f5feb11db2e1a9b29f09cd3ca42ce2229768a338660d0805ebdf6a",
+    "typescript": "7cf910ab2ec972d4817443e4939b0688cb59143a73dcc3f34155923143f9b5f4",
+    "targetedFrontend": "bd4c9c069fd786e58f92778e017943f76d047e957eb9192c885c7dd45708918f"
+  }
+}

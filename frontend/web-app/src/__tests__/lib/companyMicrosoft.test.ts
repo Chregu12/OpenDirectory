@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { CompanyMicrosoftClient } from '@/lib/companyMicrosoft';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftSyncReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftSyncReceipt, microsoftRecoveryPreview, microsoftRecoveryReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const clients: CompanyMicrosoftClient[] = []; const base = '/api/licenses/company/provider/microsoft';
 let state: ReturnType<typeof microsoftState>; let mappings: ReturnType<typeof microsoftMappings>; let products: ReturnType<typeof microsoftProducts>;
@@ -100,4 +100,31 @@ test('history distinguishes original human preparation from workload delivery re
   const current = client(); await current.state(); (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(microsoftState()) : ok({ ...microsoftEnvelope, page: 1, hasMore: false, events: [
     { id: id(80), operationId: id(100), type: 'sync_finished', actorKind: 'workload', actorUserId: null, reason: 'Original human provider action', createdAt: '2026-11-16T00:00:00.000Z', resource: null },
   ] })); const value = await current.history(); expect(value.events[0].actorKind).toBe('workload'); expect(value.events[0].actorUserId).toBeNull();
+});
+
+test.each(['prepared', 'dispatched'] as const)('recovery binds the original %s phase and accepts only its separate non-dispatch receipt', async phase => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftRecoveryPreview(phase)));
+  const view = await current.recoveryPreview(id(8), id(11)); const intent = current.captureRecovery(view, 'Reviewed crash recovery');
+  expect(intent.body.interruptedOperationId).toBe(id(40)); expect(intent.body.interruptedPhase).toBe(phase); expect(Object.isFrozen(intent.body)).toBe(true);
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftRecoveryReceipt(intent.operationId, phase))); expect((await current.recover(intent)).result.action).toBe('recover');
+  expect(api.post).toHaveBeenLastCalledWith(base + '/pools/' + id(8) + '/users/' + id(11) + '/recover', intent.body, expect.objectContaining({ headers: { 'Idempotency-Key': intent.operationId } }));
+});
+test.each(['company', 'original_operation', 'phase', 'revision', 'ownership', 'acknowledgement'])('a recovery receipt with a changed %s cannot become success', async kind => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftRecoveryPreview()));
+  const intent = current.captureRecovery(await current.recoveryPreview(id(8), id(11)), 'Reviewed crash recovery'); const result = microsoftRecoveryReceipt(intent.operationId);
+  if (kind === 'company') result.tenantId = id(99); if (kind === 'original_operation') result.result.interruptedOperationId = id(99);
+  if (kind === 'phase') result.result.interruptedPhase = 'prepared'; if (kind === 'revision') result.result.targetRevision = '3'; if (kind === 'ownership') result.result.owned = true;
+  if (kind === 'acknowledgement') { result.result.kind = 'acknowledged'; result.result.status = 'confirmed'; }
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(result)); await expect(current.recover(intent)).rejects.toThrow();
+});
+test('lost recovery replies do not retry automatically and explicit continuation retains its exact original key', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftRecoveryPreview()));
+  const intent = current.captureRecovery(await current.recoveryPreview(id(8), id(11)), 'Reviewed crash recovery');
+  (api.post as jest.Mock).mockRejectedValueOnce(new Error('lost recovery reply')); await expect(current.recover(intent)).rejects.toThrow(); expect(api.post).toHaveBeenCalledTimes(2);
+  (api.post as jest.Mock).mockResolvedValueOnce(ok({ ...microsoftRecoveryReceipt(intent.operationId), historical: true })); expect((await current.recover(intent)).historical).toBe(true);
+  const calls = (api.post as jest.Mock).mock.calls; expect(calls[2][1]).toBe(calls[1][1]); expect(calls[2][2].headers).toEqual(calls[1][2].headers);
+});
+test('an empty interrupted-operation check cannot produce a recovery intent', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok({ ...microsoftRecoveryPreview(), attempt: null, target: null, fingerprint: null }));
+  const view = await current.recoveryPreview(id(8), id(11)); expect(() => current.captureRecovery(view, 'Reviewed crash recovery')).toThrow(); expect(api.post).toHaveBeenCalledTimes(1);
 });

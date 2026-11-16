@@ -29,7 +29,7 @@ END $$;
 CREATE OR REPLACE FUNCTION company_microsoft_delivery_receiving() RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM company_microsoft_receiving();
- IF (SELECT count(*) FROM company_microsoft_delivery_manifest)<>7 OR EXISTS(SELECT 1 FROM company_microsoft_delivery_manifest manifest
+ IF (SELECT count(*) FROM company_microsoft_delivery_manifest)<>8 OR EXISTS(SELECT 1 FROM company_microsoft_delivery_manifest manifest
   WHERE to_regprocedure(manifest.signature) IS NULL OR manifest.digest<>md5(pg_get_functiondef(to_regprocedure(manifest.signature)))) THEN
   RAISE EXCEPTION 'Company Microsoft delivery evidence unavailable' USING ERRCODE='42501';END IF;
 END $$;
@@ -183,6 +183,11 @@ BEGIN
   OR result->'retryAfter'<>'null'::jsonb AND (jsonb_typeof(result->'retryAfter')<>'number' OR (result->>'retryAfter')::numeric NOT BETWEEN 1 AND 3600 OR (result->>'retryAfter')::numeric<>trunc((result->>'retryAfter')::numeric))
   OR (kind IN('observed','not_sent') AND original.phase<>'prepared' OR kind IN('acknowledged','rejected','unknown') AND original.phase<>'dispatched') THEN
   RAISE EXCEPTION 'Exact original Microsoft delivery outcome required' USING ERRCODE='42501';END IF;
+ IF original.permit_hash<>encode(sha256(convert_to(nonce,'UTF8')),'hex') AND
+  (kind IS DISTINCT FROM (CASE WHEN original.phase='prepared' THEN 'not_sent' ELSE 'unknown' END)
+   OR error_name IS DISTINCT FROM (CASE WHEN original.phase='prepared' THEN 'process_recovered_before_send' ELSE 'process_recovered_after_dispatch' END)
+   OR result->'retryAfter' IS DISTINCT FROM 'null'::jsonb) THEN
+  RAISE EXCEPTION 'Recovery cannot confirm or repeat a Microsoft write' USING ERRCODE='42501';END IF;
  remote=original.before_state#>'{capture,remote}';owned_state=target.owned;pending=target.pending_operation_id;uncertain=target.uncertain_operation_id;
  IF kind='acknowledged' THEN status_name='verifying';pending=operation;owned_state=owned_state OR original.desired;error_name='provider_verification_pending';
  ELSIF kind='unknown' THEN status_name='unknown';uncertain=operation;pending=NULL;error_name=COALESCE(error_name,'provider_write_uncertain');
@@ -224,11 +229,55 @@ BEGIN
  RETURN result;
 END $$;
 
+CREATE OR REPLACE FUNCTION company_microsoft_recover(authority JSONB,operation UUID,nonce TEXT,resource UUID,request JSONB,capture JSONB) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $$
+DECLARE connection company_microsoft_connections;product company_microsoft_pools;person company_microsoft_users;target company_microsoft_targets;original company_microsoft_operations;
+ event_id UUID;result JSONB;finished TIMESTAMPTZ;
+BEGIN
+ PERFORM company_microsoft_delivery_receiving();
+ IF nonce IS NULL OR nonce !~ '^[a-f0-9]{64}$' OR NOT pg_try_advisory_xact_lock(hashtextextended('company-microsoft:'||resource::text,0)) THEN
+  RAISE EXCEPTION 'Exclusive interrupted Microsoft target required' USING ERRCODE='55000';END IF;
+ IF NOT license_company_exact(request,ARRAY['poolId','userId','fingerprint','interruptedOperationId','interruptedPhase','reason','confirm'])
+  OR request->'confirm' IS DISTINCT FROM 'true'::jsonb OR jsonb_typeof(request->'fingerprint') IS DISTINCT FROM 'string' OR request->>'fingerprint' !~ '^[a-f0-9]{64}$'
+  OR NOT company_microsoft_source_valid(authority,operation,request->>'reason') OR authority->'target' IS DISTINCT FROM capture->'recipient'
+  OR request->>'userId' IS DISTINCT FROM authority#>>'{target,id}' OR capture->>'actorUserId' IS DISTINCT FROM authority->>'actorUserId'
+  OR capture->>'tenantId' IS DISTINCT FROM authority#>>'{tenant,id}' OR capture->>'poolId' IS DISTINCT FROM request->>'poolId' OR capture->>'userId' IS DISTINCT FROM request->>'userId' THEN
+  RAISE EXCEPTION 'Exact current human Microsoft recovery review required' USING ERRCODE='42501';END IF;
+ SELECT * INTO connection FROM company_microsoft_connections WHERE id=(capture#>>'{connection,id}')::uuid AND tenant_id=(authority#>>'{tenant,id}')::uuid AND status='active' FOR SHARE;
+ SELECT * INTO product FROM company_microsoft_pools WHERE id=(capture#>>'{pool,id}')::uuid AND connection_id=connection.id AND tenant_id=connection.tenant_id AND status='active' FOR SHARE;
+ SELECT * INTO person FROM company_microsoft_users WHERE id=(capture#>>'{user,id}')::uuid AND connection_id=connection.id AND tenant_id=connection.tenant_id AND status='active' FOR SHARE;
+ IF connection.id IS NULL OR product.id IS NULL OR person.id IS NULL OR product.pool_id::text IS DISTINCT FROM request->>'poolId' OR person.user_id::text IS DISTINCT FROM request->>'userId'
+  OR connection.revision::text IS DISTINCT FROM capture#>>'{connection,revision}' OR connection.tenant_generation::text IS DISTINCT FROM capture#>>'{connection,tenantGeneration}'
+  OR connection.microsoft_tenant_id::text IS DISTINCT FROM capture#>>'{connection,microsoftTenantId}'
+  OR connection.read_client_id::text IS DISTINCT FROM capture#>>'{connection,readClientId}' OR connection.write_client_id::text IS DISTINCT FROM capture#>>'{connection,writeClientId}'
+  OR product.revision::text IS DISTINCT FROM capture#>>'{pool,revision}' OR person.revision::text IS DISTINCT FROM capture#>>'{user,revision}'
+  OR product.sku_id::text IS DISTINCT FROM capture#>>'{pool,skuId}' OR person.object_id::text IS DISTINCT FROM capture#>>'{user,objectId}'
+  OR NOT license_company_pool_valid(product.pool_id) THEN RAISE EXCEPTION 'Retained own Microsoft recovery bindings changed' USING ERRCODE='40001';END IF;
+ SELECT * INTO target FROM company_microsoft_targets WHERE id=resource AND tenant_id=connection.tenant_id AND connection_id=connection.id AND pool_binding_id=product.id AND user_binding_id=person.id FOR UPDATE;
+ SELECT * INTO original FROM company_microsoft_operations WHERE id=target.last_operation_id AND tenant_id=connection.tenant_id AND resource_id=resource AND connection_id=connection.id FOR UPDATE;
+ IF target.id IS NULL OR original.id IS NULL OR target.status<>'processing' OR original.action<>'sync' OR original.phase NOT IN('prepared','dispatched')
+  OR target.revision::text IS DISTINCT FROM capture#>>'{target,revision}' OR target.id::text IS DISTINCT FROM capture#>>'{target,id}'
+  OR original.id::text IS DISTINCT FROM request->>'interruptedOperationId' OR original.phase IS DISTINCT FROM request->>'interruptedPhase'
+  OR original.source#>>'{target,id}' IS DISTINCT FROM request->>'userId' OR original.request->>'poolId' IS DISTINCT FROM request->>'poolId'
+  OR original.before_state#>>'{capture,pool,id}' IS DISTINCT FROM product.id::text OR original.before_state#>>'{capture,user,id}' IS DISTINCT FROM person.id::text THEN
+  RAISE EXCEPTION 'Exact interrupted Microsoft attempt changed' USING ERRCODE='40001';END IF;
+ PERFORM set_config('opendirectory.company_microsoft_operation',operation::text,true);PERFORM set_config('opendirectory.company_microsoft_permit',nonce,true);PERFORM set_config('opendirectory.company_microsoft_purpose','change',true);
+ INSERT INTO company_microsoft_operations(id,tenant_id,connection_id,resource_id,action,source,request,permit_hash,phase,before_state)
+  VALUES(operation,connection.tenant_id,connection.id,resource,'recover',authority,request,encode(sha256(convert_to(nonce,'UTF8')),'hex'),'prepared',capture);
+ event_id=company_microsoft_audit(operation,'recover',jsonb_build_object('kind','human','userId',authority->>'actorUserId'),jsonb_build_object('source',authority,'interruptedOperationId',original.id,'interruptedPhase',original.phase));
+ PERFORM set_config('opendirectory.company_microsoft_recovery',operation::text,true);
+ result=company_microsoft_finish(original.id,nonce,jsonb_build_object('kind',CASE WHEN original.phase='prepared' THEN 'not_sent' ELSE 'unknown' END,
+  'errorCode',CASE WHEN original.phase='prepared' THEN 'process_recovered_before_send' ELSE 'process_recovered_after_dispatch' END,'retryAfter',NULL));
+ PERFORM set_config('opendirectory.company_microsoft_operation',operation::text,true);PERFORM set_config('opendirectory.company_microsoft_purpose','change',true);PERFORM set_config('opendirectory.company_microsoft_recovery','',true);
+ result=result||jsonb_build_object('operationId',operation,'action','recover','interruptedOperationId',original.id,'interruptedPhase',original.phase,'originalEventId',result->>'eventId','eventId',event_id);
+ finished=clock_timestamp();UPDATE company_microsoft_operations SET phase='finished',outcome=result,finished_at=finished,updated_at=finished WHERE id=operation;
+ RETURN result;
+END $$;
+
 INSERT INTO company_microsoft_delivery_manifest(signature,digest)
  SELECT signature,md5(pg_get_functiondef(to_regprocedure(signature))) FROM unnest(ARRAY[
  'company_microsoft_local(uuid,jsonb)','company_microsoft_delivery_receiving()','company_microsoft_observation_valid(jsonb)',
  'company_microsoft_admission(jsonb,jsonb,jsonb,jsonb)','company_microsoft_prepare(jsonb,uuid,text,uuid,jsonb,jsonb,jsonb)',
- 'company_microsoft_dispatch(uuid,text)','company_microsoft_finish(uuid,text,jsonb)']) signature
+ 'company_microsoft_dispatch(uuid,text)','company_microsoft_finish(uuid,text,jsonb)','company_microsoft_recover(jsonb,uuid,text,uuid,jsonb,jsonb)']) signature
  ON CONFLICT(signature) DO UPDATE SET digest=EXCLUDED.digest;
 DO $$ DECLARE signature TEXT;BEGIN
  FOR signature IN SELECT manifest.signature FROM company_microsoft_delivery_manifest manifest LOOP

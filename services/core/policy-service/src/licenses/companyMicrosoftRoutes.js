@@ -40,6 +40,8 @@ function companyMicrosoftRoutes(companies, options) {
   router.get('/history', route(async (req, res) => res.json(await bridge.history(req.query, req.user, req.headers.authorization))));
   router.post('/pools/:id/users/:userId/preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.preview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
   router.post('/pools/:id/users/:userId/sync', route(async (req, res) => res.json(await delivery.sync(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
+  router.post('/pools/:id/users/:userId/recovery-preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.recoveryPreview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
+  router.post('/pools/:id/users/:userId/recover', route(async (req, res) => res.json(await delivery.recover(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
   router.post('/connections', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization), 'connection', 'connection', 201)));
   router.post('/connections/:id/renew', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization,
     precondition(req.headers['if-match'], 'connection', identifier(req.params.id))), 'connection', 'connection')));
@@ -53,7 +55,7 @@ function companyMicrosoftRoutes(companies, options) {
   }
   router.use((_req, res) => res.status(404).json({ error: 'Microsoft operation unsupported' }));
   router.use((error, _req, res, _next) => {
-    const status = error.status || ({ '40001': 412, '23505': 409, '23514': 409, '23503': 409, P0002: 404, '42501': 503, '22P02': 400, '55P03': 409, '57014': 503 }[error.code]) || 503;
+    const status = error.status || ({ '40001': 412, '23505': 409, '23514': 409, '23503': 409, P0002: 404, '42501': 503, '22P02': 400, '55P03': 409, '55000': 409, '57014': 503 }[error.code]) || 503;
     res.status(status).json({ error: status >= 500 ? 'Company Microsoft source, configuration or provider unavailable' : error.message });
   });
   return router;

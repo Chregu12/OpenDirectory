@@ -16,25 +16,34 @@ const stateSchema = z.object({ ...envelope, state: z.enum(['not_configured', 'co
     && value.connection.microsoftTenantId === value.microsoftTenantId && value.connection.readClientId === value.readClientId && value.connection.writeClientId === value.writeClientId));
 const mappingsSchema = z.object({ ...envelope, poolId: uuid, pool: pool.nullable(), users: z.array(person).max(25), page: z.number().int().min(1).max(10000), hasMore: z.boolean() }).strict();
 const productsSchema = z.object({ ...envelope, microsoftTenantId: uuid, checkedAt: timestamp, products: z.array(companyProviderProductSchema).max(1000) }).strict();
-const event = z.object({ id: uuid, operationId: uuid, type: z.enum(['connect', 'renew', 'disconnect', 'bind_pool', 'retire_pool', 'bind_user', 'retire_user', 'sync_prepared', 'sync_dispatched', 'sync_finished']), actorKind: z.enum(['human', 'workload']), actorUserId: uuid.nullable(), reason: z.string().min(10).max(500), createdAt: timestamp, resource: z.union([connection, pool, person]).nullable() }).strict().refine(value => value.actorKind === 'human' ? value.actorUserId !== null : value.actorUserId === null);
+const event = z.object({ id: uuid, operationId: uuid, type: z.enum(['connect', 'renew', 'disconnect', 'bind_pool', 'retire_pool', 'bind_user', 'retire_user', 'sync_prepared', 'sync_dispatched', 'sync_finished', 'recover']), actorKind: z.enum(['human', 'workload']), actorUserId: uuid.nullable(), reason: z.string().min(10).max(500), createdAt: timestamp, resource: z.union([connection, pool, person]).nullable() }).strict().refine(value => value.actorKind === 'human' ? value.actorUserId !== null : value.actorUserId === null);
 const historySchema = z.object({ ...envelope, events: z.array(event).max(25), page: z.number().int().min(1).max(10000), hasMore: z.boolean() }).strict();
 const targetState = z.object({ id: uuid, revision: revision.nullable(), eligibilityRevision: revision, enabled: z.boolean(), deleted: z.boolean() }).strict().refine(value => value.deleted ? !value.enabled && value.revision === null : value.revision !== null);
 const originSchema = z.object({ sourceType: z.enum(['direct', 'blueprint']), sourceId: z.union([z.literal('direct'), uuid]), grantId: uuid,
   eligibilityRevision: revision, live: z.boolean(), deadline: timestamp.nullable(), bindingValid: z.literal(true),
   rule: z.object({ id: uuid, groupId: uuid, revision, status: z.enum(['active', 'unlinked']) }).strict().nullable() }).strict().refine(value => value.sourceType === 'direct' ? value.sourceId === 'direct' && value.rule === null : value.sourceId !== 'direct');
 const groupProof = z.object({ ruleId: uuid, groupId: uuid, revision, hash: z.string().regex(/^[a-f0-9]{64}$/), active: z.boolean(), membershipId: uuid.nullable(), eligibilityRevision: revision.nullable(), reviewDeadlineAt: timestamp.nullable() }).strict();
+const deliveryTarget = z.object({ id: uuid, revision, status: z.enum(['processing', 'verifying', 'confirmed', 'conflict', 'failed', 'unknown']), owned: z.boolean(), lastOperationId: uuid, pendingOperationId: uuid.nullable(), uncertainOperationId: uuid.nullable(), errorCode: z.string().max(120).nullable(), retryAt: timestamp.nullable(), checkedAt: timestamp.nullable() }).strict();
 const previewSchema = z.object({ ...envelope, poolId: uuid, userId: uuid, connection, pool, user: person,
-  target: z.object({ id: uuid, revision, status: z.enum(['processing', 'verifying', 'confirmed', 'conflict', 'failed', 'unknown']), owned: z.boolean(), lastOperationId: uuid, pendingOperationId: uuid.nullable(), uncertainOperationId: uuid.nullable(), errorCode: z.string().max(120).nullable(), retryAt: timestamp.nullable(), checkedAt: timestamp.nullable() }).strict().nullable(),
+  target: deliveryTarget.nullable(),
   local: z.object({ raw: z.object({ poolId: uuid, poolRevision: revision, target: targetState,
     assignment: z.object({ id: uuid, eligibilityRevision: revision }).strict().nullable(), origins: z.array(originSchema).max(10000) }).strict(), groups: z.array(groupProof).max(10000), desired: z.boolean() }).strict(),
   remote: z.object({ present: z.boolean(), direct: z.boolean(), active: z.boolean(), plansMatch: z.boolean(), inherited: z.boolean(), accountEnabled: z.boolean() }).strict(), stock: companyProviderProductSchema.nullable(),
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/), action: z.enum(['assign', 'remove', 'confirmed', 'conflict', 'review', 'recover', 'verify', 'external_retained']), checkedAt: timestamp }).strict();
 export type MicrosoftPreview = CompanyWire<z.infer<typeof previewSchema>>;
-const syncResultSchema = z.object({ operationId: uuid, poolId: uuid, userId: uuid, action: z.enum(['assign', 'remove', 'confirmed', 'conflict', 'review', 'verify', 'external_retained']), targetId: uuid, targetRevision: revision, status: z.enum(['verifying', 'confirmed', 'conflict', 'failed', 'unknown']), owned: z.boolean(), pendingOperationId: uuid.nullable(), uncertainOperationId: uuid.nullable(), errorCode: z.string().regex(/^[a-z0-9_]{1,120}$/).nullable(), eventId: uuid,
-  kind: z.enum(['observed', 'acknowledged', 'rejected', 'unknown', 'not_sent']), retryAfter: z.number().int().min(1).max(3600).nullable(), retryAt: timestamp.nullable() }).strict().refine(value => value.kind !== 'acknowledged' || value.status === 'verifying' && value.pendingOperationId === value.operationId);
+const syncResultFields = { operationId: uuid, poolId: uuid, userId: uuid, action: z.enum(['assign', 'remove', 'confirmed', 'conflict', 'review', 'verify', 'external_retained']), targetId: uuid, targetRevision: revision, status: z.enum(['verifying', 'confirmed', 'conflict', 'failed', 'unknown']), owned: z.boolean(), pendingOperationId: uuid.nullable(), uncertainOperationId: uuid.nullable(), errorCode: z.string().regex(/^[a-z0-9_]{1,120}$/).nullable(), eventId: uuid,
+  kind: z.enum(['observed', 'acknowledged', 'rejected', 'unknown', 'not_sent']), retryAfter: z.number().int().min(1).max(3600).nullable(), retryAt: timestamp.nullable() };
+const syncResultSchema = z.object(syncResultFields).strict().refine(value => value.kind !== 'acknowledged' || value.status === 'verifying' && value.pendingOperationId === value.operationId);
 const syncReceiptSchema = z.object({ ...envelope, historical: z.boolean(), result: syncResultSchema }).strict();
 export type MicrosoftSyncReceipt = CompanyWire<z.infer<typeof syncReceiptSchema>>;
 export interface MicrosoftSyncIntent { operationId: string; poolId: string; userId: string; targetId: string | null; targetRevision: string; action: Exclude<MicrosoftPreview['action'], 'recover'>; body: { fingerprint: string; action: Exclude<MicrosoftPreview['action'], 'recover'>; reason: string; confirm: true } }
+const recoveryPreviewSchema = z.object({ ...envelope, poolId: uuid, userId: uuid, recipient: targetState, connection, pool, user: person, target: deliveryTarget.nullable(),
+  attempt: z.object({ id: uuid, phase: z.enum(['prepared', 'dispatched']), desired: z.boolean(), actorUserId: uuid, reason: z.string().min(10).max(500), createdAt: timestamp }).strict().nullable(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/).nullable(), checkedAt: timestamp }).strict().refine(value => value.attempt ? value.target?.status === 'processing' && value.target.lastOperationId === value.attempt.id && !!value.fingerprint : value.target?.status !== 'processing' && value.fingerprint === null);
+const recoveryReceiptSchema = z.object({ ...envelope, historical: z.boolean(), result: z.object({ ...syncResultFields, action: z.literal('recover'), interruptedOperationId: uuid, interruptedPhase: z.enum(['prepared', 'dispatched']), originalEventId: uuid }).strict() }).strict();
+export type MicrosoftRecoveryPreview = CompanyWire<z.infer<typeof recoveryPreviewSchema>>;
+export type MicrosoftRecoveryReceipt = CompanyWire<z.infer<typeof recoveryReceiptSchema>>;
+export interface MicrosoftRecoveryIntent { operationId: string; poolId: string; userId: string; targetId: string; targetRevision: string; owned: boolean; pendingOperationId: string | null; uncertainOperationId: string | null; body: { fingerprint: string; interruptedOperationId: string; interruptedPhase: 'prepared' | 'dispatched'; reason: string; confirm: true } }
 export type MicrosoftState = CompanyWire<z.infer<typeof stateSchema>>;
 export type MicrosoftMappings = CompanyWire<z.infer<typeof mappingsSchema>>;
 export type MicrosoftProducts = CompanyWire<z.infer<typeof productsSchema>>;
@@ -53,7 +62,7 @@ export class CompanyMicrosoftClient {
   invalidate() { this.session.invalidate(); this.people.invalidate(); }
   dispose() { this.session.dispose(); this.people.dispose(); }
   async state() { return this.session.own(await this.session.access()); }
-  canRetry(intent: MicrosoftIntent | MicrosoftSyncIntent) { return this.session.captured(intent); }
+  canRetry(intent: MicrosoftIntent | MicrosoftSyncIntent | MicrosoftRecoveryIntent) { return this.session.captured(intent); }
   private read<Schema extends z.ZodTypeAny>(path: string, schema: Schema, params?: Record<string, string | number>, validate?: (value: CompanyWire<z.infer<Schema>>) => void): Promise<CompanyWire<z.infer<Schema>>> {
     return this.session.run(async (signal, check) => {
       this.session.require(); const response = await api.get(base + path, { params, signal }); check(); if (response.status !== 200) companyUnconfirmed();
@@ -118,6 +127,38 @@ export class CompanyMicrosoftClient {
         || intent.targetId && value.result.targetId !== intent.targetId || value.result.targetRevision !== intent.targetRevision
         || value.result.kind === 'acknowledged' && !['assign', 'remove'].includes(intent.action)
         || value.result.kind === 'unknown' && (value.result.status !== 'unknown' || value.result.uncertainOperationId !== intent.operationId)) companyUnconfirmed();
+      return value;
+    });
+  }
+  recoveryPreview(poolId: string, userId: string): Promise<MicrosoftRecoveryPreview> {
+    uuid.parse(poolId); uuid.parse(userId);
+    return this.session.run(async (signal, check) => {
+      this.session.require(); const response = await api.post(base + '/pools/' + poolId + '/users/' + userId + '/recovery-preview', {}, { signal }); check();
+      if (response.status !== 200) companyUnconfirmed(); const value = recoveryPreviewSchema.parse(response.data) as MicrosoftRecoveryPreview; this.session.bind(value); await this.session.fresh(signal, check);
+      const state = this.session.require();
+      if (value.poolId !== poolId || value.pool.poolId !== poolId || value.userId !== userId || value.user.userId !== userId || value.recipient.id !== userId
+        || value.connection.id !== state.connection?.id || value.connection.revision !== state.connection.revision
+        || [value.connection, value.pool, value.user].some(row => row.tenantId !== value.tenantId || row.status !== 'active')
+        || value.pool.connectionId !== value.connection.id || value.user.connectionId !== value.connection.id) companyUnconfirmed(true);
+      return this.session.own(value);
+    });
+  }
+  captureRecovery(value: MicrosoftRecoveryPreview, reason: string): MicrosoftRecoveryIntent {
+    if (!this.session.captured(value) || !value.target || !value.attempt || !value.fingerprint) return companyUnconfirmed();
+    return this.session.own({ operationId: uuid.parse(crypto.randomUUID()), poolId: value.poolId, userId: value.userId, targetId: value.target.id, targetRevision: String(BigInt(value.target.revision) + BigInt(1)), owned: value.target.owned,
+      pendingOperationId: value.target.pendingOperationId, uncertainOperationId: value.target.uncertainOperationId,
+      body: { fingerprint: value.fingerprint, interruptedOperationId: value.attempt.id, interruptedPhase: value.attempt.phase, reason: companyReason(reason), confirm: true as const } });
+  }
+  recover(intent: MicrosoftRecoveryIntent): Promise<MicrosoftRecoveryReceipt> {
+    return this.session.write(intent, async (signal, check) => {
+      const response = await api.post(base + '/pools/' + intent.poolId + '/users/' + intent.userId + '/recover', intent.body, { headers: { 'Idempotency-Key': intent.operationId }, timeout: 15000, signal }); check();
+      if (response.status !== 200) companyUnconfirmed(); const value = recoveryReceiptSchema.parse(response.data) as MicrosoftRecoveryReceipt; this.session.bind(value);
+      const result = value.result, prepared = intent.body.interruptedPhase === 'prepared';
+      if (result.operationId !== intent.operationId || result.poolId !== intent.poolId || result.userId !== intent.userId || result.targetId !== intent.targetId || result.targetRevision !== intent.targetRevision
+        || result.interruptedOperationId !== intent.body.interruptedOperationId || result.interruptedPhase !== intent.body.interruptedPhase || result.owned !== intent.owned || result.pendingOperationId !== intent.pendingOperationId
+        || result.uncertainOperationId !== (prepared ? intent.uncertainOperationId : intent.body.interruptedOperationId)
+        || result.kind !== (prepared ? 'not_sent' : 'unknown') || result.status !== (prepared ? 'failed' : 'unknown')
+        || result.errorCode !== (prepared ? 'process_recovered_before_send' : 'process_recovered_after_dispatch') || result.retryAfter !== null || result.retryAt !== null) companyUnconfirmed();
       return value;
     });
   }
