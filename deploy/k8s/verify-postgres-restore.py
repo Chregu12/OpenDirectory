@@ -53,7 +53,7 @@ def verify(args):
         owner = parameters["owner"]
         report["source"]["version"] = parameters["version"]
         run(docker + ["run", "-d", "--name", container, "--label", "opendirectory.task=restore-rehearsal", "--network", "none", "--tmpfs", "/var/lib/postgresql/data",
-                      "-e", "POSTGRES_USER=" + owner, "-e", "POSTGRES_PASSWORD=" + secrets.token_urlsafe(24), "-e", "POSTGRES_INITDB_ARGS=-c max_locks_per_transaction=256", args.restore_image])
+                      "-e", "POSTGRES_USER=" + owner, "-e", "POSTGRES_PASSWORD=" + secrets.token_urlsafe(24), args.restore_image, "-c", "max_locks_per_transaction=256"])
         for _ in range(120):
             ready = subprocess.run(docker + ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", owner, "-d", "postgres"], capture_output=True)
             if ready.returncode == 0:

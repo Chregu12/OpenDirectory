@@ -520,11 +520,11 @@ test('reapplying the metadata migration preserves receipts and denies a legacy w
   await pool.query(fs.readFileSync(path.join(__dirname, '../../db/migrations/032_company_microsoft_delivery.sql'), 'utf8'));
   assert.equal((await bridge.state(user, 'Bearer explicit-company-fixture')).connection.id, connected.connection.id);
   assert.equal((await pool.query('SELECT count(*)::int AS count FROM company_microsoft_events')).rows[0].count, 1);
-  const role = 'microsoft_legacy_' + randomUUID().replaceAll('-', ''); let limited;
-  await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT`);
+  const role = 'microsoft_legacy_' + randomUUID().replaceAll('-', ''), password = 'owned-' + randomUUID(); let limited;
+  await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT PASSWORD '${password}'`);
   try {
     const grants = fs.readFileSync(path.join(__dirname, '../../../scripts/license-fulfillment-grants.sql'), 'utf8').replaceAll(':"license_schema"', `"${schema}"`).replaceAll(':"worker_role"', `"${role}"`); await pool.query(grants);
-    const url = new URL(process.env.LICENSE_TEST_DATABASE_URL); url.username = role; url.password = '';
+    const url = new URL(process.env.LICENSE_TEST_DATABASE_URL); url.username = role; url.password = password;
     limited = new Pool({ connectionString: url.toString(), max: 1, options: '-c search_path=' + schema + ',public' });
     const signatures = (await pool.query('SELECT signature FROM company_microsoft_receiver_manifest UNION ALL SELECT signature FROM company_microsoft_delivery_manifest')).rows;
     for (const row of signatures) assert.equal((await limited.query("SELECT has_function_privilege(current_user,to_regprocedure($1),'EXECUTE') AS allowed", [row.signature])).rows[0].allowed, false, row.signature);

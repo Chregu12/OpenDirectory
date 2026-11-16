@@ -1071,18 +1071,21 @@ test('a group reconciliation racing with offboarding cannot leave a source on a 
 
 test('expiring a direct source preserves an indefinite group entitlement', async () => {
   const userId = await person(); const groupId = await group([userId]); const license = await product();
-  await direct(license, userId, new Date(Date.now() + 250).toISOString()); await grant(license, groupId);
-  await new Promise(resolve => setTimeout(resolve, 300)); await allocator.expireAll();
+  await direct(license, userId, new Date(Date.now() + 30000).toISOString()); await grant(license, groupId);
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM license_assignment_sources')).rows[0].count, 2);
+  await pool.query("CREATE OR REPLACE FUNCTION license_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+interval '31 seconds'; $$"); await allocator.expireAll();
   assert.deepEqual(await assigned(license), [userId]);
   assert.deepEqual((await pool.query('SELECT source_type FROM license_assignment_sources')).rows.map(row => row.source_type), ['group']);
 });
 
 test('expiring a group rule preserves a direct grant and disables future group grants', async () => {
   const userId = await person(); const groupId = await group([userId]); const license = await product(); await direct(license, userId);
-  await grant(license, groupId, 'manager', new Date(Date.now() + 250).toISOString());
-  await new Promise(resolve => setTimeout(resolve, 300)); await allocator.expireAll();
+  await grant(license, groupId, 'manager', new Date(Date.now() + 30000).toISOString());
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM license_assignment_sources')).rows[0].count, 2);
+  await pool.query("CREATE OR REPLACE FUNCTION license_now() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+interval '31 seconds'; $$"); await allocator.expireAll(); await reconcile(license, groupId);
   assert.deepEqual(await assigned(license), [userId]);
   assert.equal((await pool.query('SELECT status FROM license_group_rules')).rows[0].status, 'expired');
+  assert.deepEqual((await pool.query('SELECT source_type FROM license_assignment_sources')).rows.map(row => row.source_type), ['direct']);
 });
 
 test('manual revocation fences a worker snapshot fetched before the revocation', async () => {

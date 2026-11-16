@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T04:09:11.718387+00:00",
+  "status": "native-scram-and-production-copy-rehearsal-passed-current-full-ci-pending",
+  "baseCommit": "11689a75ea4788cad6e096d908c8cbd89dac3ecf",
+  "changedFileSha256": {
+    "deploy/k8s/verify-postgres-restore.py": "8d807d944326aebfe625ebc320ebdead7e6543badf92137d825b1c561eecf6e4",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoft.integration.cjs": "fbc5c242c2e4a0e8b89fa50918a2119f43a8e3a1b522dc397f235d43f24a7a9a",
+    "services/core/policy-service/src/licenses/__tests__/groups.integration.cjs": "4247bd4489f8b1c87b3eae43f2fd588eca0c402b535286b6adeb9aa71dc82521"
+  },
+  "productionChanged": false,
+  "observedCi": {
+    "run": 43800523727,
+    "headSha": "11689a75ea4788cad6e096d908c8cbd89dac3ecf",
+    "licenseJob": 133079423515,
+    "conclusion": "failure",
+    "actualTests": 599,
+    "failed": 2,
+    "causes": [
+      "The newly created restricted-role fixture connected without a password to SCRAM PostgreSQL, failing before its function privilege assertions.",
+      "The positive group-expiration setup used a 250ms lease which expired before its physical commit under CI load."
+    ]
+  },
+  "corrections": [
+    "Give the generated restricted LOGIN role a generated fixture password and use that password on its independent connection. All Microsoft receiver/delivery function privilege denials remain asserted.",
+    "Establish both source rows under a 30-second setup lease, then advance the existing per-schema license_now test clock by31seconds. Verify the other source remains and expired group rules cannot recreate the group entitlement. Production clocks, expiry guards and negative commit-expiry tests are unchanged.",
+    "Pass max_locks_per_transaction as a PostgreSQL server argument in the restore tool. PostgreSQL15 initdb does not accept the previous -c option. The actual PostgreSQL15 restored-production migration rehearsal validates the corrected invocation."
+  ],
+  "checks": {
+    "targetedActualScram": {
+      "node": "20.20.2",
+      "postgresMajor": 16,
+      "hostAuthentication": "scram-sha-256",
+      "passed": 3,
+      "failed": 0,
+      "skippedUnselected": 126,
+      "durationMilliseconds": 5024.286292
+    },
+    "fullActualScram": {
+      "node": "20.20.2",
+      "postgresMajor": 16,
+      "hostAuthentication": "scram-sha-256",
+      "passed": 599,
+      "failed": 0,
+      "skipped": 0,
+      "durationMilliseconds": 268912.333167
+    },
+    "javascriptSyntax": "passed",
+    "pythonSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "restoredProductionMigrationRehearsal": {
+    "schemaVersion": 1,
+    "checkedAt": "2026-11-16T04:08:12.169492+00:00",
+    "sourceCommit": "11689a75ea4788cad6e096d908c8cbd89dac3ecf",
+    "productionChanged": false,
+    "sourceDatabase": "policy",
+    "restoredSnapshot": {
+      "archiveBytes": 882249,
+      "archiveSha256": "26b60a0dd71e3bdf732adf9b930494f8108f2466f6e90e3801854b0679f470d4",
+      "tables": 87,
+      "sameRowCountsAndSha256ByTable": true,
+      "transactionSnapshotSharedWithDump": true,
+      "ownershipAndPrivilegesRestoredFromArchive": true,
+      "receiversPassed": [
+        "license_company_receiving",
+        "license_company_edit_receiving",
+        "company_offboarding_receiving",
+        "company_license_group_receiving",
+        "company_blueprint_receiving",
+        "company_blueprint_assignment_receiving",
+        "company_blueprint_assignment_automation_receiving",
+        "company_blueprint_assignment_retirement_receiving"
+      ]
+    },
+    "postgresMajor": 15,
+    "migrations": {
+      "actualProductionRunnerUsed": true,
+      "allMigrationFiles": 31,
+      "runnerAppliedTwice": true,
+      "existingTablesUnchanged": 87,
+      "existingRowsAndSha256Unchanged": true,
+      "receiversPassed": [
+        "license_company_receiving",
+        "license_company_edit_receiving",
+        "company_offboarding_receiving",
+        "company_license_group_receiving",
+        "company_blueprint_receiving",
+        "company_blueprint_assignment_receiving",
+        "company_blueprint_assignment_automation_receiving",
+        "company_blueprint_assignment_retirement_receiving",
+        "company_microsoft_receiving",
+        "company_microsoft_delivery_receiving"
+      ],
+      "functionManifestCounts": {
+        "metadata": 9,
+        "delivery": 10
+      },
+      "newCompanyTablesEmpty": true
+    },
+    "cleanup": {
+      "taskContainersRemoved": true,
+      "internalNetworkRemoved": true
+    },
+    "status": "passed"
+  },
+  "cleanup": {
+    "nativeScramClustersStoppedAndRemoved": true,
+    "ownedDependencyLinksRemoved": 28,
+    "rehearsalDockerContainersAndNetworkRemoved": true,
+    "privateProductionArchivesPreserved": true
+  },
+  "limits": [
+    "The current full Linux CI must complete on the correction commit; prior-head CI service successes are not a substitute.",
+    "This is a read-only production snapshot and isolated migration rehearsal, not production migration/deployment.",
+    "Real Microsoft tenant acceptance, personal production MFA sign-in and physical device acceptance remain open."
+  ]
+}
