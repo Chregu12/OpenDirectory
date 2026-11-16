@@ -1,12 +1,12 @@
 'use strict';
 
-const { createHash } = require('node:crypto');
+const { createHash, randomBytes } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { v5 } = require('uuid');
 const { identifier, exact } = require('../../../../../packages/company-license-contract');
 const { CompanyLicenseGroups } = require('./CompanyLicenseGroups');
 const { ProviderError } = require('./fulfillment/transport');
-const { envelope, bindingView } = require('./CompanyMicrosoftBridge');
+const { envelope, bindingView, confirmation } = require('./CompanyMicrosoftBridge');
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -14,8 +14,8 @@ function eligible(raw) { return raw.target.enabled && !raw.target.deleted && raw
 function liveOrigin(origin, raw) { return eligible(raw) && origin.live && origin.bindingValid && origin.eligibilityRevision === raw.target.eligibilityRevision; }
 function targetView(row) {
   return row ? { id: identifier(row.id), revision: String(row.revision), status: row.status, owned: row.owned,
-    lastOperationId: row.last_operation_id, uncertainOperationId: row.uncertain_operation_id, errorCode: row.error_code,
-    checkedAt: row.checked_at ? new Date(row.checked_at).toISOString() : null } : null;
+    lastOperationId: row.last_operation_id, pendingOperationId: row.pending_operation_id, uncertainOperationId: row.uncertain_operation_id, errorCode: row.error_code,
+    retryAt: row.retry_at ? new Date(row.retry_at).toISOString() : null, checkedAt: row.checked_at ? new Date(row.checked_at).toISOString() : null } : null;
 }
 function observation(value) {
   const fields = ['present', 'direct', 'active', 'plansMatch', 'inherited', 'accountEnabled']; exact(value, fields);
@@ -25,7 +25,7 @@ function observation(value) {
 function plan(projected, observed, target) {
   if (target?.status === 'processing') return 'recover';
   if (target?.uncertain_operation_id || target?.status === 'unknown') return 'review';
-  if (target?.status === 'verifying') return 'verify';
+  if (target?.pending_operation_id || target?.status === 'verifying') return 'verify';
   if (projected.desired) {
     if (!observed.accountEnabled) return 'conflict';
     if (!observed.present) return 'assign';
@@ -44,7 +44,9 @@ class CompanyMicrosoftDelivery {
     const person = (await client.query("SELECT * FROM company_microsoft_users WHERE user_id=$1 AND tenant_id=$2 AND connection_id=$3 AND status='active'", [source.target.id, source.tenant.id, connection.id])).rows[0];
     if (!product || !person) fail(409, 'Current own Microsoft pool and user mappings required');
     const id = v5(person.id, product.id);
-    const target = (await client.query('SELECT * FROM company_microsoft_targets WHERE id=$1 AND tenant_id=$2', [id, source.tenant.id])).rows[0] || null;
+    const target = (await client.query(`SELECT target.*,attempt.outcome->>'retryAt' AS retry_at FROM company_microsoft_targets target
+      LEFT JOIN company_microsoft_operations attempt ON attempt.id=target.last_operation_id AND attempt.tenant_id=target.tenant_id
+      WHERE target.id=$1 AND target.tenant_id=$2`, [id, source.tenant.id])).rows[0] || null;
     if (target && (target.pool_binding_id !== product.id || target.user_binding_id !== person.id || target.connection_id !== connection.id)) fail(503, 'Exact Microsoft delivery target binding required');
     return { id, connection, product, person, target };
   }
@@ -75,8 +77,10 @@ class CompanyMicrosoftDelivery {
   }
   stableProjection(value) { return { ...value, groups: value.groups.map(({ validUntil, ...proof }) => proof) }; }
   async inspect(graph, bindings) {
+    if (graph.tenantId !== bindings.connection.microsoft_tenant_id) fail(503, 'Bound Microsoft Graph tenant required');
+    graph.assignmentError = null;
     try { return observation(await graph.inspect(bindings.person.object_id, bindings.product.sku_id, bindings.product.disabled_plans)); }
-    catch (error) { if (error instanceof ProviderError && error.code === 'graph_assignment_error' && error.observation) return observation(error.observation); throw error; }
+    catch (error) { if (error instanceof ProviderError && error.code === 'graph_assignment_error' && error.observation) { graph.assignmentError = error.code; return observation(error.observation); } throw error; }
   }
   capture(source, bindings, projection, remote, stock = null) {
     return { ...envelope(source), poolId: bindings.product.pool_id, userId: bindings.person.user_id,
@@ -101,6 +105,110 @@ class CompanyMicrosoftDelivery {
       if (Buffer.byteLength(JSON.stringify(value)) > 2097152) fail(409, 'Microsoft preview exceeds response limit');
       return { ...value, fingerprint: digest(value), action, checkedAt: new Date().toISOString() };
     }, userId);
+  }
+  async transaction(client, operation) {
+    try {
+      await client.query('BEGIN'); await client.query("SET LOCAL lock_timeout='3s'; SET LOCAL statement_timeout='5s'");
+      const result = await operation(); await client.query('COMMIT'); return result;
+    } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+  }
+  async recorded(source, operation, request, client = this.database) {
+    const row = (await client.query('SELECT * FROM company_microsoft_operations WHERE id=$1 AND tenant_id=$2', [operation, source.tenant.id])).rows[0];
+    if (!row) return null;
+    await client.query('SELECT company_microsoft_delivery_receiving()');
+    if (row.action !== 'sync' || row.source.actorUserId !== source.actorUserId || !isDeepStrictEqual(row.request, request)) fail(409, 'Microsoft operation key belongs to another original request');
+    if (row.phase !== 'finished') fail(409, 'Original Microsoft operation requires recovery; no repeat dispatch');
+    return row.outcome;
+  }
+  async sync(poolId, userId, input, operation, user, authorization) {
+    identifier(poolId); identifier(userId); identifier(operation); const reason = confirmation(input, ['fingerprint', 'action']);
+    if (typeof input.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.fingerprint)) fail(400, 'Exact reviewed Microsoft preview required');
+    if (!['assign', 'remove', 'confirmed', 'conflict', 'review', 'verify', 'external_retained'].includes(input.action)) fail(400, 'Explicit reviewed Microsoft action required');
+    const source = await this.companies.authority.read(authorization, user, userId);
+    const request = { poolId, userId, fingerprint: input.fingerprint, action: input.action, reason, confirm: true };
+    const prior = await this.recorded(source, operation, request);
+    if (prior) { await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: true, result: prior }; }
+    const config = this.bridge.requireConfiguration(source); const client = await this.database.getClient(); let locked = false, lockKey = null, prepared = false, dispatched = false, finished = false;
+    const nonce = randomBytes(32).toString('hex'); let bindings, graph;
+    const settle = async (kind, errorCode = null, retryAfter = null) => {
+      const result = await this.transaction(client, async () => (await client.query('SELECT company_microsoft_finish($1::uuid,$2::text,$3::jsonb) AS result', [operation, nonce, { kind, errorCode, retryAfter }])).rows[0].result);
+      finished = true; return result;
+    };
+    try {
+      bindings = await this.bindings(client, poolId, source, config);
+      lockKey = 'company-microsoft:' + bindings.id;
+      locked = (await client.query('SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked', [lockKey])).rows[0].locked;
+      if (!locked) fail(409, 'Microsoft target is already being inspected');
+      const existing = await this.recorded(source, operation, request, client);
+      if (existing) { await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: true, result: existing }; }
+      bindings = await this.bindings(client, poolId, source, config);
+      if ('company-microsoft:' + bindings.id !== lockKey) fail(412, 'Microsoft mapping pair changed before the target lock');
+      if (bindings.target?.status === 'processing') fail(409, 'Interrupted Microsoft operation requires explicit recovery');
+      if (bindings.target?.retry_at && Date.parse(bindings.target.retry_at) > Date.now()) fail(429, 'Microsoft retry window is still active');
+      const projection = await this.projection(client, poolId, source, authorization); graph = this.bridge.createGraph(config.write);
+      const remote = await this.inspect(graph, bindings); let action = plan(projection, remote, bindings.target), stock = null;
+      if (action === 'assign') {
+        stock = (await this.bridge.createReader(config.read).inspect()).find(row => row.skuId === bindings.product.sku_id) || null;
+        if (!stock || stock.appliesTo !== 'User' || stock.capabilityStatus !== 'Enabled' || stock.prepaidUnits.enabled <= stock.consumedUnits) action = 'conflict';
+      }
+      const capture = this.capture(source, bindings, projection, remote, stock);
+      if (digest(capture) !== input.fingerprint || action !== input.action) fail(412, 'Microsoft preview, reviewed action, local entitlement or provider observation changed');
+      const mutation = action === 'assign' || action === 'remove'; let token;
+      if (mutation) token = await graph.tokens.get();
+      await this.transaction(client, async () => {
+        await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config);
+        await client.query('SELECT company_microsoft_prepare($1::jsonb,$2::uuid,$3::text,$4::uuid,$5::jsonb,$6::jsonb,$7::jsonb)', [source, operation, nonce, bindings.id, request, projection, capture]);
+        await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config);
+      });
+      prepared = true;
+      if (!mutation) {
+        const result = await settle('observed', graph.assignmentError); await this.companies.unchanged(source, user, authorization); return { ...envelope(source), historical: false, result };
+      }
+      const current = await this.projection(client, poolId, source, authorization);
+      const maps = await this.bindings(client, poolId, source, config);
+      if (!isDeepStrictEqual(this.stableProjection(current), this.stableProjection(projection))
+        || !isDeepStrictEqual(bindingView('connection', maps.connection), bindingView('connection', bindings.connection))
+        || !isDeepStrictEqual(bindingView('pool', maps.product), bindingView('pool', bindings.product))
+        || !isDeepStrictEqual(bindingView('user', maps.person), bindingView('user', bindings.person))
+        || !isDeepStrictEqual(await this.inspect(graph, maps), remote)) fail(412, 'Original Microsoft dispatch proof changed');
+      if (action === 'assign') {
+        const latest = (await this.bridge.createReader(config.read).inspect()).find(row => row.skuId === bindings.product.sku_id) || null;
+        if (!isDeepStrictEqual(latest, stock)) fail(412, 'Microsoft stock changed before dispatch');
+      }
+      token = await graph.tokens.get();
+      await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config);
+      const deadline = await this.transaction(client, async () => {
+        const value = (await client.query('SELECT company_microsoft_dispatch($1::uuid,$2::text) AS deadline', [operation, nonce])).rows[0].deadline;
+        await this.companies.unchanged(source, user, authorization); this.bridge.unchangedConfiguration(source, config); return value;
+      });
+      dispatched = true;
+      if (!Number.isFinite(new Date(deadline).getTime()) || Date.now() >= new Date(deadline).getTime()) fail(503, 'Microsoft dispatch window elapsed');
+      let kind = 'acknowledged', errorCode = null, retryAfter = null;
+      try { await graph.mutate(bindings.person.object_id, bindings.product.sku_id, bindings.product.disabled_plans, projection.desired, token, operation); }
+      catch (error) {
+        const certainRejection = error instanceof ProviderError && error.uncertain === false && /^graph_write_(?:invalid_request|http_(?:400|401|403|404|405|410|412|415|422|429))$/.test(error.code);
+        kind = certainRejection ? 'rejected' : 'unknown';
+        errorCode = error instanceof ProviderError && /^[a-z0-9_]{1,120}$/.test(error.code) ? error.code : 'provider_write_uncertain';
+        retryAfter = Number.isInteger(error.retryAfter) && error.retryAfter >= 1 && error.retryAfter <= 3600 ? error.retryAfter : null;
+      }
+      const result = await settle(kind, errorCode, retryAfter); await this.companies.unchanged(source, user, authorization);
+      return { ...envelope(source), historical: false, result };
+    } catch (error) {
+      if (prepared && !finished) {
+        try { await settle(dispatched ? 'unknown' : 'not_sent', dispatched ? 'dispatch_result_unconfirmed' : 'dispatch_precheck_failed'); }
+        catch { /* Retain processing/dispatch evidence for explicit recovery. */ }
+      }
+      if (!error.status && source.validUntil * 1000 <= Date.now()) error.status = 428;
+      throw error;
+    } finally {
+      graph?.tokens?.clear?.();
+      let destroyed = false;
+      if (locked) {
+        try { await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [lockKey]); }
+        catch { client.release(true); destroyed = true; }
+      }
+      if (!destroyed) client.release();
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within, waitFor } from '@testing-librar
 import CompanyMicrosoftPanel from '@/components/views/CompanyMicrosoftPanel';
 import { CompanyPool } from '@/lib/companyApplications';
 import { api } from '@/lib/api';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftHistory, microsoftPreview, microsoftSyncReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const pool: CompanyPool = { id: id(8), tenantId: id(2), revision: '1', name: 'Büro-Lizenz', vendor: 'Microsoft', description: '', totalSeats: 2, usedSeats: 1, availableSeats: 1, licenseType: 'per_user', allocationMode: 'local-only', createdAt: '2026-11-16T00:00:00.000Z', updatedAt: '2026-11-16T00:00:00.000Z' };
 beforeEach(() => {
@@ -45,8 +45,8 @@ test('provider failure does not revoke independent local company access or expos
   (api.get as jest.Mock).mockRejectedValueOnce({ response: { status: 503 }, message: 'private-provider-secret' }); fireEvent.click(screen.getByRole('button', { name: 'Microsoft-Produkte laden' }));
   await screen.findByRole('alert'); expect(denied).not.toHaveBeenCalled(); expect(screen.queryByText('private-provider-secret')).not.toBeInTheDocument(); expect(api.post).not.toHaveBeenCalled();
 });
-test.each(['not_configured', 'review_required'])('existing mappings can be retired when configuration is %s without querying Microsoft', async status => {
-  const current = { ...microsoftState(), state: status, ...(status === 'not_configured' ? { microsoftTenantId: null, readClientId: undefined, writeClientId: undefined } : { microsoftTenantId: id(99) }) };
+test.each(['not_configured', 'configuration_unavailable', 'review_required'])('existing mappings can be retired when configuration is %s without querying Microsoft', async status => {
+  const current = { ...microsoftState(), state: status, ...(['not_configured', 'configuration_unavailable'].includes(status) ? { microsoftTenantId: null, readClientId: undefined, writeClientId: undefined } : { microsoftTenantId: id(99) }) };
   (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(current) : url.endsWith('/mappings') ? ok({ ...microsoftMappings(), pool: microsoftPool() }) : ok(microsoftHistory()));
   render(<CompanyMicrosoftPanel context={microsoftContext} pool={pool} onAccessError={jest.fn()} />); await load();
   fireEvent.change(screen.getByLabelText('Begründung der Microsoft-Verknüpfung'), { target: { value: 'Alte Produktverknüpfung zurückgeben' } });
@@ -70,4 +70,14 @@ test('a real local entitlement is presented as a proposed cloud action without d
   expect(within(preview).getByRole('heading', { name: 'Microsoft-Lizenz zuweisen' })).toBeInTheDocument(); expect(within(preview).getByText(/Lokaler Anspruch: vorhanden/)).toBeInTheDocument();
   expect(within(preview).getByText(/Noch keine Cloud-Änderung ausgelöst/)).toBeInTheDocument(); expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(); expect(api.post).toHaveBeenCalledTimes(1);
   expect((api.post as jest.Mock).mock.calls[0][0]).toMatch(/\/preview$/);
+});
+test('cloud sync requires its own reason and explicit confirmation and reports acknowledgement as pending', async () => {
+  (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(microsoftState()) : url.endsWith('/mappings') ? ok({ ...microsoftMappings(), pool: microsoftPool() }) : ok(microsoftHistory()));
+  (api.post as jest.Mock).mockImplementation(async (url: string, _body: unknown, config: any) => url.endsWith('/preview') ? ok(microsoftPreview()) : ok(microsoftSyncReceipt(config.headers['Idempotency-Key'])));
+  render(<CompanyMicrosoftPanel context={microsoftContext} pool={pool} onAccessError={jest.fn()} />); await load(); fireEvent.click(screen.getByRole('button', { name: 'Microsoft-Lizenzabgleich prüfen' })); await screen.findByRole('region', { name: 'Microsoft-Lizenzabgleich-Vorschau' });
+  fireEvent.change(screen.getByLabelText('Begründung des Microsoft-Lizenzabgleichs'), { target: { value: 'Lizenzabgleich ausdrücklich geprüft' } }); fireEvent.click(screen.getByRole('button', { name: 'Microsoft-Lizenzabgleich vorbereiten' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Microsoft-Lizenzabgleich bestätigen' }); expect(within(dialog).getByRole('button', { name: 'Bestätigen' })).toBeDisabled(); expect(api.post).toHaveBeenCalledTimes(1);
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ich bestätige diesen Microsoft-Lizenzabgleich.' })); fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' }));
+  const result = await screen.findByRole('region', { name: 'Microsoft-Lizenzabgleich-Ergebnis' }); expect(within(result).getByRole('heading', { name: 'Anbieterbestätigung ausstehend' })).toBeInTheDocument(); expect(within(result).getByText(/tatsächliche Wirkung muss/)).toBeInTheDocument(); expect(api.post).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button', { name: 'Microsoft-Lizenzabgleich prüfen' })).toBeDisabled();
 });

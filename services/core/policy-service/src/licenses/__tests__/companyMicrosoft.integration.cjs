@@ -14,14 +14,17 @@ const { COMPANY_LICENSE_PERMISSIONS } = require('../../../../../../packages/comp
 const express = require('express'); const request = require('supertest');
 
 const admin = new Pool({ connectionString: process.env.LICENSE_TEST_DATABASE_URL, max: 1 });
-let pool, schema, database, source, user, target, companies, bridge, sku, remoteId, calls, delayCommit, targetState, observed;
+let pool, schema, database, source, user, target, companies, bridge, sku, remoteId, calls, delayCommit, targetState, observed, writes, writeHandler, permits;
 beforeEach(async () => {
   schema = 'company_microsoft_' + randomUUID().replaceAll('-', ''); await admin.query('CREATE SCHEMA ' + schema);
   pool = new Pool({ connectionString: process.env.LICENSE_TEST_DATABASE_URL, options: '-c search_path=' + schema + ',public', max: 5 });
   for (const name of fs.readdirSync(path.join(__dirname, '../../db/migrations')).filter(value => value.endsWith('.sql')).sort()) await pool.query(fs.readFileSync(path.join(__dirname, '../../db/migrations', name), 'utf8'));
   delayCommit = null;
   database = { query: (...args) => pool.query(...args), getClient: async () => {
-    const client = await pool.connect(); return { query: async (...args) => { if (args[0] === 'COMMIT' && delayCommit) await delayCommit(); return client.query(...args); }, release: () => client.release() };
+    const client = await pool.connect(); return { query: async (...args) => {
+      if (String(args[0]).includes('SELECT company_microsoft_prepare(')) permits.push(args[1][2]);
+      if (args[0] === 'COMMIT' && delayCommit) await delayCommit(); return client.query(...args);
+    }, release: destroy => client.release(destroy) };
   } };
   const now = Math.floor(Date.now() / 1000), actor = randomUUID(); target = randomUUID(); remoteId = randomUUID(); calls = [];
   user = { actor_type: 'user', token_use: 'access', iss: 'https://company-microsoft.fixture', sub: 'explicit-company-owner', jti: randomUUID(), auth_time: now, exp: now + 3600,
@@ -31,6 +34,7 @@ beforeEach(async () => {
     actorUserId: actor, tenant: { id: randomUUID(), version: '1', generation: '1' }, permissions: [...COMPANY_LICENSE_PERMISSIONS], validUntil: now + 300, target: null };
   targetState = { revision: '1', eligibilityRevision: '1', enabled: true, deleted: false };
   observed = { present: false, direct: false, active: false, plansMatch: false, inherited: false, accountEnabled: true };
+  writes = []; writeHandler = null; permits = [];
   const authority = { read: async (_authorization, _user, requested = null) => {
     if (requested !== null && requested !== target) throw Object.assign(new Error('Own target required'), { status: 404 });
     return structuredClone({ ...source, target: requested === null ? null : { id: target, ...targetState } });
@@ -42,7 +46,13 @@ beforeEach(async () => {
   bridge = new CompanyMicrosoftBridge(companies, { tenantId: source.tenant.id, readFilename: 'read.fixture', writeFilename: 'write.fixture',
     load: name => ({ schemaVersion: 1, provider: 'microsoft-365', tenantId, clientId: name === 'read.fixture' ? readId : writeId, clientSecret: 'explicit-fixture-secret', consentReviewed: true }),
     createReader: () => ({ inspect: async () => { calls.push('capacity'); return [structuredClone(sku)]; } }),
-    createGraph: () => ({ readUser: async id => { calls.push(id); return { id, accountEnabled: true }; }, inspect: async (id, product) => {
+    createGraph: config => ({ tenantId: config.tenantId, tokens: { get: async () => 'fixture-ms-access-token', clear: () => {} },
+      mutate: async (id, product, plans, desired, token, operation) => {
+        assert.equal(id, remoteId); assert.equal(product, sku.skuId); assert.deepEqual(plans, []); assert.equal(token, 'fixture-ms-access-token');
+        writes.push({ id, product, desired, operation });
+        if (writeHandler) return writeHandler(desired, operation);
+        observed = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true };
+      }, readUser: async id => { calls.push(id); return { id, accountEnabled: true }; }, inspect: async (id, product) => {
       assert.equal(id, remoteId); assert.equal(product, sku.skuId); calls.push('inspect'); return structuredClone(observed);
     } }),
   });
@@ -66,6 +76,143 @@ async function manual(poolId, remove = false) {
   return remove ? companies.v2.revoke(poolId, before.assignment.id, body, `"company-pool-${poolId}-${before.poolRevision}"`, randomUUID(), user, 'Bearer explicit-company-fixture')
     : companies.v2.assign(poolId, body, `"company-pool-${poolId}-${before.poolRevision}"`, randomUUID(), user, 'Bearer explicit-company-fixture');
 }
+const syncInput = preview => ({ ...input(), fingerprint: preview.fingerprint, action: preview.action });
+async function sync(delivery, poolId, operation = randomUUID(), preview = null) {
+  preview ||= await delivery.preview(poolId, target, user, 'Bearer explicit-company-fixture');
+  return delivery.sync(poolId, target, syncInput(preview), operation, user, 'Bearer explicit-company-fixture');
+}
+
+test('a company Microsoft add and remove each dispatch once and only independent reads confirm the effect', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); const addId = randomUUID();
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture');
+  const added = await sync(delivery, local.id, addId, before); assert.equal(added.result.status, 'verifying'); assert.equal(added.result.pendingOperationId, addId); assert.equal(added.result.owned, true); assert.equal(writes.length, 1);
+  const repeated = await sync(delivery, local.id, addId, before); assert.equal(repeated.historical, true); assert.equal(repeated.result.status, 'verifying'); assert.equal(writes.length, 1);
+  const confirmed = await sync(delivery, local.id); assert.equal(confirmed.result.status, 'confirmed'); assert.equal(confirmed.result.pendingOperationId, null); assert.equal(writes.length, 1);
+  await manual(local.id, true); const removalId = randomUUID(); const removal = await sync(delivery, local.id, removalId);
+  assert.equal(removal.result.status, 'verifying'); assert.equal(removal.result.pendingOperationId, removalId); assert.equal(removal.result.owned, true); assert.equal(writes.length, 2); assert.equal(writes[1].desired, false);
+  const absent = await sync(delivery, local.id); assert.equal(absent.result.status, 'confirmed'); assert.equal(absent.result.owned, false); assert.equal(absent.result.pendingOperationId, null); assert.equal(writes.length, 2);
+  await assert.rejects(pool.query('SELECT company_microsoft_dispatch($1,$2)', [addId, permits[0]]), error => error.code === '42501');
+  const records = JSON.stringify((await pool.query('SELECT source,request,before_state,outcome,permit_hash FROM company_microsoft_operations')).rows);
+  assert.equal(records.includes('fixture-ms-access-token'), false); for (const nonce of permits) assert.equal(records.includes(nonce), false);
+});
+
+test('a lost Microsoft response remains durably unknown and is never resent or automatically adopted', async () => {
+  const { ProviderError } = require('../fulfillment/transport'); const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); const operation = randomUUID();
+  writeHandler = async desired => { observed = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true }; throw new ProviderError('graph_write_unavailable', { uncertain: true }); };
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture'); const receipt = await sync(delivery, local.id, operation, before);
+  assert.equal(receipt.result.status, 'unknown'); assert.equal(receipt.result.owned, false); assert.equal(receipt.result.uncertainOperationId, operation); assert.equal(writes.length, 1);
+  assert.equal((await sync(delivery, local.id, operation, before)).historical, true); assert.equal(writes.length, 1);
+  const inspected = await sync(delivery, local.id); assert.equal(inspected.result.status, 'unknown'); assert.equal(inspected.result.owned, false); assert.equal(inspected.result.uncertainOperationId, operation); assert.equal(writes.length, 1);
+});
+
+test('a changed reviewed action, local recipient or configuration never admits a new cloud write', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture');
+  await assert.rejects(delivery.sync(local.id, target, { ...input(), fingerprint: before.fingerprint, action: 'remove' }, randomUUID(), user, 'Bearer explicit-company-fixture'), error => error.status === 412);
+  targetState.enabled = false;
+  await assert.rejects(sync(delivery, local.id, randomUUID(), before), error => error.status === 412);
+  targetState.enabled = true;
+  const load = bridge.load; bridge.load = name => ({ ...load(name), clientId: randomUUID() });
+  await assert.rejects(sync(delivery, local.id, randomUUID(), before), error => error.status === 409);
+  assert.equal(writes.length, 0);
+  assert.equal((await pool.query("SELECT count(*)::int AS count FROM company_microsoft_operations WHERE action='sync'")).rows[0].count, 0);
+});
+
+test('canonical group removal after durable prepare prevents dispatch and retains a not-sent receipt', async () => {
+  const local = await mappedPool(); const group = await groupPool(local.id); const delivery = new CompanyMicrosoftDelivery(bridge, { groups: group.service });
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture'); const operation = randomUUID();
+  delayCommit = async () => { group.remove(); delayCommit = null; };
+  await assert.rejects(sync(delivery, local.id, operation, before), error => error.status === 412);
+  assert.equal(writes.length, 0);
+  const saved = (await pool.query('SELECT phase,outcome FROM company_microsoft_operations WHERE id=$1', [operation])).rows[0];
+  assert.equal(saved.phase, 'finished'); assert.equal(saved.outcome.kind, 'not_sent'); assert.equal(saved.outcome.errorCode, 'dispatch_precheck_failed');
+});
+
+test('prepare and dispatch physical commits independently reject an expired human source before any Graph write', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);
+  for (const stage of [1, 2]) {
+    source.validUntil = Math.floor(Date.now() / 1000) + 300; const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture');
+    source.validUntil = Math.floor(Date.now() / 1000) + 2; let commits = 0; const operation = randomUUID();
+    delayCommit = async () => { if (++commits === stage) await new Promise(resolve => setTimeout(resolve, Math.max(0, source.validUntil * 1000 - Date.now() + 40))); };
+    await assert.rejects(sync(delivery, local.id, operation, before), error => error.code === '42501' || [401, 428].includes(error.status)); delayCommit = null; assert.equal(writes.length, 0);
+    const result = (await pool.query('SELECT phase,outcome FROM company_microsoft_operations WHERE id=$1', [operation])).rows[0];
+    if (stage === 1) assert.equal(result, undefined); else { assert.equal(result.phase, 'finished'); assert.equal(result.outcome.kind, 'not_sent'); }
+  }
+});
+
+test('an acknowledgement after authority expires still records the original workload result without returning private success', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture'); source.validUntil = Math.floor(Date.now() / 1000) + 2; const operation = randomUUID();
+  writeHandler = async desired => { await new Promise(resolve => setTimeout(resolve, Math.max(0, source.validUntil * 1000 - Date.now() + 40))); observed = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true }; };
+  await assert.rejects(sync(delivery, local.id, operation, before), error => [401, 428].includes(error.status)); assert.equal(writes.length, 1);
+  const saved = (await pool.query('SELECT phase,outcome,source FROM company_microsoft_operations WHERE id=$1', [operation])).rows[0]; assert.equal(saved.phase, 'finished'); assert.equal(saved.outcome.kind, 'acknowledged'); assert.equal(saved.outcome.status, 'verifying');
+  const actors = (await pool.query('SELECT actor FROM company_microsoft_events WHERE operation_id=$1 ORDER BY sequence', [operation])).rows.map(row => row.actor);
+  assert.deepEqual(actors, [{ kind: 'human', userId: source.actorUserId }, { kind: 'workload', operationId: operation }, { kind: 'workload', operationId: operation }]);
+});
+
+test('pending writes survive read-only observations and desired-state reversal without a second dispatch', async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); writeHandler = async () => {};
+  const added = await sync(delivery, local.id); const pending = added.result.pendingOperationId;
+  const waiting = await sync(delivery, local.id); assert.equal(waiting.result.pendingOperationId, pending); assert.equal(waiting.result.status, 'verifying'); assert.equal(writes.length, 1);
+  await manual(local.id, true); const stillWaiting = await sync(delivery, local.id); assert.equal(stillWaiting.result.pendingOperationId, pending); assert.equal(writes.length, 1);
+  observed = { present: true, direct: true, active: true, plansMatch: true, inherited: false, accountEnabled: true };
+  const changed = await sync(delivery, local.id); assert.equal(changed.result.pendingOperationId, null); assert.equal(changed.result.errorCode, 'desired_changed'); assert.equal(changed.result.owned, true); assert.equal(writes.length, 1);
+  const removal = await sync(delivery, local.id); assert.equal(removal.result.status, 'verifying'); assert.equal(writes.length, 2);
+  observed = { present: true, direct: false, active: false, plansMatch: false, inherited: true, accountEnabled: true };
+  const retained = await sync(delivery, local.id); assert.equal(retained.result.pendingOperationId, null); assert.equal(retained.result.owned, false); assert.equal(retained.result.errorCode, 'external_assignment_retained'); assert.equal(writes.length, 2);
+});
+
+test('a definite Microsoft throttle persists its wait and historical receipts remain readable without credentials', async () => {
+  const { ProviderError } = require('../fulfillment/transport'); const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); const operation = randomUUID();
+  writeHandler = async () => { throw new ProviderError('graph_write_http_429', { uncertain: false, retryAfter: 60 }); };
+  const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture'); const rejected = await sync(delivery, local.id, operation, before);
+  assert.equal(rejected.result.kind, 'rejected'); assert.equal(rejected.result.status, 'failed'); assert.equal(rejected.result.owned, false); assert.ok(Date.parse(rejected.result.retryAt) > Date.now());
+  const current = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture'); await assert.rejects(sync(delivery, local.id, randomUUID(), current), error => error.status === 429); assert.equal(writes.length, 1);
+  bridge.load = () => { throw new Error('explicit unavailable file fixture'); };
+  assert.equal((await bridge.state(user, 'Bearer explicit-company-fixture')).state, 'configuration_unavailable');
+  const historical = await sync(delivery, local.id, operation, before); assert.equal(historical.historical, true); assert.equal(historical.result.kind, 'rejected'); assert.equal(writes.length, 1);
+});
+
+test('an ambiguous transport error cannot become certain merely because a supplied uncertainty flag is false', async () => {
+  const { ProviderError } = require('../fulfillment/transport'); const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge);
+  writeHandler = async () => { throw new ProviderError('graph_write_http_500', { uncertain: false }); };
+  const value = await sync(delivery, local.id); assert.equal(value.result.kind, 'unknown'); assert.equal(value.result.owned, false); assert.equal(writes.length, 1);
+});
+
+test('the target session lock prevents concurrent requests from dispatching the same reviewed license twice', { timeout: 15000 }, async () => {
+  const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); const before = await delivery.preview(local.id, target, user, 'Bearer explicit-company-fixture');
+  let release, entered; const inWrite = new Promise(resolve => { entered = resolve; }); const hold = new Promise(resolve => { release = resolve; });
+  writeHandler = async desired => { entered(); await hold; observed = { present: desired, direct: desired, active: desired, plansMatch: desired, inherited: false, accountEnabled: true }; };
+  const first = sync(delivery, local.id, randomUUID(), before); await Promise.race([inWrite, first.then(() => { throw new Error('First request ended without reaching the provider'); })]);
+  let timer;
+  try { await assert.rejects(Promise.race([sync(delivery, local.id, randomUUID(), before), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Concurrent request did not reject within5seconds')), 5000); })]), error => error.status === 409); assert.equal(writes.length, 1); }
+  finally { clearTimeout(timer); release(); }
+  assert.equal((await first).result.status, 'verifying'); assert.equal(writes.length, 1);
+});
+
+test('a held target client does not request a second pool connection to check the original operation', async () => {
+  const local = await mappedPool(); await manual(local.id);
+  const single = new Pool({ connectionString: process.env.LICENSE_TEST_DATABASE_URL, options: '-c search_path=' + schema + ',public', max: 1, connectionTimeoutMillis: 1000 });
+  bridge.database = { query: (...args) => single.query(...args), getClient: () => single.connect() };
+  try {
+    const result = await sync(new CompanyMicrosoftDelivery(bridge), local.id);
+    assert.equal(result.result.kind, 'acknowledged'); assert.equal(writes.length, 1);
+  } finally { await single.end(); }
+});
+
+test('a provider assignment failure is retained with its pending original attempt and cannot claim confirmation', async () => {
+  const { ProviderError } = require('../fulfillment/transport'); const local = await mappedPool(); await manual(local.id); const delivery = new CompanyMicrosoftDelivery(bridge); await sync(delivery, local.id);
+  const previous = bridge.createGraph;
+  bridge.createGraph = config => ({ ...previous(config), inspect: async () => { const error = new ProviderError('graph_assignment_error'); error.observation = { present: true, direct: true, active: false, plansMatch: true, inherited: false, accountEnabled: true }; throw error; } });
+  const failed = await sync(delivery, local.id); assert.equal(failed.result.status, 'failed'); assert.equal(failed.result.errorCode, 'graph_assignment_error'); assert.ok(failed.result.pendingOperationId); assert.equal(writes.length, 1);
+});
+test('missing provider files do not prevent the authorized owner from retiring unused metadata', async () => {
+  const local = await mappedPool(); const mappings = await bridge.mappings(local.id, { page: '1' }, user, 'Bearer explicit-company-fixture'); bridge.load = () => { throw new Error('fixture file removed'); };
+  assert.equal((await bridge.state(user, 'Bearer explicit-company-fixture')).state, 'configuration_unavailable');
+  assert.equal((await bridge.retire('pool', mappings.pool.id, '1', randomUUID(), input(), user, 'Bearer explicit-company-fixture')).binding.status, 'retired');
+  assert.equal((await bridge.retire('user', mappings.users[0].id, '1', randomUUID(), input(), user, 'Bearer explicit-company-fixture')).binding.status, 'retired');
+  assert.equal(writes.length, 0); assert.equal((await bridge.history({ page: '1' }, user, 'Bearer explicit-company-fixture')).events.length, 5);
+});
 async function groupPool(poolId) {
   const { CompanyBlueprints } = require('../../CompanyBlueprints'); const { CompanyBlueprintAssignments } = require('../CompanyBlueprintAssignments');
   const { CompanyLicenseGroups } = require('../CompanyLicenseGroups'); const { normalizeSnapshot } = require('../GroupSnapshotClient');
@@ -160,6 +307,7 @@ test('foreign targets, unsupported selectors and stale connection revisions make
 test('reapplying the metadata migration preserves receipts and denies a legacy worker every company Microsoft function', async () => {
   const connected = await connect();
   await pool.query(fs.readFileSync(path.join(__dirname, '../../db/migrations/031_company_microsoft.sql'), 'utf8'));
+  await pool.query(fs.readFileSync(path.join(__dirname, '../../db/migrations/032_company_microsoft_delivery.sql'), 'utf8'));
   assert.equal((await bridge.state(user, 'Bearer explicit-company-fixture')).connection.id, connected.connection.id);
   assert.equal((await pool.query('SELECT count(*)::int AS count FROM company_microsoft_events')).rows[0].count, 1);
   const role = 'microsoft_legacy_' + randomUUID().replaceAll('-', ''); let limited;
@@ -168,7 +316,7 @@ test('reapplying the metadata migration preserves receipts and denies a legacy w
     const grants = fs.readFileSync(path.join(__dirname, '../../../scripts/license-fulfillment-grants.sql'), 'utf8').replaceAll(':"license_schema"', `"${schema}"`).replaceAll(':"worker_role"', `"${role}"`); await pool.query(grants);
     const url = new URL(process.env.LICENSE_TEST_DATABASE_URL); url.username = role; url.password = '';
     limited = new Pool({ connectionString: url.toString(), max: 1, options: '-c search_path=' + schema + ',public' });
-    const signatures = (await pool.query('SELECT signature FROM company_microsoft_receiver_manifest')).rows;
+    const signatures = (await pool.query('SELECT signature FROM company_microsoft_receiver_manifest UNION ALL SELECT signature FROM company_microsoft_delivery_manifest')).rows;
     for (const row of signatures) assert.equal((await limited.query("SELECT has_function_privilege(current_user,to_regprocedure($1),'EXECUTE') AS allowed", [row.signature])).rows[0].allowed, false, row.signature);
     await assert.rejects(limited.query('SELECT * FROM company_microsoft_connections'), error => error.code === '42501');
     await assert.rejects(limited.query('SELECT company_microsoft_receiving()'), error => error.code === '42501');
@@ -210,7 +358,10 @@ test('the mounted company HTTP API persists only the reviewed Microsoft configur
   const rows = await request(app).get(base + '/pools/' + local.id + '/mappings?page=1'); assert.equal(rows.status, 200); assert.equal(rows.body.pool.id, bound.body.pool.id);
   const linked = await request(app).post(base + '/users/' + target + '/bind').set('If-Match', connected.headers.etag).set('Idempotency-Key', randomUUID()).send({ ...input(), objectId: remoteId, exclusiveDirectManagement: true }); assert.equal(linked.status, 201);
   const preview = await request(app).post(base + '/pools/' + local.id + '/users/' + target + '/preview').send({}); assert.equal(preview.status, 200, JSON.stringify(preview.body)); assert.equal(preview.body.local.desired, false); assert.equal(preview.body.action, 'confirmed');
-  const history = await request(app).get(base + '/history?page=1'); assert.equal(history.status, 200); assert.equal(history.body.events.length, 3);
+  const synced = await request(app).post(base + '/pools/' + local.id + '/users/' + target + '/sync').set('Idempotency-Key', randomUUID()).send({ ...input(), fingerprint: preview.body.fingerprint, action: preview.body.action });
+  assert.equal(synced.status, 200, JSON.stringify(synced.body)); assert.equal(synced.body.result.kind, 'observed'); assert.equal(synced.body.result.status, 'confirmed'); assert.equal(writes.length, 0);
+  const history = await request(app).get(base + '/history?page=1'); assert.equal(history.status, 200); assert.equal(history.body.events.length, 5);
+  assert.equal(history.body.events.filter(event => event.actorKind === 'workload' && event.actorUserId === null).length, 1);
 });
 
 test('receiving rejects a correctly named commit trigger that omits updates', async () => {

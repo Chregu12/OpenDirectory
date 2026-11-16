@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { CompanyMicrosoftClient } from '@/lib/companyMicrosoft';
-import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
+import { microsoftId as id, microsoftContext, microsoftEnvelope, microsoftState, microsoftMappings, microsoftProducts, microsoftPool, microsoftPerson, microsoftPreview, microsoftSyncReceipt, microsoftResponse as ok } from '../fixtures/companyMicrosoft';
 jest.mock('@/lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() } }));
 const clients: CompanyMicrosoftClient[] = []; const base = '/api/licenses/company/provider/microsoft';
 let state: ReturnType<typeof microsoftState>; let mappings: ReturnType<typeof microsoftMappings>; let products: ReturnType<typeof microsoftProducts>;
@@ -76,4 +76,28 @@ test.each(['user', 'pool', 'company', 'connection', 'plan', 'generation', 'obser
   if (kind === 'user') value.user.userId = id(99); if (kind === 'pool') value.local.raw.poolId = id(99); if (kind === 'company') value.pool.tenantId = id(99);
   if (kind === 'connection') value.connection.revision = '1'; if (kind === 'plan') value.action = 'remove'; if (kind === 'generation') value.local.raw.assignment.eligibilityRevision = '2'; if (kind === 'observation') value.remote.direct = true;
   (api.post as jest.Mock).mockResolvedValue(ok(value)); await expect(current.preview(id(8), id(11))).rejects.toThrow(); expect(api.post).toHaveBeenCalledTimes(1);
+});
+test('sync keeps the exact reviewed action and request key and treats acknowledgement only as pending', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftPreview()));
+  const value = await current.preview(id(8), id(11)); const intent = current.captureSync(value, 'Reviewed original license action');
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftSyncReceipt(intent.operationId))); const result = await current.sync(intent);
+  expect(result.result.status).toBe('verifying'); expect(result.result.pendingOperationId).toBe(intent.operationId);
+  expect(api.post).toHaveBeenLastCalledWith(base + '/pools/' + id(8) + '/users/' + id(11) + '/sync', { fingerprint: value.fingerprint, action: 'assign', reason: 'Reviewed original license action', confirm: true }, expect.objectContaining({ headers: { 'Idempotency-Key': intent.operationId }, timeout: 60000 }));
+  expect(() => current.captureSync({ ...value }, 'Uncaptured provider action')).toThrow();
+});
+test.each(['company', 'user', 'action', 'revision', 'fake_confirmation'])('a mismatched %s sync receipt remains unconfirmed', async kind => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftPreview())); const value = await current.preview(id(8), id(11)); const intent = current.captureSync(value, 'Reviewed original license action'); const receipt = microsoftSyncReceipt(intent.operationId);
+  if (kind === 'company') receipt.tenantId = id(99); if (kind === 'user') receipt.result.userId = id(99); if (kind === 'action') receipt.result.action = 'remove'; if (kind === 'revision') receipt.result.targetRevision = '3'; if (kind === 'fake_confirmation') receipt.result.status = 'confirmed';
+  (api.post as jest.Mock).mockResolvedValueOnce(ok(receipt)); await expect(current.sync(intent)).rejects.toThrow();
+});
+test('unknown sync result has no automatic retry and an explicit continuation reuses its exact frozen body', async () => {
+  const current = client(); await current.state(); (api.post as jest.Mock).mockResolvedValueOnce(ok(microsoftPreview())); const value = await current.preview(id(8), id(11)); const intent = current.captureSync(value, 'Reviewed original license action');
+  (api.post as jest.Mock).mockRejectedValueOnce(new Error('lost reply')); await expect(current.sync(intent)).rejects.toThrow(); expect(current.canRetry(intent)).toBe(true); expect(api.post).toHaveBeenCalledTimes(2);
+  const receipt = microsoftSyncReceipt(intent.operationId); (api.post as jest.Mock).mockResolvedValueOnce(ok({ ...receipt, historical: true })); expect((await current.sync(intent)).historical).toBe(true);
+  const calls = (api.post as jest.Mock).mock.calls; expect(calls[2][1]).toBe(calls[1][1]); expect(calls[2][2].headers).toEqual(calls[1][2].headers);
+});
+test('history distinguishes original human preparation from workload delivery receipts', async () => {
+  const current = client(); await current.state(); (api.get as jest.Mock).mockImplementation(async (url: string) => url.endsWith('/state') ? ok(microsoftState()) : ok({ ...microsoftEnvelope, page: 1, hasMore: false, events: [
+    { id: id(80), operationId: id(100), type: 'sync_finished', actorKind: 'workload', actorUserId: null, reason: 'Original human provider action', createdAt: '2026-11-16T00:00:00.000Z', resource: null },
+  ] })); const value = await current.history(); expect(value.events[0].actorKind).toBe('workload'); expect(value.events[0].actorUserId).toBeNull();
 });

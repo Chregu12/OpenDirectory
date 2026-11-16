@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T02:14:40.006641+00:00",
+  "status": "native-sync-checkpoint-not-release-ready",
+  "baseCommit": "8fcb42fa7d6af82d1eb71ba48abeefdf7bb75fe1",
+  "branch": "codex/company-microsoft-bridge",
+  "productionChanged": false,
+  "checks": {
+    "policyUnit": {
+      "passed": 1525,
+      "suites": 48
+    },
+    "frontendUnit": {
+      "passed": 3295,
+      "suites": 163
+    },
+    "licensePostgres": {
+      "passed": 586,
+      "companySqlHttpCases": 27
+    },
+    "targetedFrontend": {
+      "passed": 39
+    },
+    "typescript": "passed",
+    "javascriptSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "verifiedBehavior": [
+    "One reviewed action and original actor/company/target, durable prepare and one-use dispatch in separate physical SQL commits; no SQL transaction across Graph.",
+    "Acknowledged additions/removals stay pending; a separate current observation confirms actual direct effect and preserves the original pending attempt.",
+    "Unknown additions neither establish ownership nor automatically resend; old operation IDs return only their original retained outcome.",
+    "Fresh source expiry at actual prepare/dispatch commits prevents POST; expiry after POST still retains the original workload receipt while denying private success.",
+    "Changed reviewed action, recipient state, operator configuration or canonical group membership prevents a new write.",
+    "Definite throttles retain bounded wait; ambiguous transport/server failures remain unknown, even with a supplied false uncertainty flag.",
+    "Concurrent target requests cannot dispatch twice; the held SQL client checks original state without requesting a second connection from an exhausted pool.",
+    "External group/direct licenses remain retained; source overlap and desired-state reversal do not cause an automatic compensating POST.",
+    "Metadata retirement/reapplication, mounted HTTP routes, workload history and absent configuration are checked against real disposable PostgreSQL.",
+    "Dedicated legacy role cannot execute company metadata or delivery functions; raw token and nonce do not appear in retained operations."
+  ],
+  "providerBoundary": "All new Graph responses, token acquisition and mutations use explicit in-process provider fixtures. Local metadata, license sources, SQL transactions, deferred commit guards and HTTP routes use actual PostgreSQL. This does not verify a real Microsoft tenant or execute a company write through the actual Rust CLI.",
+  "browserBoundary": "The earlier actual unconfigured TOTP/browser case is recorded in company-microsoft-preview-2026-11-16.json. Configured provider browser coverage was not run for this checkpoint.",
+  "remaining": [
+    "Explicit fresh-human recovery after process loss without reconstructing an old nonce or permitting redispatch.",
+    "Explicit review/adoption/retry decision bound to the original uncertain addition; no automatic ownership acquisition.",
+    "Configured provider browser flow and actual Microsoft test tenant consent, mappings and observed effect.",
+    "Final full Linux CI, release/backup/migration validation and deployment."
+  ],
+  "sourceSha256": {
+    "services/core/policy-service/src/db/migrations/031_company_microsoft.sql": "f16d36f0bdb64e55dbb1a18945bac616272755d854c98730c2e4be11401b48a1",
+    "services/core/policy-service/src/db/migrations/032_company_microsoft_delivery.sql": "45a409db6f05cf295f2d9d3932cfa862da09852d7e8992f56a0565855d50fcd4",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftBridge.js": "5e57352bb2849f005c46fd43e7b0691ddea93b86e01dfd68e783c7c339ff7371",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftDelivery.js": "bfa6f6d7f63b6868714d578bca4b01b8458826b91b9192fee1dd57f84821a20e",
+    "services/core/policy-service/src/licenses/companyMicrosoftRoutes.js": "798a4e352e1ee0dee8c811c5fa808a1512fb5d8f5edd4c5d4563b2b0c823b453",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoft.integration.cjs": "9bff6b03b3e6034ba788f441293190f66b2b4aa15e6d0ed4bb360358fd5d4387",
+    "services/core/policy-service/src/licenses/__tests__/companyMicrosoftRoutes.test.js": "979094ba2089698358007187f9d5e6fbcc83d18b2585afd16f6b71a63a00475b",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "53bd582cc3bd38b9a7a80d71d3656647e9f612090cd860da873b73f47067605a",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "bf104170716e9aeec7cbf04d9f82ab4a02f48de91af9d244f75cc6deb062faab",
+    "frontend/web-app/src/__tests__/fixtures/companyMicrosoft.ts": "78ab6f988501bd92731140fc95f5c9ca310d79dfc40115de3d22e5a6cae3a995",
+    "frontend/web-app/src/__tests__/lib/companyMicrosoft.test.ts": "c234dbd850696126a45836ea67eceb84c6af41cc366d8d65bb3320c595e8118d",
+    "frontend/web-app/src/__tests__/views/CompanyMicrosoftPanel.test.tsx": "546fc383822750fbfc9af988667237b4476dbf49f664e03d3153eb89a274cb34"
+  },
+  "logSha256": {
+    "policy": "1bfb7c65785af53cdc395993f28700c5d6d9464db05f12882fab5c526a88b683",
+    "frontend": "c98e0a2d6703037c5b7a9b7fda81af328ecaeb662fb3573cb2d5760d602230c4",
+    "licensePostgres": "307ae21c5c60406add8fbb02da234c64fce3346e495e82726685cd3901f53771",
+    "typescript": "7cf910ab2ec972d4817443e4939b0688cb59143a73dcc3f34155923143f9b5f4"
+  }
+}

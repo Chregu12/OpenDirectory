@@ -39,10 +39,14 @@ CREATE TABLE IF NOT EXISTS company_microsoft_operations (
  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),finished_at TIMESTAMPTZ,
  CHECK((phase='finished')=(outcome IS NOT NULL AND finished_at IS NOT NULL))
 );
+ALTER TABLE company_microsoft_targets ADD COLUMN IF NOT EXISTS pending_operation_id UUID;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='company_microsoft_targets'::regclass AND conname='company_microsoft_target_operation') THEN
   ALTER TABLE company_microsoft_targets ADD CONSTRAINT company_microsoft_target_operation FOREIGN KEY(last_operation_id) REFERENCES company_microsoft_operations(id) DEFERRABLE INITIALLY DEFERRED;
   ALTER TABLE company_microsoft_targets ADD CONSTRAINT company_microsoft_target_uncertainty FOREIGN KEY(uncertain_operation_id) REFERENCES company_microsoft_operations(id) DEFERRABLE INITIALLY DEFERRED;
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='company_microsoft_targets'::regclass AND conname='company_microsoft_target_pending') THEN
+  ALTER TABLE company_microsoft_targets ADD CONSTRAINT company_microsoft_target_pending FOREIGN KEY(pending_operation_id) REFERENCES company_microsoft_operations(id) DEFERRABLE INITIALLY DEFERRED;
  END IF;
 END $$;
 CREATE TABLE IF NOT EXISTS company_microsoft_events (
@@ -108,7 +112,7 @@ BEGIN
   IF TG_TABLE_NAME='company_microsoft_targets' THEN
    IF original.action NOT IN('sync','adopt','retry') OR purpose NOT IN('prepare','finish')
     OR payload->>'connection_id' IS DISTINCT FROM original.connection_id::text
-    OR TG_OP='UPDATE' AND (payload-ARRAY['revision','status','owned','last_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at']) IS DISTINCT FROM (old_data-ARRAY['revision','status','owned','last_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at'])
+    OR TG_OP='UPDATE' AND (payload-ARRAY['revision','status','owned','last_operation_id','pending_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at']) IS DISTINCT FROM (old_data-ARRAY['revision','status','owned','last_operation_id','pending_operation_id','uncertain_operation_id','observation','checked_at','error_code','updated_at'])
     OR TG_OP='INSERT' AND (NEW.owned OR NEW.status<>'processing' OR NEW.revision<>1)
     OR TG_OP='UPDATE' AND NEW.revision<>OLD.revision+1 THEN RAISE EXCEPTION 'Exact company Microsoft target transition required' USING ERRCODE='42501';END IF;
   ELSE
@@ -140,6 +144,10 @@ BEGIN
  IF (NEW.phase IN('prepared','dispatched') OR NEW.action NOT IN('sync','retry'))
   AND NOT company_microsoft_source_valid(NEW.source,NEW.id,NEW.request->>'reason') THEN
   RAISE EXCEPTION 'Company Microsoft authority expired before commit' USING ERRCODE='42501';END IF;
+ IF NEW.action='sync' AND NEW.phase IN('prepared','dispatched') THEN
+  IF company_microsoft_admission(NEW.source,NEW.request,NEW.local_state,NEW.before_state->'capture') IS DISTINCT FROM NEW.desired THEN
+   RAISE EXCEPTION 'Company Microsoft entitlement changed before commit' USING ERRCODE='42501';END IF;
+ END IF;
  IF NEW.phase='finished' AND NOT EXISTS(SELECT 1 FROM company_microsoft_events event JOIN company_microsoft_outbox box ON box.id=event.id
    WHERE event.operation_id=NEW.id AND box.status='pending') THEN RAISE EXCEPTION 'Company Microsoft receipt missing' USING ERRCODE='42501';END IF;
  RETURN NULL;
@@ -203,7 +211,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'Own active Microsoft connection not found' USING ERRCODE='P0002';END IF;
   IF action_name IN('renew','disconnect') THEN
    IF resource<>connection OR current_connection.revision IS DISTINCT FROM expected THEN RAISE EXCEPTION 'Microsoft connection version changed' USING ERRCODE='40001';END IF;
-   IF EXISTS(SELECT 1 FROM company_microsoft_targets WHERE connection_id=connection AND (status IN('processing','unknown') OR uncertain_operation_id IS NOT NULL OR action_name='disconnect' AND owned)) THEN
+   IF EXISTS(SELECT 1 FROM company_microsoft_targets WHERE connection_id=connection AND (status IN('processing','unknown') OR uncertain_operation_id IS NOT NULL OR action_name='disconnect' AND (owned OR pending_operation_id IS NOT NULL))) THEN
     RAISE EXCEPTION 'Finish or review Microsoft deliveries before changing the connection' USING ERRCODE='23514';END IF;
    IF action_name='renew' AND current_connection.microsoft_tenant_id IS DISTINCT FROM (request->>'microsoftTenantId')::uuid THEN RAISE EXCEPTION 'Microsoft tenant binding is immutable' USING ERRCODE='23514';END IF;
    IF action_name='disconnect' AND (EXISTS(SELECT 1 FROM company_microsoft_pools WHERE connection_id=connection AND status='active') OR EXISTS(SELECT 1 FROM company_microsoft_users WHERE connection_id=connection AND status='active')) THEN
@@ -226,7 +234,7 @@ BEGIN
     VALUES(resource,tenant,connection,(request->>'userId')::uuid,(request->>'objectId')::uuid,'active') RETURNING to_jsonb(company_microsoft_users.*) INTO result;
   ELSIF action_name IN('retire_pool','retire_user') THEN
    IF EXISTS(SELECT 1 FROM company_microsoft_targets WHERE connection_id=connection AND (pool_binding_id=resource OR user_binding_id=resource)
-    AND (owned OR status IN('processing','unknown') OR uncertain_operation_id IS NOT NULL)) THEN RAISE EXCEPTION 'Return owned licenses and review unknown results first' USING ERRCODE='23514';END IF;
+    AND (owned OR status IN('processing','unknown') OR pending_operation_id IS NOT NULL OR uncertain_operation_id IS NOT NULL)) THEN RAISE EXCEPTION 'Return owned licenses and review unknown results first' USING ERRCODE='23514';END IF;
    IF action_name='retire_pool' THEN
     UPDATE company_microsoft_pools SET status='retired',revision=revision+1,updated_at=clock_timestamp() WHERE id=resource AND connection_id=connection AND status='active' AND revision=expected RETURNING to_jsonb(company_microsoft_pools.*) INTO result;
    ELSE

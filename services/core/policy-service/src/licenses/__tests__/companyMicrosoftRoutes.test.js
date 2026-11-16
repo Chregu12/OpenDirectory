@@ -3,7 +3,7 @@ const { randomUUID } = require('node:crypto');
 const express = require('express'); const request = require('supertest');
 jest.mock('../CompanyMicrosoftBridge', () => ({ CompanyMicrosoftBridge: jest.fn() }));
 jest.mock('../CompanyMicrosoftDelivery', () => ({ CompanyMicrosoftDelivery: jest.fn() }));
-const preview = jest.fn(); require('../CompanyMicrosoftDelivery').CompanyMicrosoftDelivery.mockImplementation(() => ({ preview }));
+const preview = jest.fn(), sync = jest.fn(); require('../CompanyMicrosoftDelivery').CompanyMicrosoftDelivery.mockImplementation(() => ({ preview, sync }));
 const methods = Object.fromEntries(['state', 'products', 'mappings', 'history', 'connect', 'bindPool', 'bindUser', 'retire'].map(name => [name, jest.fn()]));
 require('../CompanyMicrosoftBridge').CompanyMicrosoftBridge.mockImplementation(() => methods);
 const { companyMicrosoftRoutes } = require('../companyMicrosoftRoutes');
@@ -12,7 +12,7 @@ const version = `"company-microsoft-connection-${id}-7"`;
 const body = { reason: 'Explicit Microsoft binding review', confirm: true };
 let app;
 beforeEach(() => {
-  jest.clearAllMocks(); preview.mockResolvedValue({ fingerprint: 'a'.repeat(64) });
+  jest.clearAllMocks(); preview.mockResolvedValue({ fingerprint: 'a'.repeat(64) }); sync.mockResolvedValue({ historical: false, result: {} });
   for (const method of Object.values(methods)) method.mockResolvedValue({ connection: { id, revision: '7' }, pool: { id, revision: '1' }, user: { id, revision: '1' }, binding: { id, revision: '8' } });
   app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { sub: 'original' }; next(); }); app.use('/microsoft', companyMicrosoftRoutes({}));
 });
@@ -49,4 +49,9 @@ test('preview forwards only the original actor and canonical path targets; calle
   const result = await request(app).post('/microsoft/pools/' + id + '/users/' + target + '/preview').set('Authorization', 'Bearer original').send({}); expect(result.status).toBe(200);
   expect(preview).toHaveBeenCalledWith(id, target, { sub: 'original' }, 'Bearer original'); preview.mockClear();
   expect((await request(app).post('/microsoft/pools/' + id + '/users/' + target + '/preview').send({ desired: true })).status).toBe(400); expect(preview).not.toHaveBeenCalled();
+});
+test('sync forwards only the explicit original operation and body to the independently authorized service', async () => {
+  const input = { ...body, fingerprint: 'a'.repeat(64), action: 'assign' };
+  const result = await request(app).post('/microsoft/pools/' + id + '/users/' + target + '/sync').set('Authorization', 'Bearer original').set('Idempotency-Key', operation).send(input);
+  expect(result.status).toBe(200); expect(sync).toHaveBeenCalledWith(id, target, input, operation, { sub: 'original' }, 'Bearer original');
 });

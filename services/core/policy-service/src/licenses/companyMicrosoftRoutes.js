@@ -39,6 +39,7 @@ function companyMicrosoftRoutes(companies, options) {
   router.get('/pools/:id/mappings', route(async (req, res) => res.json(await bridge.mappings(req.params.id, req.query, req.user, req.headers.authorization))));
   router.get('/history', route(async (req, res) => res.json(await bridge.history(req.query, req.user, req.headers.authorization))));
   router.post('/pools/:id/users/:userId/preview', route(async (req, res) => { exact(req.body, []); res.json(await delivery.preview(req.params.id, req.params.userId, req.user, req.headers.authorization)); }));
+  router.post('/pools/:id/users/:userId/sync', route(async (req, res) => res.json(await delivery.sync(req.params.id, req.params.userId, req.body, key(req), req.user, req.headers.authorization))));
   router.post('/connections', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization), 'connection', 'connection', 201)));
   router.post('/connections/:id/renew', route(async (req, res) => reply(res, await bridge.connect(req.body, key(req), req.user, req.headers.authorization,
     precondition(req.headers['if-match'], 'connection', identifier(req.params.id))), 'connection', 'connection')));

@@ -15,3 +15,5 @@ export const microsoftPreview = () => ({ ...microsoftEnvelope, poolId: microsoft
     origins: [{ sourceType: 'direct', sourceId: 'direct', grantId: microsoftId(14), eligibilityRevision: '1', live: true, deadline: null, bindingValid: true, rule: null }] }, groups: [], desired: true },
   remote: { present: false, direct: false, active: false, plansMatch: false, inherited: false, accountEnabled: true }, stock: microsoftProducts().products[0], fingerprint: 'a'.repeat(64), action: 'assign', checkedAt: time });
 export const microsoftResponse = (data: unknown, status = 200, headers = {}) => ({ data, status, headers });
+export const microsoftSyncReceipt = (operationId = microsoftId(100)) => ({ ...microsoftEnvelope, historical: false, result: { operationId, poolId: microsoftId(8), userId: microsoftId(11), action: 'assign', targetId: microsoftId(30), targetRevision: '2',
+  status: 'verifying', owned: true, pendingOperationId: operationId, uncertainOperationId: null, errorCode: 'provider_verification_pending', eventId: microsoftId(31), kind: 'acknowledged', retryAfter: null, retryAt: null } });

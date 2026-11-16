@@ -70,14 +70,15 @@ class CompanyMicrosoftBridge {
   async state(user, authorization) {
     return this.companies.read(user, authorization, async (client, source) => {
       await client.query('SELECT company_microsoft_receiving()');
-      const config = this.configurations(source);
+      let config = null, configurationUnavailable = false;
+      try { config = this.configurations(source); } catch (error) { if (error.status !== 503) throw error; configurationUnavailable = true; }
       const row = (await client.query("SELECT * FROM company_microsoft_connections WHERE tenant_id=$1 AND status='active'", [source.tenant.id])).rows[0];
-      let state = config ? 'configured' : 'not_configured';
+      let state = config ? 'configured' : configurationUnavailable ? 'configuration_unavailable' : 'not_configured';
       if (row && config) {
         try { this.matchingConnection(source, row, config); state = 'connected'; }
         catch { state = 'review_required'; }
       }
-      this.unchangedConfiguration(source, config);
+      if (!configurationUnavailable) this.unchangedConfiguration(source, config);
       return { ...envelope(source), state, microsoftTenantId: config?.read.tenantId || null,
         connection: row ? bindingView('connection', row) : null,
         ...(config ? { readClientId: config.read.clientId, writeClientId: config.write.clientId } : {}) };
