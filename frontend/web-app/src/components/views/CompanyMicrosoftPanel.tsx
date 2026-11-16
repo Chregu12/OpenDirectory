@@ -1,0 +1,113 @@
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { CompanyPool } from '@/lib/companyApplications';
+import { CompanyWorkflowContext, companyWorkflowError, companyWorkflowUnsafe } from '@/lib/companyAssignmentProtocol';
+import { CompanyMicrosoftClient, MicrosoftState, MicrosoftMappings, MicrosoftProducts, MicrosoftHistory, MicrosoftIntent, MicrosoftReceipt } from '@/lib/companyMicrosoft';
+import { UserPage, userName } from '@/lib/directoryUsers';
+import { DirectoryConfirmation } from './UserDetailPanel';
+
+const inputClass = 'mt-1 block w-full rounded border border-[var(--border-strong)] bg-transparent p-2';
+const actionLabels = { connect: 'Microsoft-Verbindung bestätigen', renew: 'Microsoft-Verbindung neu prüfen', bind_pool: 'Microsoft-Produkt verknüpfen', bind_user: 'Microsoft-Benutzer verknüpfen', disconnect: 'Microsoft-Verbindung trennen', retire_pool: 'Produktverknüpfung entfernen', retire_user: 'Benutzerverknüpfung entfernen' };
+
+export default function CompanyMicrosoftPanel({ context, pool, onAccessError }: { context: CompanyWorkflowContext; pool: CompanyPool; onAccessError: (error: unknown) => void }) {
+  const client = useRef<CompanyMicrosoftClient | null>(null); const generation = useRef(0); const running = useRef(false);
+  const [state, setState] = useState<MicrosoftState | null>(null); const [mappings, setMappings] = useState<MicrosoftMappings | null>(null);
+  const [products, setProducts] = useState<MicrosoftProducts | null>(null); const [history, setHistory] = useState<MicrosoftHistory | null>(null);
+  const [users, setUsers] = useState<UserPage | null>(null); const [usersLoaded, setUsersLoaded] = useState(false);
+  const [userId, setUserId] = useState(''); const [objectId, setObjectId] = useState(''); const [skuId, setSkuId] = useState(''); const [search, setSearch] = useState(''); const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState<MicrosoftIntent | null>(null); const [confirmed, setConfirmed] = useState(false); const [intent, setIntent] = useState<MicrosoftIntent | null>(null); const [receipt, setReceipt] = useState<MicrosoftReceipt | null>(null);
+  const [busy, setBusy] = useState(false); const [needsReload, setNeedsReload] = useState(false); const [error, setError] = useState(''); const [formError, setFormError] = useState('');
+  const clear = () => { setState(null); setMappings(null); setProducts(null); setHistory(null); setUsers(null); setUsersLoaded(false); setUserId(''); setObjectId(''); setSkuId(''); setSearch(''); setReason(''); setConfirmation(null); setConfirmed(false); setIntent(null); setReceipt(null); };
+  const run = async <Value,>(operation: (current: CompanyMicrosoftClient) => Promise<Value>, apply: (value: Value) => void) => {
+    if (!client.current || running.current) return;
+    const current = client.current; const expected = generation.current; running.current = true; setBusy(true); setError(''); setFormError('');
+    try { const value = await operation(current); if (expected === generation.current) apply(value); }
+    catch (failure) {
+      if (expected === generation.current) {
+        setError(companyWorkflowError(failure)); setConfirmation(null); setConfirmed(false); setNeedsReload(true);
+        if (companyWorkflowUnsafe(failure)) { current.invalidate(); clear(); onAccessError(failure); }
+      }
+    } finally { if (expected === generation.current) { running.current = false; setBusy(false); } }
+  };
+  useEffect(() => {
+    generation.current++; client.current = new CompanyMicrosoftClient(context); running.current = false; clear(); setBusy(false); setNeedsReload(false); setError('');
+    const sessionError = () => { generation.current++; client.current?.invalidate(); running.current = false; clear(); setBusy(false); setNeedsReload(true); setError(companyWorkflowError({ response: { status: 401 } })); };
+    window.addEventListener('od:session-error', sessionError);
+    return () => { generation.current++; client.current?.dispose(); window.removeEventListener('od:session-error', sessionError); };
+  }, [context.actorUserId, context.tenantId, pool.id]);
+  const reload = () => {
+    generation.current++; client.current?.dispose(); client.current = new CompanyMicrosoftClient(context); running.current = false; clear(); setNeedsReload(false);
+    void run(async current => ({ state: await current.state(), mappings: await current.mappings(pool.id), history: await current.history() }), value => { setState(value.state); setMappings(value.mappings); setHistory(value.history); });
+  };
+  const prepare = (capture: (current: CompanyMicrosoftClient) => MicrosoftIntent) => {
+    if (blocked || !client.current) return;
+    try { setConfirmation(capture(client.current)); setConfirmed(false); setFormError(''); }
+    catch { setFormError('Bitte den aktuellen Stand, die ausgewählten IDs und eine Begründung mit 10 bis 500 Zeichen prüfen.'); }
+  };
+  const write = () => {
+    if (!confirmation || !confirmed || busy) return;
+    const captured = confirmation; setIntent(captured);
+    void run(current => current.write(captured), value => { setReceipt(value); setConfirmation(null); setConfirmed(false); setIntent(null); setNeedsReload(true); });
+  };
+  const blocked = busy || needsReload || !!confirmation || !!intent;
+  const selectedUser = users?.users.find(row => row.id === userId);
+  return <details className="od-panel text-sm">
+    <summary>Microsoft 365 · Verknüpfungen dieses Lizenzpools</summary>
+    <section aria-label="Microsoft-Verknüpfungen" className="mt-3 space-y-4">
+      <p>Den Firmenpool einem Microsoft-Produkt und die eigenen Mitarbeitenden ihren Microsoft-Konten zuordnen. Eine Verknüpfung allein weist noch keine Cloud-Lizenz zu.</p>
+      <button className="fluent-btn-secondary" disabled={busy || !!confirmation} onClick={reload}>Microsoft-Verknüpfungen laden</button>
+      {busy && <p role="status">Microsoft-Verknüpfung wird geprüft …</p>}{error && <p role="alert">{error}</p>}{formError && <p role="alert">{formError}</p>}
+      {state?.state === 'not_configured' && <p role="status">Für diese Firma ist noch keine freigegebene Microsoft-Verbindung mit getrenntem Lese- und Schreibzugang eingerichtet.</p>}
+      {state && state.state !== 'not_configured' && <>
+        <p className="break-all">Microsoft-Verzeichnis: {state.connection?.microsoftTenantId || state.microsoftTenantId}</p>
+        {state.connection && state.connection.microsoftTenantId !== state.microsoftTenantId && <p className="break-all">Neu konfiguriertes Verzeichnis: {state.microsoftTenantId}. Zuerst die alten Verknüpfungen entfernen und die bisherige Verbindung trennen.</p>}
+        <details><summary>Geprüfte Microsoft-Anwendungen</summary><p className="break-all">Bestand lesen: {state.readClientId}</p><p className="break-all">Lizenzen verwalten: {state.writeClientId}</p></details>
+        {state.state === 'review_required' && <p role="status">Die Verbindungskonfiguration hat sich geändert. Vor weiterer Nutzung neu prüfen und bestätigen.</p>}
+      </>}
+      {state && (state.state !== 'not_configured' || state.connection) && <label>Begründung der Microsoft-Verknüpfung<input className={inputClass} value={reason} minLength={10} maxLength={500} disabled={blocked} onChange={event => setReason(event.target.value)} /></label>}
+      {state?.state === 'configured' && <button className="fluent-btn-primary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.connect(state, reason))}>Microsoft-Verbindung bestätigen</button>}
+      {state && ['connected', 'review_required'].includes(state.state) && state.connection?.microsoftTenantId === state.microsoftTenantId && <button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.connect(state, reason, true))}>Microsoft-Verbindung neu prüfen</button>}
+      {state && mappings?.pool && <section aria-label="Microsoft-Produktverknüpfung" className="space-y-3"><h4 className="font-semibold">Produkt für {pool.name}</h4><p className="break-all">Microsoft-SKU: {mappings.pool.skuId}</p><button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'pool', mappings.pool, reason))}>Produktverknüpfung entfernen</button></section>}
+      {state?.state === 'connected' && <>
+        {!mappings?.pool && <section aria-label="Microsoft-Produktverknüpfung" className="space-y-3">
+          <h4 className="font-semibold">Produkt für {pool.name}</h4>
+          <button className="fluent-btn-secondary" disabled={blocked} onClick={() => { setProducts(null); setSkuId(''); void run(current => current.products(), setProducts); }}>Microsoft-Produkte laden</button>
+              {products && <><label>Microsoft-Produkt auswählen<select className={inputClass} disabled={blocked} value={skuId} onChange={event => setSkuId(event.target.value)}><option value="">Produkt wählen …</option>{products.products.filter(row => row.appliesTo === 'User' && row.capabilityStatus === 'Enabled' && row.prepaidUnits.enabled > 0).map(row => <option key={row.skuId} value={row.skuId}>{row.skuPartNumber} · {row.prepaidUnits.enabled} aktive Einheiten · {row.consumedUnits} verbraucht</option>)}</select></label>
+                {!products.products.some(row => row.appliesTo === 'User' && row.capabilityStatus === 'Enabled' && row.prepaidUnits.enabled > 0) && <p>Keine aktiven Benutzerprodukte verfügbar.</p>}
+                <button className="fluent-btn-primary" disabled={blocked || !skuId || reason.trim().length < 10} onClick={() => prepare(current => current.bindPool(state, products, pool.id, skuId, reason))}>Microsoft-Produkt verknüpfen</button></>}
+        </section>}
+        <section aria-label="Microsoft-Benutzerverknüpfung" className="space-y-3">
+          <h4 className="font-semibold">Microsoft-Konto zuordnen</h4>
+          <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); setUserId(''); setObjectId(''); void run(current => current.users(1, search), value => { setUsers(value); setUsersLoaded(true); }); }}>
+            <label>Firmenbenutzer suchen<input className={inputClass} maxLength={100} disabled={blocked} value={search} onChange={event => setSearch(event.target.value)} /></label><button className="fluent-btn-secondary" disabled={blocked}>Firmenbenutzer suchen</button>
+          </form>
+          {usersLoaded && (users ? <><label>Firmenbenutzer auswählen<select className={inputClass} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }}><option value="">Mitarbeiter wählen …</option>{users.users.map(row => <option key={row.id} value={row.id}>{userName(row)} · {row.username}</option>)}</select></label>
+            <nav aria-label="Microsoft-Firmenbenutzerseiten" className="flex gap-4"><button disabled={blocked || users.page <= 1} onClick={() => { setUserId(''); setObjectId(''); void run(current => current.users(users.page - 1, search), setUsers); }}>Zurück</button><span>Seite {users.page} · {users.total} Mitarbeiter</span><button disabled={blocked || users.page * 25 >= users.total} onClick={() => { setUserId(''); setObjectId(''); void run(current => current.users(users.page + 1, search), setUsers); }}>Weiter</button></nav></>
+            : <label>Bekannte Firmenbenutzer-ID<input className={inputClass} maxLength={36} disabled={blocked} value={userId} onChange={event => { setUserId(event.target.value); setObjectId(''); }} /><span>Keine Profil-Leseberechtigung. Der Server prüft die eigene Firmenzugehörigkeit.</span></label>)}
+          {userId && <><p>{selectedUser ? userName(selectedUser) : userId}</p><label>Microsoft-Benutzer-ID<input className={inputClass} maxLength={36} disabled={blocked} value={objectId} onChange={event => setObjectId(event.target.value)} /><span>Die Objekt-ID des zugehörigen Kontos aus dem oben angezeigten Microsoft-Verzeichnis.</span></label>
+            <button className="fluent-btn-primary" disabled={blocked || !objectId || reason.trim().length < 10} onClick={() => prepare(current => current.bindUser(state, userId, objectId.trim(), reason))}>Microsoft-Benutzer verknüpfen</button></>}
+        </section>
+      </>}
+      {state?.connection && mappings && <section aria-label="Gespeicherte Microsoft-Benutzerverknüpfungen" className="space-y-3">
+        <h4 className="font-semibold">Gespeicherte Kontozuordnungen</h4>{!mappings.users.length && <p>Keine Benutzerverknüpfungen auf dieser Seite.</p>}
+        <ul className="space-y-3">{mappings.users.map(row => <li key={row.id} className="rounded border border-[var(--border)] p-3 space-y-2"><p className="break-all">Firmenbenutzer {row.userId}</p><p className="break-all">Microsoft-Konto {row.objectId}</p><button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'user', row, reason))}>Benutzerverknüpfung entfernen</button></li>)}</ul>
+        <nav aria-label="Microsoft-Verknüpfungsseiten" className="flex gap-4"><button disabled={blocked || mappings.page <= 1} onClick={() => void run(current => current.mappings(pool.id, mappings.page - 1), setMappings)}>Zurück</button><span>Seite {mappings.page}</span><button disabled={blocked || !mappings.hasMore} onClick={() => void run(current => current.mappings(pool.id, mappings.page + 1), setMappings)}>Weiter</button></nav>
+      </section>}
+      {state?.connection && <button className="fluent-btn-secondary" disabled={blocked || reason.trim().length < 10} onClick={() => prepare(current => current.retire(state, 'connection', state.connection, reason))}>Microsoft-Verbindung trennen</button>}
+      {receipt && <p role="status">{actionLabels[receipt.action]} · {receipt.historical ? 'Ursprünglicher Vorgang bereits gespeichert' : 'Vorgang gespeichert'} · {receipt.operationId}. Aktuellen Stand neu laden.</p>}
+      {intent && <aside aria-label="Unbestätigte Microsoft-Verknüpfung" className="space-y-3"><p>Die Verknüpfung könnte bereits gespeichert sein. Den ursprünglichen Versuch ausdrücklich prüfen oder den aktuellen Stand neu laden.</p><p className="break-all">Vorgang {intent.operationId}</p><button className="fluent-btn-secondary" disabled={busy || !client.current?.canRetry(intent)} onClick={() => { setConfirmation(intent); setConfirmed(false); }}>Ursprüngliche Microsoft-Verknüpfung prüfen</button></aside>}
+      {history && (history.events.length > 0 || state?.connection) && <details><summary>Protokoll der Microsoft-Verknüpfungen</summary><ul className="space-y-3 mt-3">{history.events.map(row => <li key={row.id}><p>{new Date(row.createdAt).toLocaleString('de-CH')} · {actionLabels[row.type]}</p><p>{row.reason}</p><p className="break-all">Benutzer {row.actorUserId} · Vorgang {row.operationId}</p></li>)}</ul>
+        <nav aria-label="Microsoft-Protokollseiten" className="flex gap-4"><button disabled={blocked || history.page <= 1} onClick={() => void run(current => current.history(history.page - 1), setHistory)}>Zurück</button><span>Seite {history.page}</span><button disabled={blocked || !history.hasMore} onClick={() => void run(current => current.history(history.page + 1), setHistory)}>Weiter</button></nav></details>}
+    </section>
+    {confirmation && <DirectoryConfirmation title={actionLabels[confirmation.action]} busy={busy} error={confirmed ? '' : 'Bitte genau diesen Vorgang bestätigen.'} onClose={() => { setConfirmation(null); setConfirmed(false); }} onConfirm={write}>
+      <p>{pool.name} · Microsoft-Verzeichnis {confirmation.action === 'disconnect' ? state?.connection?.microsoftTenantId : state?.microsoftTenantId || state?.connection?.microsoftTenantId}</p><p>{String(confirmation.body.reason)}</p>
+      {confirmation.action.startsWith('retire_') && <p className="break-all">{confirmation.kind === 'user' ? 'Firmenbenutzer' : 'Firmenpool'} {confirmation.targetId} · Verknüpfung {confirmation.expectedId}</p>}
+      {confirmation.action === 'bind_pool' && <p className="break-all">Microsoft-SKU {String(confirmation.body.skuId)} · alle Servicepläne aktiviert.</p>}
+      {confirmation.action === 'bind_user' && <p className="break-all">Firmenbenutzer {confirmation.targetId} · Microsoft-Konto {String(confirmation.body.objectId)}</p>}
+      {['bind_pool', 'bind_user'].includes(confirmation.action) && <p>Die verknüpfte direkte Microsoft-Lizenz soll ausschließlich über OpenDirectory verwaltet werden. Bestehende fremde oder gruppenbasierte Zuweisungen werden nicht übernommen.</p>}
+      <p>Nur die Verknüpfung wird gespeichert. Noch keine Microsoft-Lizenzänderung.</p>
+      <label className="flex gap-3 mt-3"><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />Ich bestätige diese Microsoft-Verknüpfung.</label>
+    </DirectoryConfirmation>}
+  </details>;
+}

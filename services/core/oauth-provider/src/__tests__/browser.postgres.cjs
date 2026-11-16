@@ -171,7 +171,7 @@ before(async () => {
       const result=await fetch(actualAuth.url+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentials),redirect:'error'});
       response.statusCode=result.status;return response.end(Buffer.from(await result.arrayBuffer()));
     }
-    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign','company-invitation-owner','company-pim-groups-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
+    if ((!actors.has(credentials.username) && !['company-registration-owner', 'company-blueprint-owner', 'company-assignment-owner', 'company-automation-owner','company-license-automation-owner','company-group-rules-owner','company-app-owner','company-app-foreign','company-invitation-owner','company-pim-groups-owner','company-microsoft-owner'].includes(credentials.username)) || credentials.password !== 'disposable-password') {
       response.statusCode = 401; return response.end('{"success":false}');
     }
     const actor = actors.get(credentials.username);
@@ -222,9 +222,9 @@ before(async () => {
   inventoryFixture=await require('../../../../../scripts/lib/device-inventory-fixture.cjs').deviceInventoryFixture(process.env.OAUTH_TEST_DATABASE_URL,identityBase);
   const policyUrl=new URL(process.env.OAUTH_TEST_DATABASE_URL); policyUrl.searchParams.set('options',`-c search_path=${policySchema},public`);
   Object.assign(process.env,{ DATABASE_URL:policyUrl.toString(),IDENTITY_SERVICE_URL:identityBase,LICENSE_DEMO_MODE:'false',OAUTH_PROVIDER_URL:issuerBase,
-    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'' });
+    LICENSE_COMPANY_PROVIDER_TENANT_ID:'',LICENSE_COMPANY_PROVIDER_CONFIG_FILE:'',LICENSE_COMPANY_PROVIDER_WRITE_CONFIG_FILE:'' });
   policyDb=require('../../../policy-service/src/db/postgres');
-  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|030)_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
+  for (const migration of fs.readdirSync(path.join(__dirname,'../../../policy-service/src/db/migrations')).filter(name=>/^(00[134-9]|01[0-9]|02[0-9]|03[01])_.*\.sql$/.test(name)).sort()) await policyDb.query(fs.readFileSync(path.join(__dirname,'../../../policy-service/src/db/migrations',migration),'utf8'));
   policyServer=require('../../../policy-service/src').listen(Number(new URL(policyBase).port),'127.0.0.1'); await serverBase(policyServer);
   process.env.OAUTH_POLICY_SOURCE_URL=policyBase;
   process.env.DATABASE_URL=identityDatabaseUrl.toString();
@@ -2987,6 +2987,37 @@ test('real own-company Owner UI assigns pinned blueprints and displays actual li
     for (const [name, value] of Object.entries(savedEnvironment)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
     await administration.query(`DROP SCHEMA IF EXISTS ${gatewaySchema} CASCADE`);
   }
+});
+
+test('real own-company Owner inspects unconfigured Microsoft mappings through real MFA and preserves local stock', { timeout: 120000 }, async () => {
+  const ownerUsername = 'company-microsoft-owner';
+  const company = await require('../../../../../scripts/lib/company-owner-fixture.cjs').activeCompany(identityDb, identitySchema, logicalIssuer,
+    { subject: ownerUsername + '-subject', username: ownerUsername });
+  const isolated = await context(); const page = await isolated.newPage(); const writes = [];
+  try {
+    await reviewFirstFactor(page, ownerUsername); await login(page, ownerUsername); const original = await mediated(page); assert.equal(original.status, 200);
+    const claims = jwt.verify(original.body.access_token, require('node:crypto').createPublicKey(fs.readFileSync(path.join(directory, 'signing.pem'))), { algorithms: ['RS256'], issuer: logicalIssuer, audience: 'opendirectory-api' });
+    assert.deepEqual(claims.roles, []); assert.equal(claims.identity_authorization.userId, company.receipt.administratorId); assert.equal(require('../../../../../packages/mfa-authorization-contract').provenMfa(claims), true);
+    const created = await page.request.post(origin + '/api/licenses/company/pools', { headers: { Authorization: 'Bearer ' + original.body.access_token }, data: {
+      name: 'Microsoft browser connection pool', vendor: 'Microsoft', description: 'Actual own local stock remains independent', totalSeats: 2, reason: 'Actual MFA owner prepares its own connection test pool' } });
+    assert.equal(created.status(), 201, await created.text()); const pool = await created.json();
+    page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/licenses/company/provider/microsoft') && request.method() !== 'GET') writes.push(request); });
+    await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(origin + '/applications'); await page.getByRole('button', { name: pool.name, exact: true }).click();
+    await page.getByText('Microsoft 365 · Verknüpfungen dieses Lizenzpools', { exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Microsoft-Verknüpfungen', exact: true });
+    const checking = page.waitForResponse(response => new URL(response.url()).pathname === '/api/licenses/company/provider/microsoft/state' && response.request().method() === 'GET');
+    await panel.getByRole('button', { name: 'Microsoft-Verknüpfungen laden', exact: true }).click();
+    const checked = await checking; assert.equal(checked.status(), 200, await checked.text()); assert.equal(checked.headers()['cache-control'], 'no-store');
+    assert.deepEqual(await checked.json(), { schemaVersion: 1, companyMicrosoftProtocol: 1, actorUserId: company.receipt.administratorId, tenantId: company.receipt.tenantId, state: 'not_configured', microsoftTenantId: null, connection: null });
+    await panel.getByText('Für diese Firma ist noch keine freigegebene Microsoft-Verbindung mit getrenntem Lese- und Schreibzugang eingerichtet.', { exact: true }).waitFor();
+    assert.equal(await panel.getByRole('heading', { name: 'Gespeicherte Kontozuordnungen', exact: true }).count(), 0); assert.equal(await panel.getByRole('button', { name: 'Microsoft-Verbindung bestätigen', exact: true }).count(), 0);
+    await panel.screenshot({ path: '/tmp/od-company-microsoft-unconfigured-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 1000 }); const box = await panel.boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= 390);
+    await panel.screenshot({ path: '/tmp/od-company-microsoft-unconfigured-mobile.png' });
+    assert.deepEqual((await policyDb.query('SELECT used_seats,total_seats FROM license_catalog WHERE id=$1 AND business_tenant_id=$2', [pool.id, company.receipt.tenantId])).rows, [{ used_seats: 0, total_seats: 2 }]);
+    for (const table of ['company_microsoft_connections', 'company_microsoft_operations', 'company_microsoft_events']) assert.equal((await policyDb.query('SELECT count(*)::int AS count FROM ' + table + ' WHERE tenant_id=$1', [company.receipt.tenantId])).rows[0].count, 0);
+    assert.equal(writes.length, 0); assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_role_assignments WHERE user_id=$1', [company.receipt.administratorId])).rows[0].count, 0);
+  } finally { await isolated.unrouteAll({ behavior: 'ignoreErrors' }); await isolated.close(); }
 });
 
 test('real company automation Owner UI grants an actual app worker, downloads its own export and revokes queued work', { timeout: 240000 }, async () => {

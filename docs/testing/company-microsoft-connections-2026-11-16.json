@@ -1,0 +1,86 @@
+{
+  "checkedAt": "2026-11-16T00:25:43.140100+00:00",
+  "baseCommit": "0e27663d638c4b9a12b649a618306a9cb8e43356",
+  "status": "native-metadata-api-and-gui-validation-passed-cloud-delivery-still-open",
+  "productionChanged": false,
+  "unreleased": true,
+  "branch": "codex/company-microsoft-bridge",
+  "behavior": {
+    "selectedCompanyAndMicrosoftTenantExplicit": true,
+    "publicMicrosoftConfigIdsConfirmedAndRechecked": true,
+    "connectionIdAndBigintRevisionPreconditions": true,
+    "canonicalOwnUserAndPoolChecks": true,
+    "immutableRemoteIdentityBindings": true,
+    "sourceFreshAtPhysicalCommit": true,
+    "originalHumanAuditAndOutboxRetained": true,
+    "legacyWorkerCannotExecuteNewFunctions": true,
+    "metadataOnlyNoGraphWrites": true,
+    "noAutomaticRetries": true,
+    "retirementReachableWithoutCurrentProviderCredentials": true
+  },
+  "validation": {
+    "policyUnit": {
+      "suites": 48,
+      "passed": 1523,
+      "failed": 0
+    },
+    "frontendUnit": {
+      "suites": 163,
+      "passed": 3276,
+      "failed": 0,
+      "durationSeconds": 99.784
+    },
+    "licensePostgres": {
+      "passed": 567,
+      "failed": 0,
+      "skipped": 0,
+      "durationMilliseconds": 222276.160708,
+      "companyMicrosoftCasesIncluded": 8,
+      "providerBoundary": "Actual PostgreSQL and mounted HTTP; company Microsoft token/Graph responses are explicit in-process fixtures."
+    },
+    "actualBrowser": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "case": "real own-company Owner inspects unconfigured Microsoft mappings through real MFA and preserves local stock",
+      "caseDurationMilliseconds": 43702.236416,
+      "totalDurationMilliseconds": 44926.230125,
+      "services": "Actual disposable Identity, OAuth TOTP, policy SQL, gateway/Next mediation and production-built Next.js with Chrome. Password provider remains the explicit disposable browser fixture.",
+      "noProviderMutationRequests": true,
+      "localPoolUnchanged": true,
+      "noProductionFactorOrGrant": true,
+      "schemasAndServicesCleaned": true
+    },
+    "visualInspection": {
+      "desktopAnd390PixelMobile": "Actual unconfigured panel screenshots inspected; no horizontal overflow in the panel. Empty mapping/history controls are hidden when no connection exists.",
+      "configuredProviderBrowser": "not yet covered by an actual provider-backed browser flow"
+    },
+    "typeCheck": "passed",
+    "diffCheck": "passed"
+  },
+  "configuration": {
+    "companySelector": "LICENSE_COMPANY_PROVIDER_TENANT_ID",
+    "readFile": "LICENSE_COMPANY_PROVIDER_CONFIG_FILE",
+    "writeFile": "LICENSE_COMPANY_PROVIDER_WRITE_CONFIG_FILE",
+    "secretValuesInGuiOrAudit": false,
+    "operatorConfigurationChanged": false
+  },
+  "fullLinuxCi": "Required on completed company bridge before merge; no feature PR opened for this intermediate metadata step.",
+  "remaining": [
+    "Implement durable company cloud dispatch, independent provider confirmation, unknown-result review and crash recovery.",
+    "Use current local manual/blueprint/group eligibility when deciding cloud assignment and cleanup.",
+    "Complete configured provider browser coverage and real Microsoft tenant acceptance.",
+    "Deploy and verify the completed provider feature; current production remains1.0.54/revision87."
+  ],
+  "sourceSha256": {
+    "frontend/web-app/src/components/views/CompanyApplicationsView.tsx": "f113aeceee93df99354fe42310751e0305fd1dd71095fa84ca6a70680fff38ae",
+    "frontend/web-app/src/components/views/CompanyMicrosoftPanel.tsx": "2cfc6d51d60315ca52f2e47d783aa868bdd0bd7cfdb1c8b9bd075379d7f433ab",
+    "frontend/web-app/src/lib/companyMicrosoft.ts": "d2815835d4eaa5f9bb6c0e6cc08a1229bfb51e7b67599cbfbe39d53f7067ccd6",
+    "frontend/web-app/src/lib/companyLicenseProvider.ts": "793c9c8193f2afb1d94ff797564c40b3a62b0b3886b658658a4c2df1568e474e",
+    "services/core/policy-service/src/licenses/CompanyMicrosoftBridge.js": "ffde3efb99fd9124f62d3e3254cafeb8e8b588be869f2258b4d942c05cee8acc",
+    "services/core/policy-service/src/licenses/companyMicrosoftRoutes.js": "f912a8d30500bdeda08eb96cf9db33160b7dfcf0fd190657fce62edab59a64df",
+    "services/core/policy-service/src/licenses/companyRoutes.js": "85f64d11e0f247b19dcde27ecac5a01824d712a871acf61d21c65449dcdd85df",
+    "services/core/policy-service/src/db/migrations/031_company_microsoft.sql": "f72e615a11c0a3921d9657e15e05de2fa12b540801935f3984a5b40473b4f733",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "3b4da7eeed1b6e11a48ca4e4e6f773020390e0de60b1499cc4b1454b7d723f54"
+  }
+}
