@@ -21,9 +21,10 @@ export function DirectoryConfirmation({ title, children, busy, error, onConfirm,
   </Dialog>;
 }
 
-export default function UserDetailPanel({ user, permissions, actorUserId, onChanged, onReload, onDenied }: {
+export default function UserDetailPanel({ user, permissions, actorUserId, onChanged, onReload, onDenied, onInvite }: {
   user: DirectoryUser | null; permissions: string[]; actorUserId: string | null;
   onChanged: (user: DirectoryUser | null, expectedId: string) => void; onReload: () => void; onDenied: () => void;
+  onInvite?: (user: DirectoryUser) => void;
 }) {
   const [editing, setEditing] = useState(false); const [action, setAction] = useState<'status' | 'reset' | 'delete' | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
@@ -42,6 +43,7 @@ export default function UserDetailPanel({ user, permissions, actorUserId, onChan
     <div><PageHeader title={userName(user)} subtitle={user.username + ' · ' + user.email} icon={UserIcon} /><p className="od-badge">{user.enabled ? 'Verzeichniskonto freigegeben' : 'Verzeichniskonto gesperrt'}</p></div>
     <div className="flex flex-wrap gap-3 [&>button]:rounded [&>button]:border [&>button]:border-[var(--border-strong)] [&>button]:px-3 [&>button]:py-2 [&>button]:text-sm">
       {can('users.update') && <button onClick={() => setEditing(true)}>Profil bearbeiten</button>}
+      {!user.enabled && onInvite && <button onClick={() => onInvite(user)}>Einladung vorbereiten</button>}
       {can('users.update') && can('users.status.manage') && <button onClick={() => begin('status')}>{user.enabled ? 'Konto sperren' : 'Konto freigeben'}</button>}
       {can('users.update') && can('users.status.manage') && user.id !== actorUserId && <a className="rounded border border-[var(--border-strong)] px-3 py-2 text-sm" href={`/applications?offboard=${user.id}#company-offboarding`}>Mitarbeiter-Offboarding</a>}
       {can('pim.eligibilities.manage') && <a className="rounded border border-[var(--border-strong)] px-3 py-2 text-sm" href={`/pim?userId=${user.id}`}>PIM-Gruppen zuweisen</a>}

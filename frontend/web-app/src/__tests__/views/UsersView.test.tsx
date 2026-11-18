@@ -53,6 +53,35 @@ test('the dashboard create request opens the real editor without submitting a us
   expect(api.post).not.toHaveBeenCalled();
 });
 
+function asOwner() {
+  const original = (api.get as jest.Mock).getMockImplementation()!;
+  (api.get as jest.Mock).mockImplementation(async (url, options) => {
+    const response = await original(url, options);
+    return url === '/api/identity/access' ? { data: { ...response.data, companyOwner: true } } : response;
+  });
+}
+test('an owner starts the complete intake from the dashboard without an implicit account or invitation write', async () => {
+  permissions = ['users.read', 'users.create']; asOwner(); const handled = jest.fn();
+  render(<UsersView createRequested onCreateHandled={handled} />);
+  expect(await screen.findByRole('heading', { name: 'Mitarbeiter aufnehmen' })).toBeInTheDocument();
+  await screen.findByText(/Gruppen konnten nicht geladen werden/);
+  expect(handled).toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+test('owners retain the separate bare directory command under further actions', async () => {
+  permissions = ['users.read', 'users.create']; asOwner(); const user = userEvent.setup(); render(<UsersView />);
+  await screen.findByRole('button', { name: 'Mitarbeiter aufnehmen' });
+  expect(screen.getByRole('button', { name: 'Verzeichniseintrag erstellen' })).not.toBeVisible();
+  await user.click(screen.getByText('Weitere Benutzeraktionen')); await user.click(screen.getByRole('button', { name: 'Verzeichniseintrag erstellen' }));
+  expect(await screen.findByRole('heading', { name: 'Verzeichniseintrag erstellen' })).toBeInTheDocument(); expect(api.post).not.toHaveBeenCalled();
+});
+test('an owner can continue the selected disabled person without re-entering an identifier', async () => {
+  permissions = ['users.read']; records = [record({ enabled: false })]; asOwner(); const user = userEvent.setup(); render(<UsersView />); await select();
+  await user.click(screen.getByRole('button', { name: 'Einladung vorbereiten' }));
+  expect(await screen.findByRole('heading', { name: 'Mitarbeiter aufnehmen' })).toBeInTheDocument();
+  expect(screen.getByLabelText('E-Mail', { exact: true })).toHaveValue('employee@test.invalid'); expect(screen.getByLabelText('Benutzername')).toBeDisabled();
+  await screen.findByText(/Gruppen konnten nicht geladen werden/); expect(api.post).not.toHaveBeenCalled();
+});
+
 test('ordinary users do not fetch the directory or see fake sample users', async () => {
   permissions = []; render(<UsersView />);
   expect(await screen.findByText('Keine Berechtigung zum Lesen der Benutzerliste.')).toBeInTheDocument();

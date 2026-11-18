@@ -19,14 +19,16 @@ interface Props {
   onPage: (page: number) => void;
   onReload: () => void;
   onCreateNew?: () => void;
+  onOnboard?: () => void;
 }
 
 export default function UserListColumn(props: Props) {
   return <section className="h-full flex flex-col" aria-label="Kanonische Benutzerliste" style={{ background: 'var(--bg-surface, #161b22)', color: 'var(--text-primary, #e4e6ea)' }}>
     <div className="p-3 space-y-3 border-b border-[var(--border)]">
       <div className="flex justify-between items-center"><h2 className="font-semibold">Benutzer</h2>
-        {props.onCreateNew && <button onClick={props.onCreateNew} className="rounded bg-blue-600 px-3 py-1 text-white" aria-label="Verzeichniseintrag erstellen">Neu</button>}
+        {props.onOnboard ? <button onClick={props.onOnboard} className="rounded bg-blue-600 px-3 py-1 text-white">Mitarbeiter aufnehmen</button> : props.onCreateNew && <button onClick={props.onCreateNew} className="rounded bg-blue-600 px-3 py-1 text-white" aria-label="Verzeichniseintrag erstellen">Neu</button>}
       </div>
+      {props.onOnboard && props.onCreateNew && <details><summary className="cursor-pointer text-sm">Weitere Benutzeraktionen</summary><button className="mt-2" onClick={props.onCreateNew}>Verzeichniseintrag erstellen</button></details>}
       <label className="block text-xs">Suche<input className="mt-1 w-full rounded border p-2 bg-transparent" value={props.search} maxLength={255} onChange={event => props.onSearch(event.target.value)} placeholder="Name, Benutzername oder E-Mail" /></label>
       <label className="block text-xs">Kontostatus<select className="mt-1 w-full rounded border p-2 bg-transparent" value={props.enabled} onChange={event => props.onFilter(event.target.value)}>
         <option value="">Alle</option><option value="true">Freigegeben</option><option value="false">Gesperrt</option>
