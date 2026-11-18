@@ -24,8 +24,15 @@ END; $$;
 CREATE OR REPLACE FUNCTION identity_employee_receiving() RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM identity_company_group_rule_app_receiving();
- IF current_setting('session_replication_role')<>'origin' OR (SELECT count(*) FROM identity_employee_enrollment_manifest)<>26
+ IF current_setting('session_replication_role')<>'origin' OR (SELECT count(*) FROM identity_employee_enrollment_manifest)<>23
   OR EXISTS(SELECT 1 FROM identity_employee_enrollment_manifest WHERE to_regprocedure(signature) IS NULL OR digest<>md5(pg_get_functiondef(to_regprocedure(signature))))
+  -- Pin derived snapshot receivers without expanding the manifest consumed by the previous image on rollback.
+  OR EXISTS(SELECT 1 FROM(VALUES
+   ('identity_user_memberships()','0acd3c89b7eb8a39e95974898bf6d926'),
+   ('identity_group_revision()','a436881cf5983d2f23d93a952f871e4e'),
+   ('identity_group_record_change()','169afe8a448db88265f244a87de0cdfc')
+  ) expected(signature,digest) WHERE NOT EXISTS(SELECT 1 FROM pg_proc routine JOIN pg_language language ON language.oid=routine.prolang
+   WHERE routine.oid=to_regprocedure(expected.signature) AND md5(routine.prosrc)=expected.digest AND NOT routine.prosecdef AND routine.proconfig IS NULL AND language.lanname='plpgsql'))
   OR EXISTS(SELECT 1 FROM pg_class relation WHERE relnamespace=current_schema()::regnamespace AND relkind='r'
    AND(SELECT count(*) FROM pg_trigger WHERE tgrelid=relation.oid AND NOT tgisinternal AND tgenabled='O' AND tgfoid='identity_employee_fence()'::regprocedure
     AND(tgname='aaa_identity_employee_fence' AND tgtype=31 AND NOT tgdeferrable OR tgname='identity_employee_effect_commit' AND tgtype=29 AND tgdeferrable AND tginitdeferred OR tgname='identity_employee_effect_truncate' AND tgtype=34 AND NOT tgdeferrable))<>3)
@@ -261,7 +268,6 @@ DO $$ DECLARE signature TEXT;definition TEXT;relation TEXT;hook RECORD;BEGIN
  FOREACH signature IN ARRAY ARRAY['identity_employee_receiving()','identity_employee_scope()','identity_employee_withdrawal_unchanged(uuid,jsonb)','identity_employee_actor(jsonb)','identity_employee_valid(uuid)','identity_employee_guard()','identity_employee_event()','identity_employee_evidence()','identity_employee_fence()',
   'identity_directory_creation_actor(jsonb)','identity_directory_user_mutation_guard()','identity_directory_user_mutation_actor(jsonb)','identity_directory_user_evidence_guard()',
   'identity_subject_tenant_transition()','identity_subject_tenant_binding_guard()','identity_link_changed()','identity_authorization_link_guard()','identity_authorization_user_guard()',
-  'identity_user_memberships()','identity_group_revision()','identity_group_record_change()',
   'identity_user_eligibility_guard()','identity_user_record_version()','identity_user_record_changed()','identity_authorization_user_record()','identity_user_eligibility_record()'] LOOP
   IF left(signature,18)='identity_employee_' THEN
    EXECUTE format('ALTER FUNCTION %s SET search_path TO %I,pg_catalog,pg_temp',signature,current_schema());EXECUTE format('ALTER FUNCTION %s SET timezone TO %L',signature,'UTC');EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC',signature);

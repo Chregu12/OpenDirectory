@@ -39,13 +39,13 @@ Ein Bereich ist erst erledigt, wenn seine tatsächlichen Aufrufer umgestellt sin
 
 Nach der Bestätigung werden die aktuelle Einladungsberechtigung mit frischer MFA, der gesperrte Verzeichniseintrag, die ausgewählten Gruppenstände und die ursprüngliche Einladung nacheinander geprüft beziehungsweise verarbeitet. Bereits vorhandene gesperrte Personen verwenden denselben Ablauf. Ein bestätigter Zwischenstand wird bei Fehlern beibehalten; ein unklarer Schreibausgang löst keinen erneuten Anlage- oder Versandversuch aus. Eine bestätigte Ablehnung erlaubt nach erneuter Prüfung die Fortsetzung für genau dieselbe Person. Die gesonderte Erstellung eines Verzeichniseintrags bleibt unter „Weitere Benutzeraktionen“ verfügbar.
 
-Die eingeladene Person setzt ihr Passwort selbst und richtet bei der ersten Anmeldung die vorgeschriebene MFA ein. Die Aktivierung aktualisiert die Statusstände ihrer vorhandenen Gruppen mit Audit und Outbox. Mitgliedschaften und Gruppenmetadaten bleiben dabei erhalten. Diese automatische Folgeänderung war zuvor durch die Einladungs-Schutzregel blockiert; die Regel erlaubt jetzt nur diese überprüfte Folgeänderung. Ihre Empfänger und Funktionsdefinitionen werden ebenfalls geprüft.
+Die eingeladene Person setzt ihr Passwort selbst und richtet bei der ersten Anmeldung die vorgeschriebene MFA ein. Die Aktivierung aktualisiert die Statusstände ihrer vorhandenen Gruppen mit Audit und Outbox. Mitgliedschaften und Gruppenmetadaten bleiben dabei erhalten. Diese automatische Folgeänderung war zuvor durch die Einladungs-Schutzregel blockiert; die Regel erlaubt jetzt nur diese überprüfte Folgeänderung. Ihre Empfänger und Funktionsdefinitionen werden ebenfalls geprüft. Die ursprüngliche Manifeststruktur bleibt für den Start der bisherigen Version bei einer Rückkehr erhalten.
 
 Lokal geprüft am 19. November 2026 (Europe/Zurich):
 
 - Frontend: 166 Jest-Suiten / 3.346 Tests erfolgreich; TypeScript ohne Fehler; beide Lockfiles konsistent, npm-ci-Trockenlauf erfolgreich.
-- Einladungen: 39 PostgreSQL-Fälle erfolgreich, anschließend sechs gezielte Fälle auf dem endgültigen Gruppen-Fix einschließlich Migration-Wiederholung und unterdrückter Outbox; zusammen 40 unterschiedliche Fälle.
+- Einladungen: 39 PostgreSQL-Fälle erfolgreich, anschließend neun gezielte Fälle auf dem endgültigen Gruppen-Fix einschließlich Migration-Wiederholung, unterdrückter Outbox und veränderter Empfängerfunktionen; zusammen 43 unterschiedliche Fälle.
 - Produktionsbuild mit Next.js 16.4.5 und tatsächlichem Chrome: vollständige Aufnahme mit bestehender Gruppe, Passwortvergabe, abgewiesenem falschem Passwort und erzwungener erster MFA-Anmeldung erfolgreich. Desktop- und Mobilvorschau geprüft.
-- Der zusätzliche Browsertest der bestehenden Firmenverwaltung sowie GitHub CI stehen für diesen Stand noch aus.
+- Der zusätzliche Browsertest der bestehenden Firmenverwaltung ist erfolgreich (zwei ausgewählte echte Browserfälle, keine Fehler). GitHub CI steht für diesen Stand noch aus.
 
 Die Prüfung verwendet isolierte Datenbanken, Dienste und Testkonten. Externe Mailzustellung, echte Herstellerlizenzen und die laufende Harbor-Installation werden damit nicht als geprüft erklärt. Next.js und die passende ESLint-Konfiguration wurden auf die benötigte Sicherheitsversion 16.4.5 aktualisiert; beide Paket-Lockfiles sind mitgeführt.

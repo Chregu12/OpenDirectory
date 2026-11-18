@@ -295,7 +295,7 @@ async function employeeGroup(){
  return new GroupMutator(identity,{issuer,revalidate}).add(group.id,{userId:employee.id},groupEtag(group),owner.user,bearer);
 }
 test('employee activation and partial withdrawal refresh existing group snapshots with actual paired audit, retaining membership and metadata',async()=>{
- const group=await employeeGroup();const before=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
+ const group=await employeeGroup();assert.equal((await identityPool.query('SELECT count(*)::int AS count FROM identity_employee_enrollment_manifest')).rows[0].count,23);const before=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
  const members=(await identityPool.query('SELECT * FROM group_members WHERE group_id=$1',[group.id])).rows;
  const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
  const active=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];assert.ok(BigInt(active.revision)>BigInt(before.revision));
@@ -333,5 +333,12 @@ test('suppressed group snapshot delivery rolls back employee activation and pres
  const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query('CREATE RULE suppress_employee_group_outbox AS ON INSERT TO identity_group_outbox DO INSTEAD NOTHING');
  await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});
  assert.deepEqual((await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0],before);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+});
+
+for(const routine of ['identity_user_memberships','identity_group_revision','identity_group_record_change'])test('an altered group snapshot receiver '+routine+' prevents employee activation',async()=>{
+ await employeeGroup();const created=await credentialed();const input={witness:created.credential.witness};
+ await identityPool.query('CREATE OR REPLACE FUNCTION '+routine+'() RETURNS trigger AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql');
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});
  assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
 });
