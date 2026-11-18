@@ -287,3 +287,51 @@ test('the retained admission fingerprint rejects replacement of the original wor
  await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});assert.equal(replaced,true);
  assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);assert.equal((await identityPool.query('SELECT count(*) AS n FROM identity_employee_enrollments')).rows[0].n,'0');
 });
+
+async function employeeGroup(){
+ const revalidate=async(_authorization,user)=>(await new AuthorizationState(identity).state(issuer,user.sub)).tenant;
+ const group=await new DirectoryCreator(identity,{issuer,revalidate}).group({name:'Actual intake group'},owner.user,bearer);
+ const {GroupMutator,groupEtag}=require('../../../identity-service/src/GroupMutator');
+ return new GroupMutator(identity,{issuer,revalidate}).add(group.id,{userId:employee.id},groupEtag(group),owner.user,bearer);
+}
+test('employee activation and partial withdrawal refresh existing group snapshots with actual paired audit, retaining membership and metadata',async()=>{
+ const group=await employeeGroup();const before=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
+ const members=(await identityPool.query('SELECT * FROM group_members WHERE group_id=$1',[group.id])).rows;
+ const created=await credentialed();const input={witness:created.credential.witness};await enrollments.complete(input,claims('complete',input),'Bearer private');
+ const active=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];assert.ok(BigInt(active.revision)>BigInt(before.revision));
+ assert.deepEqual({...active,revision:before.revision,updated_at:before.updated_at},before);
+ assert.deepEqual((await identityPool.query('SELECT * FROM group_members WHERE group_id=$1',[group.id])).rows,members);
+ const evidence=await identityPool.query("SELECT audit.actor,outbox.payload FROM identity_group_audit audit JOIN identity_group_outbox outbox USING(group_id,revision) WHERE audit.group_id=$1 AND audit.revision=$2",[group.id,active.revision]);
+ assert.equal(evidence.rows.length,1);assert.equal(evidence.rows[0].actor,'oauth-provider');assert.equal(evidence.rows[0].payload.deleted,false);
+ await identityPool.query(fs.readFileSync(path.join(__dirname,'../../../identity-service/migrations/055_employee_enrollments.sql'),'utf8'));
+ await enrollments.complete(input,claims('complete',input),'Bearer private');assert.equal((await identityPool.query('SELECT revision FROM groups WHERE id=$1',[group.id])).rows[0].revision,active.revision);
+ const revoke={id:created.invitation.id,revision:created.credential.invitation.revision,reason:'Withdraw actual group member partial enrollment',confirm:true};await store.revoke(revoke,claims('revoke',revoke,bearer),bearer);
+ await enrollments.withdraw(input,claims('withdraw',input),'Bearer private');const withdrawn=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
+ assert.ok(BigInt(withdrawn.revision)>BigInt(active.revision));assert.deepEqual({...withdrawn,revision:before.revision,updated_at:before.updated_at},before);
+ assert.deepEqual((await identityPool.query('SELECT * FROM group_members WHERE group_id=$1',[group.id])).rows,members);
+});
+for(const operation of ['metadata','membership','audit'])test('employee activation cannot carry a separate group '+operation+' write',async()=>{
+ const group=await employeeGroup();const before=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
+ const created=await credentialed();const input={witness:created.credential.witness};let injected=false;
+ interceptIdentityQueries(async(sql,_values,client)=>{if(!injected&&sql.startsWith('INSERT INTO identity_subject_links')){
+  injected=true;
+  if(operation==='metadata')await client.query("UPDATE groups SET name='Unrelated group edit' WHERE id=$1",[group.id]);
+  if(operation==='membership')await client.query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2',[group.id,employee.id]);
+  if(operation==='audit')await client.query("INSERT INTO identity_group_audit(group_id,revision,action,actor,details) VALUES($1,$2,'update','oauth-provider',$3)",[group.id,(await client.query('SELECT revision FROM groups WHERE id=$1',[group.id])).rows[0].revision,{groupId:group.id,revision:before.revision,deleted:false}]);
+ }});
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});assert.equal(injected,true);
+ assert.deepEqual((await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0],before);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+});
+test('a missing group snapshot receiver prevents employee activation before canonical writes',async()=>{
+ await employeeGroup();const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query('DROP TRIGGER identity_group_change_record ON groups');
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+});
+test('suppressed group snapshot delivery rolls back employee activation and preserves its original group version',async()=>{
+ const group=await employeeGroup();const before=(await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0];
+ const created=await credentialed();const input={witness:created.credential.witness};await identityPool.query('CREATE RULE suppress_employee_group_outbox AS ON INSERT TO identity_group_outbox DO INSTEAD NOTHING');
+ await assert.rejects(enrollments.complete(input,claims('complete',input),'Bearer private'),{status:503});
+ assert.deepEqual((await identityPool.query('SELECT * FROM groups WHERE id=$1',[group.id])).rows[0],before);
+ assert.equal((await identityPool.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,false);
+});
