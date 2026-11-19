@@ -359,9 +359,13 @@ async function openLicenseSettings(page, panel) {
 }
 
 async function openPimRoles(page) {
-  await page.goto(origin + '/pim');
+  // A server-rendered button can appear before its client handler is attached.
+  const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/pim/groups' && response.request().method() === 'GET');
+  await page.goto(origin + '/pim'); await initialized;
   await page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true }).click();
-  return page.locator('#pim-advanced');
+  const panel = page.locator('#pim-advanced');
+  await panel.waitFor().catch(async error => { throw new Error(error.message + '\nPIM page: ' + (await page.locator('body').innerText()).slice(0,3000)); });
+  return panel;
 }
 
 async function login(page, username = 'reader') {
