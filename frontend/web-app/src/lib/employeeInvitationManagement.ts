@@ -6,6 +6,7 @@ export type EmployeeInvitationRecord = {
   credentialCreated: boolean; identityConfirmed: boolean;
 };
 export type EmployeeInvitationTarget = { id: string; revision: string; username: string; email: string };
+export type EmployeeInvitationInput = { id: string; userId: string; userRevision: string; loginName: string; durationHours: number; reason: string; confirm: true };
 
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 function validRecord(value: any): value is EmployeeInvitationRecord {
@@ -24,7 +25,7 @@ export function employeeInvitationManagementError(error: any) {
   if (status === 401) return 'Sitzung abgelaufen. Bitte erneut anmelden.';
   if (status === 403 || status === 428) return 'Nur der aktuelle Firmeninhaber mit frischer MFA kann Einladungen verwalten.';
   if (status === 404) return 'Der Eintrag wurde nicht gefunden. Bitte neu laden.';
-  if (status === 409 || status === 412) return 'Einladung oder Benutzer wurde inzwischen geändert. Bitte Liste aktualisieren und erneut prüfen.';
+  if (status === 409 || status === 412) return 'Einladung, Benutzer oder Gruppe wurde inzwischen geändert. Bitte Liste aktualisieren und erneut prüfen.';
   if (status === 429) return 'Zu viele Einladungsaktionen. Bitte später erneut versuchen.';
   return 'Einladungsdienst nicht verfügbar. Prüfe den aktuellen Stand, bevor du eine Aktion wiederholst.';
 }
@@ -48,9 +49,15 @@ export const employeeInvitationManagement = {
       || !Array.isArray(data.invitations) || data.invitations.length > 25 || data.invitations.some((value: any) => !validRecord(value))) throw new Error('Einladungsliste nicht bestätigt.');
     return data as { schemaVersion: 1; employeeInvitationProtocol: 1; page: number; hasMore: boolean; invitations: EmployeeInvitationRecord[] };
   },
-  async create(input: { id: string; userId: string; userRevision: string; loginName: string; durationHours: number; reason: string; confirm: true }) {
+  async get(id: string) {
+    if (!uuid.test(id)) throw new Error('Ungültige Einladungs-ID.');
+    const { data } = await ownerPost<any>('get', { id });
+    if (data?.schemaVersion !== 1 || data?.employeeInvitationProtocol !== 1 || !validRecord(data.invitation) || data.invitation.id !== id) throw new Error('Einladungsstatus nicht bestätigt.');
+    return data.invitation as EmployeeInvitationRecord;
+  },
+  async create(input: EmployeeInvitationInput) {
     const { data } = await ownerPost<any>('create', input);
-    if (data?.schemaVersion !== 1 || data?.employeeInvitationProtocol !== 1 || !validRecord(data.invitation) || typeof data.created !== 'boolean'
+    if (data?.schemaVersion !== 1 || data?.employeeInvitationProtocol !== 1 || !validRecord(data.invitation) || data.invitation.id !== input.id || data.invitation.userId !== input.userId || typeof data.created !== 'boolean'
       || !['sent', 'failed', 'not_configured', 'not_sent'].includes(data.mailStatus)
       || (data.created ? typeof data.invitationToken !== 'string' || !/^[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.invitationToken) || data.mailStatus === 'not_sent' : data.invitationToken !== null || data.mailStatus !== 'not_sent')) throw new Error('Einladungsergebnis nicht bestätigt.');
     return data as { schemaVersion: 1; employeeInvitationProtocol: 1; invitation: EmployeeInvitationRecord; created: boolean; invitationToken: string | null; mailStatus: 'sent' | 'failed' | 'not_configured' | 'not_sent' };

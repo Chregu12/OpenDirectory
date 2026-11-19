@@ -9,6 +9,7 @@ import { ensureSession } from '@/lib/auth';
 import UserListColumn from './UserListColumn';
 import UserDetailPanel, { DirectoryConfirmation } from './UserDetailPanel';
 import DirectoryUserEditor from './DirectoryUserEditor';
+import EmployeeOnboardingDialog from './EmployeeOnboardingDialog';
 
 export default function UsersView({ createRequested = false, onCreateHandled, selectedUserId }: { selectedUserId?: string | null; createRequested?: boolean; onCreateHandled?: () => void } = {}) {
   const { access, can, unavailable, reload: reloadAccess } = useIdentityAccess();
@@ -17,8 +18,10 @@ export default function UsersView({ createRequested = false, onCreateHandled, se
   const [selectedId, setSelectedId] = useState<string | null>(null); const [selected, setSelected] = useState<DirectoryUser | null>(null);
   const [loading, setLoading] = useState(false); const [listError, setListError] = useState(''); const [detailError, setDetailError] = useState('');
   const [creating, setCreating] = useState(false); const [reload, setReload] = useState(0);
+  const [onboarding, setOnboarding] = useState<{ user?: DirectoryUser } | null>(null);
+  useEffect(() => { setOnboarding(null); }, [access?.userId, access?.subject]);
   useEffect(() => {
-    if (createRequested && can('users.create')) { setCreating(true); onCreateHandled?.(); }
+    if (createRequested && can('users.create')) { if (access?.companyOwner && access.userId) setOnboarding({}); else setCreating(true); onCreateHandled?.(); }
   }, [createRequested, access, onCreateHandled]);
   useEffect(() => {
     if (selectedUserId && access?.permissions.includes('users.read')) setSelectedId(selectedUserId);
@@ -54,6 +57,7 @@ export default function UsersView({ createRequested = false, onCreateHandled, se
   const details = <div className="flex flex-col flex-1 min-h-0" style={{ background: 'var(--bg-base, #0e1115)', color: 'var(--text-primary, #e4e6ea)' }}><div className="p-3 text-sm border-b border-[var(--border)]">Quelle: kanonischer Verzeichnisdienst{access.demoMode ? ' · Expliziter Demo-Modus' : ''}</div>
     {detailError ? <p className="p-8" role="alert">{detailError} <button onClick={refresh}>Details neu laden</button></p> :
       <UserDetailPanel key={selectedId || 'none'} user={selected} permissions={access.permissions} actorUserId={access.userId} onReload={refresh} onDenied={reloadAccess}
+        onInvite={access.companyOwner && access.userId ? user => setOnboarding({ user }) : undefined}
         onChanged={(updated, expectedId) => {
           setSelected(current => current?.id === expectedId ? updated : current);
           if (!updated) setSelectedId(current => current === expectedId ? null : current);
@@ -64,9 +68,9 @@ export default function UsersView({ createRequested = false, onCreateHandled, se
     {can('users.read') ? <ABMShell detailSelected={!!selectedId} onBackToList={() => choose(null)} showListColumn listColumn={<UserListColumn users={users} total={total} page={page} selectedId={selectedId} loading={loading} error={listError}
       search={search} enabled={enabled} onSelect={choose} onReload={refresh}
       onSearch={value => { setSearch(value); setPage(1); choose(null); }} onFilter={value => { setEnabled(value); setPage(1); choose(null); }}
-      onPage={value => { setPage(value); choose(null); }} onCreateNew={can('users.create') ? () => setCreating(true) : undefined} />} detailPanel={details} /> :
+      onPage={value => { setPage(value); choose(null); }} onOnboard={can('users.create') && access.companyOwner && access.userId ? () => setOnboarding({}) : undefined} onCreateNew={can('users.create') ? () => setCreating(true) : undefined} />} detailPanel={details} /> :
       <section className="p-8 space-y-5"><h1 className="text-xl">Benutzerverwaltung</h1><p>Keine Berechtigung zum Lesen der Benutzerliste.</p>
-        {can('users.create') && <button onClick={() => setCreating(true)}>Verzeichniseintrag erstellen</button>}
+        {can('users.create') && <>{access.companyOwner && access.userId && <button onClick={() => setOnboarding({})}>Mitarbeiter aufnehmen</button>}<button onClick={() => setCreating(true)}>Verzeichniseintrag erstellen</button></>}
         {createdReceipt && can('users.create') && <section aria-label="Erstellter Verzeichniseintrag"><h2>Gesperrt erstellt: {createdReceipt.username}</h2><p className="break-all">Verzeichnis-ID: {createdReceipt.id}</p><p>Zugangsdaten und Anmelde-Verknüpfung sind nicht provisioniert.</p></section>}
         {resetOnly && <form className="space-y-3" onSubmit={event => { event.preventDefault(); setResetId(knownId); setResetError(''); }}>
           <p>Der Sicherheitsreset benötigt nur eine bekannte kanonische UUID; Benutzerprofile werden nicht geladen.</p>
@@ -78,6 +82,9 @@ export default function UsersView({ createRequested = false, onCreateHandled, se
       setCreating(false); setCreatedReceipt(user); setPage(1); setSearch(''); setEnabled(''); choose(can('users.read') ? user.id : null); refresh();
       toast.success('Verzeichniseintrag gesperrt erstellt. Zugangsdaten werden nicht automatisch provisioniert.');
     }} />}
+    {onboarding && access.companyOwner && access.userId && <EmployeeOnboardingDialog key={onboarding.user?.id || 'new'} actorUserId={access.userId} user={onboarding.user} onClose={() => setOnboarding(null)} onCreated={user => {
+      setCreatedReceipt(user); setPage(1); setSearch(''); setEnabled(''); choose(can('users.read') ? user.id : null); refresh();
+    }} onInvited={refresh} />}
     {resetId && resetOnly && <DirectoryConfirmation title="Sicherheitsreset bestätigen" busy={resetBusy} error={resetError}
       onClose={() => setResetId('')} onConfirm={async () => {
         if (resetBusy || resetError) return; setResetBusy(true);

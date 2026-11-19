@@ -26,10 +26,20 @@ BEGIN
  PERFORM identity_company_group_rule_app_receiving();
  IF current_setting('session_replication_role')<>'origin' OR (SELECT count(*) FROM identity_employee_enrollment_manifest)<>23
   OR EXISTS(SELECT 1 FROM identity_employee_enrollment_manifest WHERE to_regprocedure(signature) IS NULL OR digest<>md5(pg_get_functiondef(to_regprocedure(signature))))
+  -- Pin derived snapshot receivers without expanding the manifest consumed by the previous image on rollback.
+  OR EXISTS(SELECT 1 FROM(VALUES
+   ('identity_user_memberships()','0acd3c89b7eb8a39e95974898bf6d926'),
+   ('identity_group_revision()','a436881cf5983d2f23d93a952f871e4e'),
+   ('identity_group_record_change()','169afe8a448db88265f244a87de0cdfc')
+  ) expected(signature,digest) WHERE NOT EXISTS(SELECT 1 FROM pg_proc routine JOIN pg_language language ON language.oid=routine.prolang
+   WHERE routine.oid=to_regprocedure(expected.signature) AND md5(routine.prosrc)=expected.digest AND NOT routine.prosecdef AND routine.proconfig IS NULL AND language.lanname='plpgsql'))
   OR EXISTS(SELECT 1 FROM pg_class relation WHERE relnamespace=current_schema()::regnamespace AND relkind='r'
    AND(SELECT count(*) FROM pg_trigger WHERE tgrelid=relation.oid AND NOT tgisinternal AND tgenabled='O' AND tgfoid='identity_employee_fence()'::regprocedure
     AND(tgname='aaa_identity_employee_fence' AND tgtype=31 AND NOT tgdeferrable OR tgname='identity_employee_effect_commit' AND tgtype=29 AND tgdeferrable AND tginitdeferred OR tgname='identity_employee_effect_truncate' AND tgtype=34 AND NOT tgdeferrable))<>3)
   OR EXISTS(SELECT 1 FROM(VALUES
+   ('users','identity_user_membership_state','identity_user_memberships()',27,false),
+   ('groups','identity_group_revision_guard','identity_group_revision()',23,false),
+   ('groups','identity_group_change_record','identity_group_record_change()',29,false),
    ('identity_employee_enrollments','employee_enrollment_before','identity_employee_guard()',31,false),
    ('identity_employee_enrollments','employee_enrollment_record','identity_employee_event()',21,false),
    ('identity_employee_enrollments','employee_enrollment_commit','identity_employee_guard()',21,true),
@@ -212,6 +222,28 @@ BEGIN
  ELSIF TG_TABLE_NAME='users' THEN
   IF TG_OP<>'UPDATE' OR data->>'id' IS DISTINCT FROM target OR data-ARRAY['enabled','updated_at','record_revision','authorization_revision','eligibility_revision'] IS DISTINCT FROM to_jsonb(OLD)-ARRAY['enabled','updated_at','record_revision','authorization_revision','eligibility_revision']
    THEN RAISE EXCEPTION 'Only the exact employee status may change' USING ERRCODE='42501';END IF;
+ ELSIF TG_TABLE_NAME='groups' THEN
+  -- Enabling an existing member invalidates its group snapshots without changing membership or metadata.
+  IF TG_OP<>'UPDATE' OR TG_WHEN='BEFORE' AND pg_trigger_depth()<2
+   OR data-ARRAY['revision','updated_at'] IS DISTINCT FROM to_jsonb(OLD)-ARRAY['revision','updated_at']
+   OR identity_tenant_id('group',(data->>'id')::uuid)::text IS DISTINCT FROM witness#>>'{tenant,id}'
+   OR NOT EXISTS(SELECT 1 FROM group_members WHERE group_id=(data->>'id')::uuid AND user_id=target)
+   OR TG_WHEN='AFTER' AND((data->>'revision')::bigint<=OLD.revision OR NOT EXISTS(
+    SELECT 1 FROM identity_group_audit audit JOIN identity_group_outbox outbox USING(group_id,revision)
+    WHERE audit.group_id=NEW.id AND audit.revision=NEW.revision AND audit.actor='oauth-provider' AND audit.action='update'
+     AND outbox.event_type='identity.group.changed' AND outbox.published_at IS NULL
+     AND audit.details=outbox.payload AND outbox.payload=jsonb_build_object('groupId',NEW.id,'revision',NEW.revision::text,'deleted',false)))
+   THEN RAISE EXCEPTION 'Only original employee membership snapshot invalidation allowed' USING ERRCODE='42501';END IF;
+ ELSIF TG_TABLE_NAME IN('identity_group_audit','identity_group_outbox') THEN
+  IF TG_OP<>'INSERT' OR TG_WHEN='BEFORE' AND pg_trigger_depth()<3
+   OR NOT EXISTS(SELECT 1 FROM groups collection JOIN group_members member ON member.group_id=collection.id
+    WHERE collection.id=(data->>'group_id')::uuid AND member.user_id=target AND collection.revision=(data->>'revision')::bigint
+     AND identity_tenant_id('group',collection.id)::text=witness#>>'{tenant,id}')
+   OR TG_TABLE_NAME='identity_group_audit' AND(data->>'action' IS DISTINCT FROM 'update' OR data->>'actor' IS DISTINCT FROM 'oauth-provider'
+    OR data->'details' IS DISTINCT FROM jsonb_build_object('groupId',data->>'group_id','revision',data->>'revision','deleted',false))
+   OR TG_TABLE_NAME='identity_group_outbox' AND(data->>'event_type' IS DISTINCT FROM 'identity.group.changed' OR data->'published_at'<>'null'::jsonb
+    OR data->'payload' IS DISTINCT FROM jsonb_build_object('groupId',data->>'group_id','revision',data->>'revision','deleted',false))
+   THEN RAISE EXCEPTION 'Only actual employee group snapshot evidence allowed' USING ERRCODE='42501';END IF;
  ELSIF TG_TABLE_NAME='identity_subject_links' THEN
   IF data->>'issuer' IS DISTINCT FROM witness#>>'{source,issuer}' OR data->>'subject' IS DISTINCT FROM witness->>'subjectId' OR data->>'user_id' IS DISTINCT FROM target
    OR TG_OP IS DISTINCT FROM(CASE WHEN scope->>'action'='complete' THEN 'INSERT' ELSE 'DELETE' END)

@@ -359,9 +359,13 @@ async function openLicenseSettings(page, panel) {
 }
 
 async function openPimRoles(page) {
-  await page.goto(origin + '/pim');
+  // A server-rendered button can appear before its client handler is attached.
+  const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/pim/groups' && response.request().method() === 'GET');
+  await page.goto(origin + '/pim'); await initialized;
   await page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true }).click();
-  return page.locator('#pim-advanced');
+  const panel = page.locator('#pim-advanced');
+  await panel.waitFor().catch(async error => { throw new Error(error.message + '\nPIM page: ' + (await page.locator('body').innerText()).slice(0,3000)); });
+  return panel;
 }
 
 async function login(page, username = 'reader') {
@@ -394,22 +398,31 @@ test('real employee invitation activates the actual password credential and comp
  try{
   await reviewFirstFactor(ownerPage,ownerUsername);await login(ownerPage,ownerUsername);const owner=await mediated(ownerPage);assert.equal(owner.status,200);
   assert.deepEqual(JSON.parse(Buffer.from(owner.body.access_token.split('.')[1],'base64url')).roles,[]);
-  const created=await ownerPage.request.post(origin+'/api/users',{headers:{Authorization:'Bearer '+owner.body.access_token},data:{username,email:'invited-browser-employee@example.invalid',displayName:'Invited Browser Employee'}});
-  assert.equal(created.status(),201,await created.text());const employee=await created.json();assert.equal(employee.enabled,false);
+  const groupCreation=await ownerPage.request.post(origin+'/api/groups',{headers:{Authorization:'Bearer '+owner.body.access_token},data:{name:'Employee Entry Group'}});assert.equal(groupCreation.status(),201,await groupCreation.text());const entryGroup=await groupCreation.json();
   await ownerPage.goto(origin+'/employee-invitations');await ownerPage.getByRole('heading',{name:'Mitarbeitereinladungen',exact:true}).waitFor();
-  await ownerPage.getByLabel('Suchen',{exact:true}).fill(username);await ownerPage.getByRole('button',{name:'Auswählen',exact:true}).click();
-  await ownerPage.getByLabel('Anmeldename',{exact:true}).fill(username);await ownerPage.getByLabel('Grund',{exact:true}).fill('Actual browser employee entry with the original password and first MFA');
-  await ownerPage.getByLabel('Ich bestätige die Einladung und die ausgewählten Gruppenmitgliedschaften für den Eintrag.',{exact:true}).check();
+  await ownerPage.getByRole('button',{name:'Mitarbeiter aufnehmen',exact:true}).click();const intake=ownerPage.getByRole('dialog',{name:'Mitarbeiter aufnehmen',exact:true});
+  await intake.getByLabel('Name',{exact:true}).fill('Invited Browser Employee');await intake.getByLabel('E-Mail',{exact:true}).fill('invited-browser-employee@example.invalid');
+  assert.equal(await intake.getByLabel('Benutzername',{exact:true}).inputValue(),username);await intake.getByRole('checkbox',{name:'Employee Entry Group',exact:true}).check();
+  await intake.getByRole('button',{name:'Aufnahme prüfen',exact:true}).click();assert.equal(await intake.getByRole('button',{name:'Aufnahme starten',exact:true}).isEnabled(),false);
+  assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM users WHERE username=$1',[username])).rows[0].count,0);
+  await ownerPage.screenshot({path:'/tmp/od-employee-intake-review-desktop.png',fullPage:false});
+  await ownerPage.setViewportSize({width:390,height:844});await ownerPage.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const reviewSize=await intake.locator('.od-modal-panel').evaluate(element=>({scroll:element.scrollWidth,client:element.clientWidth}));assert.ok(reviewSize.scroll<=reviewSize.client,'Intake review must fit mobile width');
+  await ownerPage.screenshot({path:'/tmp/od-employee-intake-review-mobile.png',fullPage:false});await ownerPage.setViewportSize({width:1100,height:900});
+  await intake.getByRole('checkbox',{name:'Ich bestätige die Aufnahme und die ausgewählten Gruppenmitgliedschaften.',exact:true}).check();
+  const userCreation=ownerPage.waitForResponse(result=>new URL(result.url()).pathname==='/api/users'&&result.request().method()==='POST');
   const creation=ownerPage.waitForResponse(result=>new URL(result.url()).pathname==='/api/employee-invitations/manage/create');
-  await ownerPage.getByRole('button',{name:'Einladung erstellen',exact:true}).click();const invitationResponse=await creation;
+  await intake.getByRole('button',{name:'Aufnahme starten',exact:true}).click();const created=await userCreation;assert.equal(created.status(),201,await created.text());const employee=await created.json();assert.equal(employee.enabled,false);
+  const invitationResponse=await creation;
   assert.equal(invitationResponse.status(),201,await invitationResponse.text());const invitation=await invitationResponse.json();assert.equal(invitation.created,true);assert.equal(invitation.mailStatus,'not_configured');await ownerPage.getByText(/E-Mail-Versand ist nicht eingerichtet/).waitFor();
+  const linkedGroup=await ownerPage.request.get(origin+'/api/groups/'+entryGroup.id,{headers:{Authorization:'Bearer '+owner.body.access_token}});assert.equal(linkedGroup.status(),200,await linkedGroup.text());assert.deepEqual((await linkedGroup.json()).members,[employee.id]);
   const link=await ownerPage.getByLabel('Einmaliger Einladungslink',{exact:true}).inputValue();assert.equal(new URL(link).hash.slice(1),invitation.invitationToken);
   assert.equal((await authDb.query('SELECT count(*)::int AS n FROM users')).rows[0].n,0);
   await page.goto(link);await page.getByRole('heading',{name:'Einladung geprüft',exact:true}).waitFor();assert.equal(new URL(page.url()).hash,'');
   const browserSecrets=await page.evaluate(()=>[document.cookie,...Object.values(localStorage),...Object.values(sessionStorage)].join('|'));assert.equal(browserSecrets.includes(invitation.invitationToken),false);
   await page.getByLabel('Neues Passwort',{exact:true}).fill(password);await page.getByLabel('Passwort wiederholen',{exact:true}).fill(password);
   const acceptance=page.waitForResponse(result=>new URL(result.url()).pathname==='/api/employee-invitations/accept');await page.getByRole('button',{name:'Einladung annehmen und Zugang aktivieren',exact:true}).click();const accepted=await acceptance;
-  assert.equal(accepted.status(),200,await accepted.text());await page.getByRole('heading',{name:'Konto aktiviert',exact:true}).waitFor();
+  assert.equal(accepted.status(),200);await page.getByRole('heading',{name:'Konto aktiviert',exact:true}).waitFor();
   const credential=(await authDb.query('SELECT id,is_locked,security_revision FROM users WHERE username=$1',[username])).rows[0];assert.ok(credential);assert.equal(credential.is_locked,false);
   assert.equal((await identityDb.query('SELECT enabled FROM users WHERE id=$1',[employee.id])).rows[0].enabled,true);
   assert.equal((await identityDb.query('SELECT subject FROM identity_subject_links WHERE issuer=$1 AND user_id=$2',[logicalIssuer,employee.id])).rows[0].subject,credential.id);
@@ -1652,6 +1665,7 @@ test('real company registration UI persists one disabled tenant and candidate th
     await page.screenshot({ path: '/tmp/od-business8-company-hierarchy.png', fullPage: true });
     const employeeIds = [];
     await page.goto(origin + '/users');
+    await page.getByText('Weitere Benutzeraktionen', { exact: true }).click();
     for (const [username, name] of [['browser-company-employee-one', 'Company Employee One'], ['browser-company-employee-two', 'Company Employee Two']]) {
       await page.getByRole('button', { name: 'Verzeichniseintrag erstellen', exact: true }).click(); await page.getByLabel('Benutzername', { exact: true }).fill(username); await page.getByLabel('E-Mail', { exact: true }).fill(username + '@example.invalid'); await page.getByLabel('Anzeigename', { exact: true }).fill(name);
       const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/users' && response.request().method() === 'POST'); await page.getByRole('button', { name: 'Speichern', exact: true }).click(); const confirmed = await pending; assert.equal(confirmed.status(), 201, await confirmed.text()); const employee = await confirmed.json(); assert.equal(employee.enabled, false); employeeIds.push(employee.id); await page.getByRole('heading', { name, exact: true }).waitFor();
