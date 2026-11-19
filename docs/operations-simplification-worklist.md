@@ -24,7 +24,7 @@ Die Bestandsaufnahme umfasst die vorhandenen erreichbaren Funktionen und ihre Au
 | --- | --- | --- |
 | Mitarbeiteraufnahme | Person erfassen, Gruppen vorbereiten und Einladung in einem zusammenhängenden Auftrag erstellen; Passwort und MFA richtet die Person selbst ein | Umgesetzt und ausgerollt (1.0.56) |
 | Benutzer, Gruppen und Organisation | Kontextbezogene Änderungen, Vorlagen und nachvollziehbare Mitgliedschafts-/Rollenwirkungen | Bestandsaufnahme |
-| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Firmenrollen-Kontext und Dauervorgaben umgesetzt; CI ausstehend |
+| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Firmenrollen-Kontext und Dauervorgaben ausgerollt (1.0.57); weitere MFA-Abläufe offen |
 | Apps, Lizenzen und Blueprints | Bestehende Regeln einmal einrichten, Zuweisungen und Bestände zusammen prüfen, erlaubte Folgeschritte mit klarer Herkunft | Bestandsaufnahme |
 | Geräte | Registrierung, Benutzerzuordnung, automatische Inventar-/Statusmeldungen, Compliance, Synchronisierung und Rückgabe | Bestandsaufnahme |
 | Austritt und Wiederherstellung | Bestehenden Austrittsablauf mit vollständiger Vorschau, nachvollziehbaren Teilständen und gezielter Wiederaufnahme bedienen | Bestandsaufnahme |
@@ -63,9 +63,11 @@ Beide primären PIM-Aktivierungsbereiche verwenden dieselbe Dauerauswahl: 15 Min
 
 Lokal geprüft:
 
-- Vollständige Frontend-Suite: 168 Suiten / 3.359 Fälle; danach zusätzliche gezielte Prüfungen für frische MFA, fehlende beziehungsweise geänderte Empfänger und exakte Freigabegrenzen erfolgreich.
+- Vollständige Frontend-Suite: 169 Suiten / 3.367 Fälle; zusätzliche gezielte Prüfungen für frische MFA, fehlende beziehungsweise geänderte Empfänger und exakte Freigabegrenzen erfolgreich.
 - Browser-Anmeldedienst: 75 Fälle einschließlich zulässiger Personenrückkehr und abgewiesener zusätzlicher oder kodierter Ziele.
 - 21 gezielte Playwright-Abläufe erfolgreich, einschließlich Desktop und Mobilansicht sowie zehn Stunden, eigener Dauer, unabhängiger Freigabe und Kontextübernahme.
 - Tatsächlicher Produktionsbuild und Chrome mit isolierten OAuth-, Identity- und Datenbankdiensten: Benutzerdetails → Firmenrolle zuweisen → tatsächliche erneute MFA-Anmeldung mit Personenrückkehr → PIM-Berechtigung → Antrag → unabhängige Gruppenfreigabe → eigene Aktivierung erfolgreich. Vor der Bestätigung wurde keine Berechtigung geschrieben.
 
-Die vollständige GitHub-CI und der nächste Rollout stehen für diesen Teilstand noch aus. Weitere MFA- und Verwaltungsabläufe bleiben im Arbeitsplan offen.
+Version 1.0.57 wurde über [PR #13](https://github.com/Chregu12/OpenDirectory/pull/13) nach erfolgreicher [CI](https://github.com/Chregu12/OpenDirectory/actions/runs/44595144130) mit allen 15 Prüfungen ausgerollt. Geprüft sind 62 tatsächliche Browserfälle in neun frisch bereinigten Gruppen, 75 Browser-Anmeldetests, 3.367 Frontend-Fälle und 114 Playwright-Abläufe. Der erweiterte PIM-Test öffnet das Panel per Tastatur, damit nachladende Inhalte keinen Zeigerklick verschieben; die Selbstfreigabe bleibt abgewiesen. Die Blueprint-Auswahl wartet auf Bedienbereitschaft und überwacht Tastaturauswahl und Antwort gemeinsam, ohne unbehandelte Promise-Ablehnung.
+
+Helm-Revision 90: alle elf Deployments bereit, die zehn übrigen Deployment-Spezifikationen unverändert; ausgeführter Produktionsbuild und genaue MFA-Rückkehrroute bestätigt. [Rolloutnachweis](deployment/pim-workflows-1.0.57-2026-11-19.json). Echte produktive Benutzerzuweisungen wurden nicht durchgeführt. Weitere MFA- und Verwaltungsabläufe bleiben im Arbeitsplan offen.

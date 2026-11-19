@@ -2,7 +2,7 @@
 
 This chart packages the core services from `docker-compose.lite.yml` for one Kubernetes release: PostgreSQL, Redis, LLDAP, the identity/auth/device/policy/OAuth services, the API, the web app, and the licensing API and workers.
 
-Verified deployment: [1.0.56 employee intake](../../../docs/deployment/employee-intake-1.0.56-2026-11-19.json).
+Verified deployment: [1.0.57 person-specific PIM workflows](../../../docs/deployment/pim-workflows-1.0.57-2026-11-19.json).
 
 ## Before installation
 

@@ -39,7 +39,7 @@ apps:
     env:
       OAUTH_WEB_ADMIN_USER_IDS: '["27d3f95a-a75d-45ac-a4f9-faeef85f5c54"]'
   web-app:
-    imageTag: "1.0.56-people-3b8261f@sha256:fc6d00ecc3feb9efcf65d80b0e24d9aa75c9fc49d6f8a8afcbede22b556f2fc1"
+    imageTag: "1.0.57-pim-a41a95d@sha256:f92b7c160f56f53ec44c75e8c46b297584576b198a187bec01cb6fbfac881bc2"
   api-backend:
     imageTag: "1.0.10"
   device-service:

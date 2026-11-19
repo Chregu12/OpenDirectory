@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "status": "deployed-and-verified",
+  "release": {
+    "version": "1.0.57",
+    "chartVersion": "0.1.60",
+    "helmRevisionBefore": 89,
+    "namespace": "opendirectory",
+    "automaticRollbackEnabled": true,
+    "backendStorageProtocolsChanged": false,
+    "newSqlMigrationFiles": [],
+    "helmRevisionAfter": 90,
+    "automaticRollbackUsed": false
+  },
+  "source": {
+    "applicationImage": "a41a95dc2da1906938b437430488511bbf7ea5f7",
+    "testedCiHead": "a41a95dc2da1906938b437430488511bbf7ea5f7",
+    "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/13",
+    "mergeCommit": "e02f1bfc989a981c131e49b087ce39b8067057bb",
+    "mergeTreeEqualsTestedTree": true,
+    "testedAndMergedTree": "63cdae0f53f73273a92e587b34194bfd5b1bd20f",
+    "checkpointChangesRuntimeSources": false,
+    "postDeploymentCheckpointChanges": [
+      "deploy/helm/opendirectory-lite/Chart.yaml",
+      "deploy/helm/opendirectory-lite/values.k3s.yaml",
+      "deploy/helm/opendirectory-lite/README.md",
+      "docs/operations-simplification-worklist.md",
+      "docs/deployment/pim-workflows-1.0.57-2026-11-19.json"
+    ]
+  },
+  "ci": {
+    "run": 44595144130,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/44595144130",
+    "status": "completed",
+    "actualBrowserCases": 62,
+    "actualBrowserUniqueNames": 62,
+    "browserFixtureGroupsCleaned": 9,
+    "browserPasses": 62,
+    "browserFailures": 0,
+    "browserAuthCases": 75,
+    "identityCases": 816,
+    "licenseCases": 599,
+    "credentialAndInvitationCases": 65,
+    "frontendUnitTests": 3367,
+    "frontendPlaywrightCases": 114,
+    "conclusion": "success",
+    "successfulJobs": 15,
+    "totalJobs": 15,
+    "oauthCasesIncludingSixNestedCases": 306
+  },
+  "images": {
+    "web-app": {
+      "reference": "harbor.heusser.local/opendirectory/web-app:1.0.57-pim-a41a95d",
+      "imageId": "sha256:b4a21d1af7b769259ec02a14a5357f0bebb3dccc1bbbb07300475a783176eb95",
+      "platform": "linux/amd64",
+      "user": "nextjs",
+      "sourceCommit": "a41a95dc2da1906938b437430488511bbf7ea5f7",
+      "sourceFilesMatched": 458,
+      "allSourceHashesMatch": true,
+      "pushed": true,
+      "registryDigest": "sha256:f92b7c160f56f53ec44c75e8c46b297584576b198a187bec01cb6fbfac881bc2",
+      "remoteConfigurationDigest": "sha256:b4a21d1af7b769259ec02a14a5357f0bebb3dccc1bbbb07300475a783176eb95"
+    }
+  },
+  "scope": {
+    "selectedPerson": "Independent canonical directory lookup; named recipient fixed through renewed MFA; only explicit PIM eligibility in focused person mode, shared administration separately linked",
+    "freshMfaReturn": "Only exact local company-roles userId route added to the sealed login return; extra or encoded targets remain rejected",
+    "duration": "Shared bounded presets and exact custom seconds in primary company-role and group PIM panels",
+    "approvalsAndAudit": "Existing independent approval, self activation, expiry, revocation and audit requirements preserved",
+    "broaderMfaWorkflows": "Other simplification work remains open"
+  },
+  "localValidation": {
+    "frontendFullSuites": 169,
+    "frontendFullTests": 3367,
+    "finalContextTests": 11,
+    "browserAuthCases": 75,
+    "targetedPlaywrightCases": 21,
+    "finalCompanyRolePlaywrightCases": 9,
+    "actualChromeProtectedGroupPim": "passed: real renewed MFA retains selected person; explicit eligibility, independent reviewer-group approval and self activation",
+    "desktopMobileReview": "inspected; assignment button fits viewport at 390px",
+    "imageStartup": "passed: login200 and anonymoussession401/no-store",
+    "blueprintKeyboardSelection": "passed with real browser; UI readiness before response clock; action and response awaited together",
+    "sourceFilesMatched": 458,
+    "typescript": "passed",
+    "advancedPimKeyboardDisclosure": "passed with real browser and canonical self-approval denial"
+  },
+  "preparedManifest": {
+    "resourcesCompared": 49,
+    "changedDeployments": [
+      "opendirectory-web-app"
+    ],
+    "otherDeploymentSpecsUnchanged": 10,
+    "deploymentApplied": true
+  },
+  "productionHumanAssignmentsExecuted": false,
+  "checkedAt": "2026-11-19T20:00:20.032855+00:00",
+  "liveVerification": {
+    "status": "passed",
+    "checkedAt": "2026-11-19T20:00:20.032855+00:00",
+    "helmRevision": 90,
+    "readyDeployments": 11,
+    "otherDeploymentSpecsUnchanged": 10,
+    "actualRuntimeHashesMatch": true,
+    "runtimeFilesMatched": 618,
+    "imageSourceHashesMatch": true,
+    "nextVersion": "16.4.5",
+    "originalEnrollmentManifestShape": 23,
+    "employeeReceiving": "passed",
+    "http": {
+      "/login": 200,
+      "/api/employee-invitations": 200,
+      "/api/identity/access": 401,
+      "selectedPersonLoginStart": 303,
+      "extraReturnParameter": 400
+    },
+    "humanProductionLoginExecuted": false
+  },
+  "productionRuntimeVerification": {
+    "status": "passed",
+    "runtimeFilesMatched": 618,
+    "includes": [
+      "Next server files",
+      "Next static files",
+      "BUILD_ID"
+    ],
+    "imageId": "sha256:b4a21d1af7b769259ec02a14a5357f0bebb3dccc1bbbb07300475a783176eb95",
+    "sourceFilesPreviouslyMatched": 458,
+    "reason": "Source directories are private to root; the production account executes the compiled Next build"
+  },
+  "backup": {
+    "private": true,
+    "databaseArchives": 6,
+    "uploadsSaved": true,
+    "completedAt": "2026-11-19T19:56:49.258880+00:00",
+    "consistentAcrossDatabases": false
+  }
+}
