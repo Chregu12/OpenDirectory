@@ -23,14 +23,13 @@ beforeEach(() => {
   (directoryUsers.get as jest.Mock).mockResolvedValue(person); (directoryUsers.list as jest.Mock).mockResolvedValue({ users: [person], page: 1, total: 1 });
 });
 async function openAssignment() {
-  await screen.findByText('Aufgabe für Employee Example zuweisen'); fireEvent.click(screen.getByRole('button', { name: role.name, exact: true }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Rolle vergeben', exact: true })); return screen.getByRole('alertdialog');
+  await screen.findByText('Aufgabe für Employee Example zuweisen'); fireEvent.click(screen.getByRole('button', { name: 'Zuweisen', exact: true })); return screen.getByRole('alertdialog');
 }
 test('carries the independently loaded person into one explicit eligible assignment without a second recipient search', async () => {
   render(<CompanyRolesView selectedUserId={target} />); const dialog = await openAssignment();
   expect(within(dialog).getByRole('region', { name: 'Bestätigte Person' })).toHaveTextContent(person.email);
   expect(within(dialog).queryByLabelText('Person auswählen')).not.toBeInTheDocument(); expect(directoryUsers.list).not.toHaveBeenCalled();
-  expect(within(dialog).getByLabelText('Vergabeart')).toHaveValue('eligible'); expect(within(dialog).getByRole('button', { name: 'Bestätigen' })).toBeDisabled(); expect(companyPim.assign).not.toHaveBeenCalled();
+  expect(within(dialog).queryByLabelText('Vergabeart')).not.toBeInTheDocument(); expect(within(dialog).getByText(/Für PIM berechtigen/)).toBeInTheDocument();expect(companyRoles.detail).not.toHaveBeenCalled();expect(companyRoles.history).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'Rolle erstellen'})).not.toBeInTheDocument(); expect(within(dialog).getByRole('button', { name: 'Bestätigen' })).toBeDisabled(); expect(companyPim.assign).not.toHaveBeenCalled();
   fireEvent.change(within(dialog).getByLabelText('Begründung'), { target: { value: 'Engineering darf die Leseaufgabe selbst aktivieren' } }); fireEvent.click(within(dialog).getByRole('button', { name: 'Bestätigen' }));
   await waitFor(() => expect(companyPim.assign).toHaveBeenCalledTimes(1));
   expect(companyPim.assign).toHaveBeenCalledWith(actor, tenant, role, { targetType: 'user', targetId: target, scopeType: 'tenant', ouId: null, reason: 'Engineering darf die Leseaufgabe selbst aktivieren', confirm: true, validForSeconds: 2592000 }, expect.any(AbortSignal));
@@ -40,7 +39,7 @@ for (const kind of ['malformed', 'self', 'no-profile-access']) test('does not re
   if (kind === 'no-profile-access') access.permissions = ['company.roles.read', 'company.roles.manage'];
   render(<CompanyRolesView selectedUserId={kind === 'malformed' ? 'not-a-person' : kind === 'self' ? actor : target} />);
   expect(await screen.findByRole('alert')).toHaveTextContent('nicht als Empfänger bestätigt'); expect(directoryUsers.get).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: role.name })); expect(await screen.findByRole('button', { name: 'Rolle vergeben' })).toBeDisabled(); expect(companyPim.assign).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Zuweisen' })).toBeDisabled(); expect(companyPim.assign).not.toHaveBeenCalled();
 });
 for (const invalid of [{ ...person, enabled: false }, { ...person, id: actor }]) test('refuses a disabled or mismatched person response: ' + invalid.id + invalid.enabled, async () => {
   (directoryUsers.get as jest.Mock).mockResolvedValue(invalid); render(<CompanyRolesView selectedUserId={target} />);
@@ -61,5 +60,12 @@ test('a lost assignment response is not repeated and clears the person and confi
 
 test('fresh MFA is required before assignment and returns to the same selected person',async()=>{
  (companyRoles.list as jest.Mock).mockResolvedValue({actorUserId:actor,tenantId:tenant,canManage:false,roles:[role],groups:[],ouPermissions:[],page:1,total:1});render(<CompanyRolesView selectedUserId={target}/>);
- await screen.findByText('Aufgabe für Employee Example zuweisen');expect(screen.getByRole('link',{name:'Anmeldung bestätigen'})).toHaveAttribute('href','/api/auth/oidc/login?returnTo='+encodeURIComponent('/company-roles?userId='+target));expect(screen.queryByRole('button',{name:'Rolle vergeben'})).not.toBeInTheDocument();expect(companyPim.assign).not.toHaveBeenCalled();
+ await screen.findByText('Aufgabe für Employee Example zuweisen');expect(screen.getByRole('link',{name:'Anmeldung bestätigen'})).toHaveAttribute('href','/api/auth/oidc/login?returnTo='+encodeURIComponent('/company-roles?userId='+target));expect(screen.getByRole('button',{name:'Zuweisen'})).toBeDisabled();expect(companyPim.assign).not.toHaveBeenCalled();
+});
+
+test('selected-person mode requires the explicit PIM protocol and keeps general management reachable',async()=>{
+ access.companyPimProtocol=undefined;render(<CompanyRolesView selectedUserId={target}/>);expect(await screen.findByRole('alert')).toHaveTextContent('keine Firmenrollen-PIM-Unterstützung');expect(screen.getByRole('button',{name:'Zuweisen'})).toBeDisabled();expect(screen.getByRole('link',{name:'Allgemeine Rollenverwaltung'})).toHaveAttribute('href','/company-roles');expect(directoryUsers.get).not.toHaveBeenCalled();expect(companyPim.assign).not.toHaveBeenCalled();
+});
+test('changing the selected person closes the old review and never carries an old assignment forward',async()=>{
+ const view=render(<CompanyRolesView selectedUserId={target}/>);await openAssignment();(directoryUsers.get as jest.Mock).mockRejectedValue(new Error('New selected person is unavailable'));view.rerender(<CompanyRolesView selectedUserId="66666666-6666-4666-8666-666666666666"/>);expect(await screen.findByRole('alert')).toHaveTextContent('New selected person');expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();expect(screen.queryByText(/Employee Example/)).not.toBeInTheDocument();expect(companyPim.assign).not.toHaveBeenCalled();
 });
