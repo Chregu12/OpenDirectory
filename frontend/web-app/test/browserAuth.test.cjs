@@ -148,7 +148,7 @@ test('callback verifies identity/access/live state and exposes neither token nor
   assert.match(headers.find(value => value.startsWith(auth.csrfCookie + '=')), /Path=\/;.*SameSite=Strict; Secure$/);
 });
 
-for (const target of ['/applications', '/mfa', '/company-apps']) {
+for (const target of ['/applications', '/mfa', '/company-apps', '/company-roles?userId=22222222-2222-4222-8222-222222222222']) {
   test('a verified new login returns to its sealed local view: ' + target, async () => {
     const response = await callback(undefined, target);
     assert.equal(response.status, 303);
@@ -160,6 +160,12 @@ for (const target of ['https://evil.test', '//evil.test', '/\\evil.test', '/%2F%
   test('login rejects an unsafe return view before contacting the issuer: ' + JSON.stringify(target), async () => {
     await assert.rejects(auth.login(new Request(config.origin + '/api/auth/oidc/login?' + new URLSearchParams({ returnTo: target }))), { status: 400, code: 'browser_auth_return_path_invalid' });
     assert.equal(tokenCalls, 0);
+  });
+}
+for (const suffix of ['&userId=33333333-3333-4333-8333-333333333333', '&next=https://evil.test', '#secret', '\n', '\u2028', '%26next%3Dhttps://evil.test', '/../../login']) {
+  test('selected-person return rejects an extra or encoded destination: '+JSON.stringify(suffix), async()=>{
+    const target='/company-roles?userId=22222222-2222-4222-8222-222222222222'+suffix;
+    await assert.rejects(auth.login(new Request(config.origin+'/api/auth/oidc/login?'+new URLSearchParams({returnTo:target}))),{status:400,code:'browser_auth_return_path_invalid'});assert.equal(tokenCalls,0);
   });
 }
 test('duplicate return views are rejected instead of selecting one', async () => {

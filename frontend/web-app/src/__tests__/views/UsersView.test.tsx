@@ -225,3 +225,13 @@ test('a canonical person deep link loads that exact ID without a write', async (
 test('person sections support keyboard navigation without exposing ungranted administrative tasks',async()=>{
  permissions.push('groups.read');render(<UsersView/>);await userEvent.click(await screen.findByRole('button',{name:'Benutzer employee'}));const overview=await screen.findByRole('tab',{name:'Übersicht'});expect(screen.queryByRole('tab',{name:'Rollen & Rechte'})).not.toBeInTheDocument();overview.focus();await userEvent.keyboard('{ArrowRight}');expect(screen.getByRole('tab',{name:'Gruppen'})).toHaveFocus();expect(screen.getByRole('tab',{name:'Gruppen'})).toHaveAttribute('aria-selected','true');await userEvent.keyboard('{Home}');expect(overview).toHaveFocus();expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Übersicht');
 });
+
+test('selected active people offer contextual company role assignment only to an authorized role manager', async()=>{
+ permissions=['users.read','company.roles.manage'];render(<UsersView />);await select();
+ expect(screen.getByRole('link',{name:'Firmenrolle zuweisen'})).toHaveAttribute('href','/company-roles?userId='+targetId);
+ expect(screen.queryByRole('link',{name:'PIM-Gruppen zuweisen'})).not.toBeInTheDocument();
+});
+
+for(const values of [{enabled:false},{id:actorId}])test('contextual company role assignment excludes disabled accounts and self assignment '+JSON.stringify(values),async()=>{
+ permissions=['users.read','company.roles.manage'];records=[record(values)];render(<UsersView />);await select();expect(screen.queryByRole('link',{name:'Firmenrolle zuweisen'})).not.toBeInTheDocument();
+});

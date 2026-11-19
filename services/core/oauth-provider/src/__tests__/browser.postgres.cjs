@@ -359,10 +359,12 @@ async function openLicenseSettings(page, panel) {
 }
 
 async function openPimRoles(page) {
-  // A server-rendered button can appear before its client handler is attached.
+  // Wait for the PIM view's data, then use the keyboard so loading panels above
+  // the disclosure cannot move a pointer click onto a different element.
   const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/pim/groups' && response.request().method() === 'GET');
   await page.goto(origin + '/pim'); await initialized;
-  await page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true }).click();
+  const disclosure = page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true });
+  await disclosure.press('Enter');
   const panel = page.locator('#pim-advanced');
   await panel.waitFor().catch(async error => { throw new Error(error.message + '\nPIM page: ' + (await page.locator('body').innerText()).slice(0,3000)); });
   return panel;
@@ -373,11 +375,11 @@ async function login(page, username = 'reader') {
   await finishLogin(page, username);
 }
 
-async function finishLogin(page, username) {
+async function finishLogin(page, username, returnPath = '/dashboard') {
   await page.waitForURL(url => url.origin === issuerBase && url.pathname === '/oauth/authorize');
   await page.locator('input[name=username]').fill(username); await page.locator('input[name=password]').fill('disposable-password');
   const otpCode = await nextOtp(username); if (otpCode) await page.locator('input[name=otpCode]').fill(otpCode);
-  await page.getByRole('button', { name: 'Anmelden', exact: true }).click(); await page.waitForURL(origin + '/dashboard');
+  await page.getByRole('button', { name: 'Anmelden', exact: true }).click(); await page.waitForURL(origin + returnPath);
   await page.getByRole('button', { name: 'Benutzermenü' }).waitFor({ timeout: 60000 });
 }
 
@@ -2622,8 +2624,13 @@ test('real own-company blueprint Owner UI registers, independently activates and
         assert.equal(createdBlueprint.outcome, 'applied'); assert.equal(createdBlueprint.revision, '1'); assert.equal(createdBlueprint.publishedVersion, null);
         const blueprintCreateInput = createdBlueprintResponse.request().postDataJSON(); assert.deepEqual(blueprintCreateInput.draft.appPoolIds, [companyPool.id]); assert.deepEqual(JSON.parse(blueprintCreateInput.draft.configurations[0].payloadJson), { minutes: 5, requirePassword: true });
         const selectBlueprint = async target => {
-          const reading = target.waitForResponse(response => new URL(response.url()).pathname === blueprintPath && response.request().method() === 'GET');
-          await target.getByRole('button', { name: blueprintName, exact: true }).click(); const response = await reading; assert.equal(response.status(), 200, await response.text());
+          const choice = target.getByRole('button', { name: blueprintName, exact: true });
+          await choice.click({ trial: true });
+          const [response] = await Promise.all([
+            target.waitForResponse(response => new URL(response.url()).pathname === blueprintPath && response.request().method() === 'GET'),
+            choice.press('Enter'),
+          ]).catch(async error => { throw new Error(error.message + '\nBlueprint page: ' + (await target.locator('body').innerText()).slice(0,6000)); });
+          assert.equal(response.status(), 200, await response.text());
           await target.getByRole('region', { name: 'Blueprint-Details', exact: true }).waitFor(); return { body: await response.json(), etag: response.headers().etag };
         };
         const reloadBlueprint = async target => { await target.getByRole('button', { name: 'Aktuellen Blueprint-Stand neu laden', exact: true }).click(); return selectBlueprint(target); };
@@ -3473,12 +3480,18 @@ test('real protected PIM approver group scopes the actual HTTP queue and complet
   let pending=ownerPage.waitForResponse(response=>new URL(response.url()).pathname==='/api/identity/company-roles'&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();let response=await pending;assert.equal(response.status(),201,await response.text());const role=(await response.json()).role;
   const policy=ownerPage.getByRole('region',{name:'PIM-Genehmigungsrichtlinie'});await policy.getByLabel('Unabhängige Genehmigung erforderlich').check();await policy.getByLabel('Genehmigung durch').selectOption(group.id);await policy.getByRole('button',{name:'Genehmigungsrichtlinie speichern'}).click();dialog=ownerPage.getByRole('alertdialog');await dialog.getByLabel('Begründung').fill('Only the protected Engineering group may review these activations');
   pending=ownerPage.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/approval-policy')&&response.request().method()==='PUT');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),200,await response.text());assert.equal((await response.json()).policy.reviewerGroupId,group.id);
-  await ownerPage.getByRole('button',{name:'Rolle vergeben',exact:true}).click();dialog=ownerPage.getByRole('alertdialog');await dialog.getByLabel('Person auswählen').selectOption(recipient.userId);await dialog.getByLabel('Begründung').fill('The actual employee may request this task through PIM');pending=ownerPage.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/eligibilities')&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),201,await response.text());
+  await ownerPage.goto(origin+'/users?selected='+recipient.userId);await ownerPage.getByRole('link',{name:'Firmenrolle zuweisen',exact:true}).click();
+  const returnPath='/company-roles?userId='+recipient.userId;await ownerPage.waitForURL(origin+returnPath);await ownerPage.getByText('Aufgabe für '+recipient.name+' zuweisen',{exact:true}).waitFor();
+  await ownerPage.goto(origin+'/api/auth/oidc/login?'+new URLSearchParams({returnTo:returnPath}));await finishLogin(ownerPage,username,returnPath);
+  const freshOwner=await mediated(ownerPage);assert.equal(freshOwner.status,200);ownerHeaders.Authorization='Bearer '+freshOwner.body.access_token;
+  await ownerPage.getByText('Aufgabe für '+recipient.name+' zuweisen',{exact:true}).waitFor();await ownerPage.getByRole('row').filter({hasText:role.name}).getByRole('button',{name:'Zuweisen',exact:true}).click();dialog=ownerPage.getByRole('alertdialog');assert.equal(await dialog.getByLabel('Person auswählen').count(),0);assert.equal(await dialog.getByLabel('Vergabeart').count(),0);
+  assert.equal((await identityDb.query('SELECT count(*)::int AS count FROM identity_company_role_eligibilities WHERE target_id=$1',[recipient.userId])).rows[0].count,0);
+await dialog.getByLabel('Begründung').fill('The actual employee may request this task through PIM');pending=ownerPage.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/eligibilities')&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),201,await response.text());
   const signInWithMfa=async(page,name)=>{await login(page,name);const original=await mediated(page);assert.equal(original.status,200);const headers={Authorization:'Bearer '+original.body.access_token,'Content-Type':'application/json'};
    const setup=await fetch(issuerBase+'/api/mfa/enroll',{method:'POST',headers,body:JSON.stringify({username:name,password:'disposable-password'})});assert.equal(setup.status,200,await setup.clone().text());const factor=await setup.json(),counter=Math.floor(Date.now()/30000)-1;
    const confirmed=await fetch(issuerBase+'/api/mfa/confirm',{method:'POST',headers,body:JSON.stringify({code:totp(factor.secret,counter)})});assert.equal(confirmed.status,200,await confirmed.clone().text());rememberFactor(name,factor.secret,counter);await page.context().clearCookies();await login(page,name);
   };
-  const employeePage=await recipientContext.newPage();await signInWithMfa(employeePage,'company-pim-group-recipient');await employeePage.goto(origin+'/pim');const mine=employeePage.getByRole('region',{name:'Eigene Firmenrollen aktivieren'});await mine.getByRole('button',{name:'Aktivieren',exact:true}).click();dialog=employeePage.getByRole('alertdialog');await dialog.getByLabel('Dauer (Minuten)').fill('10');await dialog.getByLabel('Begründung').fill('Read this company directory for the approved Engineering task');pending=employeePage.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/requests')&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),201,await response.text());const request=(await response.json()).request;
+  const employeePage=await recipientContext.newPage();await signInWithMfa(employeePage,'company-pim-group-recipient');await employeePage.goto(origin+'/pim');const mine=employeePage.getByRole('region',{name:'Eigene Firmenrollen aktivieren'});await mine.getByRole('button',{name:'Aktivieren',exact:true}).click();dialog=employeePage.getByRole('alertdialog');await dialog.getByLabel('Gewünschte Dauer').selectOption('custom');await dialog.getByLabel('Dauer (Minuten)').fill('10');await dialog.getByLabel('Begründung').fill('Read this company directory for the approved Engineering task');pending=employeePage.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/requests')&&response.request().method()==='POST');await dialog.getByRole('button',{name:'Bestätigen',exact:true}).click();response=await pending;assert.equal(response.status(),201,await response.text());const request=(await response.json()).request;
   const bypass=await fetch(identityBase+'/api/identity/company-pim-approvals/requests/'+request.id+'/approve',{method:'POST',headers:{...ownerHeaders,'If-Match':'"company-request-'+request.id+'-'+request.revision+'"'},body:JSON.stringify({reason:'An actual owner must not bypass the configured reviewer group',confirm:true})});assert.equal(bypass.status,403);
   const reviewPage=await reviewContext.newPage();await signInWithMfa(reviewPage,'company-pim-group-reviewer');const principal=await mediated(reviewPage);assert.equal(principal.status,200);assert.ok(!JSON.parse(Buffer.from(principal.body.access_token.split('.')[1],'base64url')).roles.includes('pim-approver'));
   const access=await fetch(identityBase+'/api/identity/access',{headers:{Authorization:'Bearer '+principal.body.access_token}});assert.equal(access.status,200);const permissions=(await access.json()).permissions;assert.ok(permissions.includes('company.pim.requests.review'));assert.ok(!permissions.includes('company.roles.manage'));assert.ok(!permissions.includes('pim.requests.review'));

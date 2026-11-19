@@ -9,6 +9,7 @@ import { directoryUsers, DirectoryUser, userName } from '@/lib/directoryUsers';
 import { startLogin } from '@/lib/auth';
 import { DirectoryConfirmation } from './UserDetailPanel';
 import CompanyPimPanel from './CompanyPimPanel';
+import PIMDurationField from './PIMDurationField';
 
 const labels: Record<string, string> = { group_created: 'PIM-Gruppe eingerichtet', group_disabled: 'PIM-Gruppe deaktiviert', pending: 'Wartet auf Freigabe', approved: 'Freigegeben · jetzt aktivieren', active: 'Aktiv', revoked: 'Beendet', denied: 'Abgelehnt', cancelled: 'Abgebrochen', expired: 'Abgelaufen', stale: 'Berechtigung geändert', eligibility_created: 'Benutzer berechtigt', eligibility_revoked: 'Berechtigung entzogen' };
 const durations = [900, 3600, 7200, 14400, 28800, 36000];
@@ -205,8 +206,7 @@ export default function PIMGroupsPanel({ management = false }: { management?: bo
           {form.kind === 'request' && <><div className="od-pim-section-label">Aktivieren</div><dl className="od-pim-summary"><div><dt>Rolle / Gruppe</dt><dd>{form.group.name}</dd></div><div><dt>Zuweisung</dt><dd>Berechtigt</dd></div></dl>
             <p className="od-pim-message">Eine unabhängige Freigabe und frische MFA sind erforderlich. Dein Antrag wird protokolliert.</p>
             {form.group.role === 'admin' && <p className="od-pim-error od-pim-message">Global Security gewährt für die gewählte Dauer volle Adminrechte.</p>}
-            <label htmlFor={tabId + '-duration'}>Dauer (Stunden)</label><div className="od-pim-duration"><input type="range" aria-label="Aktivierungsdauer in Minuten" min={60} max={form.group.maxDurationSeconds} step={60} value={seconds} onChange={event => setSeconds(Number(event.target.value))} />
-              <input id={tabId + '-duration'} type="number" min={1 / 60} max={form.group.maxDurationSeconds / 3600} step="any" required value={seconds / 3600} onChange={event => setSeconds(Math.round(Number(event.target.value) * 3600))} /></div><p className="od-pim-hint">Maximal {durationText(form.group.maxDurationSeconds)}</p>
+            <PIMDurationField seconds={seconds} maximumSeconds={form.group.maxDurationSeconds} disabled={busy} onChange={setSeconds} />
           </>}
           {form.kind === 'create' && <><label>Gruppenname<input className="fluent-input" required minLength={2} maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
             <label>Beschreibung<input className="fluent-input" maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
