@@ -2624,8 +2624,13 @@ test('real own-company blueprint Owner UI registers, independently activates and
         assert.equal(createdBlueprint.outcome, 'applied'); assert.equal(createdBlueprint.revision, '1'); assert.equal(createdBlueprint.publishedVersion, null);
         const blueprintCreateInput = createdBlueprintResponse.request().postDataJSON(); assert.deepEqual(blueprintCreateInput.draft.appPoolIds, [companyPool.id]); assert.deepEqual(JSON.parse(blueprintCreateInput.draft.configurations[0].payloadJson), { minutes: 5, requirePassword: true });
         const selectBlueprint = async target => {
-          const reading = target.waitForResponse(response => new URL(response.url()).pathname === blueprintPath && response.request().method() === 'GET');
-          await target.getByRole('button', { name: blueprintName, exact: true }).click(); const response = await reading; assert.equal(response.status(), 200, await response.text());
+          const choice = target.getByRole('button', { name: blueprintName, exact: true });
+          await choice.click({ trial: true });
+          const [response] = await Promise.all([
+            target.waitForResponse(response => new URL(response.url()).pathname === blueprintPath && response.request().method() === 'GET'),
+            choice.press('Enter'),
+          ]).catch(async error => { throw new Error(error.message + '\nBlueprint page: ' + (await target.locator('body').innerText()).slice(0,6000)); });
+          assert.equal(response.status(), 200, await response.text());
           await target.getByRole('region', { name: 'Blueprint-Details', exact: true }).waitFor(); return { body: await response.json(), etag: response.headers().etag };
         };
         const reloadBlueprint = async target => { await target.getByRole('button', { name: 'Aktuellen Blueprint-Stand neu laden', exact: true }).click(); return selectBlueprint(target); };
