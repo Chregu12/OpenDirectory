@@ -67,6 +67,8 @@ const ROUTES = [
   ['POST', /^\/identity\/company-licenses\/?$/, []],
   ['GET', /^\/identity\/company-blueprints\/?$/, []],
   ['GET', /^\/identity\/device-inventory\/?$/, []],
+  ['GET', /^\/identity\/device-organizational-units\/?$/, []],
+  ['POST', /^\/identity\/device-organizational-units\/?$/, []],
   ['GET', /^\/identity\/device-compliance\/?$/, []],
   ['POST', /^\/identity\/device-inventory\/?$/, []],
   ['POST', /^\/identity\/device-offboarding\/?$/, []],

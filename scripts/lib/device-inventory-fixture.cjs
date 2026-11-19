@@ -13,7 +13,9 @@ async function deviceInventoryFixture(connectionString,identityBase){
   }};
   const {InventoryAuthority}=require('../../services/core/device-service/src/InventoryAuthority');const {DeviceInventory}=require('../../services/core/device-service/src/DeviceInventory');
   const inventory=new DeviceInventory(db,{authority:new InventoryAuthority({endpoint:identityBase+'/api/identity/device-inventory'})});
-  const server=require('../../services/core/device-service/src/inventoryServer').createInventoryApp({db,inventory}).listen(0,'127.0.0.1');
+  const {DeviceOrganizationalUnits}=require('../../services/core/device-service/src/DeviceOrganizationalUnits');const {DeviceOuSource}=require('../../services/core/device-service/src/DeviceOuSource');
+  const organizationalUnits=new DeviceOrganizationalUnits(db,{inventory,authority:new DeviceOuSource({endpoint:identityBase+'/api/identity/device-organizational-units'})});
+  const server=require('../../services/core/device-service/src/inventoryServer').createInventoryApp({db,inventory,organizationalUnits}).listen(0,'127.0.0.1');
   await new Promise((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
   return{db,base:'http://127.0.0.1:'+server.address().port,async close(){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await pool.end();await administration.query('DROP SCHEMA '+schema+' CASCADE');await administration.end();}};
 }
