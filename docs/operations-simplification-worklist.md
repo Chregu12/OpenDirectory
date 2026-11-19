@@ -24,7 +24,7 @@ Die Bestandsaufnahme umfasst die vorhandenen erreichbaren Funktionen und ihre Au
 | --- | --- | --- |
 | Mitarbeiteraufnahme | Person erfassen, Gruppen vorbereiten und Einladung in einem zusammenhängenden Auftrag erstellen; Passwort und MFA richtet die Person selbst ein | Umgesetzt und ausgerollt (1.0.56) |
 | Benutzer, Gruppen und Organisation | Kontextbezogene Änderungen, Vorlagen und nachvollziehbare Mitgliedschafts-/Rollenwirkungen | Bestandsaufnahme |
-| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Bestandsaufnahme |
+| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Firmenrollen-Kontext und Dauervorgaben umgesetzt; CI ausstehend |
 | Apps, Lizenzen und Blueprints | Bestehende Regeln einmal einrichten, Zuweisungen und Bestände zusammen prüfen, erlaubte Folgeschritte mit klarer Herkunft | Bestandsaufnahme |
 | Geräte | Registrierung, Benutzerzuordnung, automatische Inventar-/Statusmeldungen, Compliance, Synchronisierung und Rückgabe | Bestandsaufnahme |
 | Austritt und Wiederherstellung | Bestehenden Austrittsablauf mit vollständiger Vorschau, nachvollziehbaren Teilständen und gezielter Wiederaufnahme bedienen | Bestandsaufnahme |
@@ -52,3 +52,20 @@ Lokal geprüft am 19. November 2026 (Europe/Zurich):
 - Version 1.0.56 läuft unter Helm-Revision 89 mit elf bereiten Deployments. Web- und Identity-Dateien, Next.js 16.4.5, Einladungsfreigabe mit Pflicht-MFA, anonymer Zugriffsschutz und die tatsächliche Datenbank-Schutzregel sind geprüft. Neun andere Deployment-Spezifikationen bleiben gleich. [Release-Nachweis](deployment/employee-intake-1.0.56-2026-11-19.json).
 
 Die Prüfung verwendet isolierte Datenbanken, Dienste und Testkonten. Ein tatsächlicher Mitarbeiterstart mit einem Firmenkonto, externe Mailzustellung und echte Herstellerlizenzen werden durch die isolierten fachlichen Testabläufe nicht bestätigt. Der produktive Rollout und seine Zustandsprüfungen sind im Release-Nachweis getrennt dokumentiert. Next.js und die passende ESLint-Konfiguration wurden auf die benötigte Sicherheitsversion 16.4.5 aktualisiert; beide Paket-Lockfiles sind mitgeführt.
+
+## PIM: Personenkontext und passende Aktivierungsdauer
+
+Fortsetzung am 19. November 2026: Aus den Details einer freigegebenen anderen Person führt „Firmenrolle zuweisen“ direkt zur Rollenverwaltung. Die Person wird über den kanonischen Verzeichnisdienst erneut gelesen und namentlich bestätigt. Die Zuweisung übernimmt genau diesen Empfänger; die erneute Suche und manuelle ID-Eingabe entfallen. Firmenrollenverwaltung und Profil-Leserecht bleiben erforderlich. Gesperrte, fremde oder unbestätigte Personen sowie Selbstzuweisungen werden dadurch nicht freigegeben.
+
+Eine erforderliche frische MFA-Anmeldung führt zur gleichen ausgewählten Person zurück. Dafür akzeptiert der Browser-Anmeldedienst zusätzlich nur die genaue lokale Route `/company-roles?userId=<kanonische UUID>`. Weitere Parameter, Fragmente, kodierte Zusätze, doppelte Ziele und fremde URLs bleiben abgewiesen. Die Rückkehr wird in der ursprünglichen geschützten Anmeldetransaktion gehalten; anschließend werden Person und Berechtigungen frisch gelesen.
+
+Beide primären PIM-Aktivierungsbereiche verwenden dieselbe Dauerauswahl: 15 Minuten, eine Stunde, vier Stunden oder zehn Stunden, soweit die tatsächliche Zuweisung diese Dauer erlaubt. Die konkrete Höchstdauer wird zusätzlich angeboten. Andere Dauern bleiben möglich. Sekundenbegrenzungen werden erhalten und nicht auf eine längere Dauer aufgerundet. Die jeweilige serverseitige Freigabegrenze bleibt zusätzlich wirksam. Zuweisung, unabhängige Genehmigung und eigene Aktivierung behalten ihre getrennten Wirkungen; der tatsächliche Ablauf und der Entzug werden weiterhin aus dem bestehenden Dienstzustand verfolgt.
+
+Lokal geprüft:
+
+- Vollständige Frontend-Suite: 168 Suiten / 3.359 Fälle; danach zusätzliche gezielte Prüfungen für frische MFA, fehlende beziehungsweise geänderte Empfänger und exakte Freigabegrenzen erfolgreich.
+- Browser-Anmeldedienst: 75 Fälle einschließlich zulässiger Personenrückkehr und abgewiesener zusätzlicher oder kodierter Ziele.
+- 21 gezielte Playwright-Abläufe erfolgreich, einschließlich Desktop und Mobilansicht sowie zehn Stunden, eigener Dauer, unabhängiger Freigabe und Kontextübernahme.
+- Tatsächlicher Produktionsbuild und Chrome mit isolierten OAuth-, Identity- und Datenbankdiensten: Benutzerdetails → Firmenrolle zuweisen → tatsächliche erneute MFA-Anmeldung mit Personenrückkehr → PIM-Berechtigung → Antrag → unabhängige Gruppenfreigabe → eigene Aktivierung erfolgreich. Vor der Bestätigung wurde keine Berechtigung geschrieben.
+
+Die vollständige GitHub-CI und der nächste Rollout stehen für diesen Teilstand noch aus. Weitere MFA- und Verwaltungsabläufe bleiben im Arbeitsplan offen.

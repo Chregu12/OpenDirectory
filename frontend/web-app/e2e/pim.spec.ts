@@ -39,7 +39,7 @@ for (const width of [390, 1440]) {
     await activate.click(); const dialog = page.getByRole('dialog', { name: 'Aktivieren – Lizenzen' }); await expect(dialog).toBeVisible();
     const box = await dialog.locator('.od-pim-blade').boundingBox(); expect(box && box.x >= 0 && box.x + box.width <= width + 1).toBeTruthy();
     await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0); await expect(activate).toBeFocused(); expect(writes).toEqual([]);
-    await activate.click(); await dialog.getByLabel('Dauer (Stunden)').fill('10'); await dialog.getByLabel('Begründung').fill('Lizenzzuweisungen für Engineering bearbeiten');
+    await activate.click(); await dialog.getByLabel('Gewünschte Dauer').selectOption('36000'); await dialog.getByLabel('Begründung').fill('Lizenzzuweisungen für Engineering bearbeiten');
     await page.screenshot({ path: test.info().outputPath(`od-pim-entra-${width}-activate.png`) });
     await dialog.getByRole('button', { name: 'Aktivieren', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('wartet auf eine unabhängige Freigabe');

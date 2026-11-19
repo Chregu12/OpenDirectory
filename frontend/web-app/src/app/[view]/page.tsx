@@ -260,7 +260,7 @@ export default function ViewPage() {
         case 'employee-invitations': return <EmployeeInvitationManager />;
         case 'identity':          return <IdentityProviderView />;
         case 'enrollment':        return <EnrollmentHubView />;
-        case 'company-roles':      return <CompanyRolesView />;
+        case 'company-roles':      return <CompanyRolesView selectedUserId={searchParams.get('userId')} />;
         case 'permissions':       return <RolesView />;
         case 'antivirus':         return <AntivirusView />;
         case 'audit':             return <AuditView />;

@@ -38,7 +38,7 @@ test('separates eligible assignments from permanent Global Security in the activ
 test('requests only the chosen group for ten hours after reason and explicit review', async () => {
   (privilegedActivation.request as jest.Mock).mockResolvedValue({ ...approved('pending') }); render(<PIMGroupsPanel />);
   const card = await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' }); fireEvent.click(within(card).getByRole('button', { name: 'Aktivieren' }));
-  fireEvent.change(screen.getByLabelText('Dauer (Stunden)'), { target: { value: '10' } }); fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Lizenzen für den Engineering-Arbeitstag verwalten' } });
+  fireEvent.change(screen.getByLabelText('Gewünschte Dauer'), { target: { value: '36000' } }); fireEvent.change(screen.getByLabelText(/^Begründung/), { target: { value: 'Lizenzen für den Engineering-Arbeitstag verwalten' } });
   expect(privilegedActivation.request).not.toHaveBeenCalled();
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Aktivieren' }));
@@ -92,8 +92,8 @@ test('eligibility expiry bounds the duration offered in the simple form', async 
   const state = fixture(); state.self.eligibilities[0].expiresAt = new Date(Date.now() + 1800000).toISOString();
   (privilegedGroups.load as jest.Mock).mockResolvedValue(state); render(<PIMGroupsPanel />);
   fireEvent.click(within(await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' })).getByRole('button', { name: 'Aktivieren' }));
-  const input = screen.getByLabelText('Dauer (Stunden)'); const maximum = Number(input.getAttribute('max'));
-  expect(maximum).toBeLessThanOrEqual(0.5); expect(maximum).toBeGreaterThan(0.45); expect(input).toHaveValue(maximum);
+  const input = screen.getByLabelText('Gewünschte Dauer'); const maximum = Number((input as HTMLSelectElement).value);
+  expect(maximum).toBeLessThanOrEqual(1800); expect(maximum).toBeGreaterThan(1620); expect(within(input).queryByRole('option', { name: '1 Stunde' })).not.toBeInTheDocument();
 });
 test('tab arrow keys change the selected panel and its keyboard focus', async () => {
   render(<PIMGroupsPanel />); await screen.findByRole('row', { name: 'PIM-Gruppe Lizenzen' });

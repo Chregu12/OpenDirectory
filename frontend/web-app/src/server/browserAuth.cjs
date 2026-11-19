@@ -53,7 +53,8 @@ function cookieValue(request, name) {
 
 function loginReturnPath(value) {
   if (value === undefined || value === null) return '/dashboard';
-  if (typeof value !== 'string' || /\s/.test(value) || !/^\/[a-z][a-z0-9-]{0,63}$/.test(value)
+  const personRole = typeof value === 'string' && /^\/company-roles\?userId=[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
+  if (typeof value !== 'string' || /\s/.test(value) || (!/^\/[a-z][a-z0-9-]{0,63}$/.test(value) && !personRole)
     || ['/api', '/auth', '/login', '/logout'].includes(value)) throw new BrowserAuthError(400, 'browser_auth_return_path_invalid');
   return value;
 }
