@@ -1,0 +1,161 @@
+{
+  "checkedAt": "2026-11-15T04:23:38.473087+00:00",
+  "sourceBaseCommit": "3fc67eadb50e1d02ecb02c7c0fe50057991a0165",
+  "status": "local-verification-passed-policy-version-expectation-corrected-full-linux-followup-pending",
+  "scope": "Organizational device OU metadata assignment, move, removal and retained audit; no OU/group device authorization scopes.",
+  "runtime": {
+    "node": "20.20.2",
+    "postgres": "16.15 Homebrew native disposable clusters",
+    "browser": "Installed Chrome 157.0.8103.78",
+    "os": "macOS arm64"
+  },
+  "checks": {
+    "deviceUnit": {
+      "pass": 663,
+      "fail": 0,
+      "suites": 25
+    },
+    "identityUnit": {
+      "pass": 1280,
+      "fail": 0,
+      "suites": 68
+    },
+    "frontendUnit": {
+      "distinctPass": 50,
+      "fail": 0,
+      "suites": 3,
+      "note": "49 cases passed together; the final eight-case OU panel includes one additional history/write cancellation regression and was run separately."
+    },
+    "typescript": {
+      "pass": true
+    },
+    "nativePostgreSQL": {
+      "tests": 13,
+      "pass": 13,
+      "fail": 0,
+      "skipped": 0,
+      "canonicalHistoryTimeChecked": true
+    },
+    "mockedBrowser": {
+      "newOuCasesPass": 2,
+      "widths": [
+        390,
+        1440
+      ],
+      "existingDeviceCasesPass": 4,
+      "note": "Four unchanged inventory cases completed successfully before the first new selector failed. The corrected two OU cases completed separately."
+    },
+    "actualBrowser": {
+      "tests": 60,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 59,
+      "productionNextBuild": true,
+      "realIdentityOAuthDevicePolicyAndPostgreSQL": true,
+      "liveGraphDisabled": true,
+      "passwordProvider": "Explicit disposable legacy provider fixture for this company-registration test.",
+      "newOuWrites": 3,
+      "deviceAndUserAssignmentUnchanged": true,
+      "originalActorTokenAndPendingReceiptChecked": true,
+      "finalHistoryCancellationFollowup": "passed",
+      "completedTargetedRuns": 2,
+      "finalRunMilliseconds": 289964.096583
+    },
+    "policyUnit": {
+      "pass": 1471,
+      "fail": 0,
+      "suites": 45
+    }
+  },
+  "visualInspection": {
+    "widths": [
+      390,
+      1440
+    ],
+    "result": "No horizontal overflow; OU assignment, explicit actions and retained history readable."
+  },
+  "caughtDuringImplementation": [
+    "Missing real Next proxy routes and Identity route admission, both now covered by first-match routing and middleware tests.",
+    "The new select used an exact label containing option text; browser tests now use its combobox role and accessible name.",
+    "PostgreSQL JSON snapshots retained sub-millisecond timestamp text; API history now uses the same canonical millisecond ISO timestamps as current reads."
+  ],
+  "inheritedCiDriverSelectionAudit": [
+    {
+      "driver": "test-browser.js",
+      "groups": 9,
+      "declaredCases": 60,
+      "omitted": 0,
+      "duplicates": 0
+    },
+    {
+      "driver": "test-postgres.js",
+      "groups": 5,
+      "declaredCases": 300,
+      "omitted": 0,
+      "duplicates": 0
+    }
+  ],
+  "selectionAuditLimit": "Static declared-case selection audit of the PIM parent drivers, including literal loop expansions; this is separate from actual test execution and native TAP file-wrapper totals.",
+  "productionTouched": false,
+  "sourceSha256": {
+    "docs/api/openapi.yaml": "888ae4e4da0aff99bb96fdc8de3eee951b44bb7cdabbe02362e3dd76afb65408",
+    "frontend/web-app/e2e/device-inventory.spec.ts": "849f1b44add696e5eafee875c04b50da6afc9600bc44acb89e05ec44a0e88f2b",
+    "frontend/web-app/e2e/device-organizational-units.spec.ts": "8f88ba40dfa56ad402c7af0b93741c5bb63cda92879921ef821c7db10368ecd3",
+    "frontend/web-app/e2e/fixtures/api.ts": "ccd7a29281c357a6afb2836b0e156db2e251b640a051b0b036bc50d6cb34ca09",
+    "frontend/web-app/next.config.js": "2fdb9943f21d83e6a8914c6ea73330253176da48ae64a20f1106a674b4ad7c21",
+    "frontend/web-app/src/__tests__/deviceReturnsRouting.test.js": "ff2a19b8738ce7569537b0a5cac20932737e7e3fbfe3a2a9547f428255270fc2",
+    "frontend/web-app/src/__tests__/views/DeviceInventoryView.test.tsx": "c61f47bdfd05e3d47cc4a58fe3b3ac17c6847291210bfb3800c3ddf8df76023c",
+    "frontend/web-app/src/__tests__/views/DeviceOrganizationalUnitPanel.test.tsx": "901e713b5e7dccdffd24dd0775861f6045336ee826d14d51a39bd4b7eb776ab9",
+    "frontend/web-app/src/components/views/DeviceInventoryView.tsx": "cec5aa52404a3976c3a7e918b8b9527a36cfcbd9e9bf9851a59d87b9387161a9",
+    "frontend/web-app/src/components/views/DeviceOrganizationalUnitPanel.tsx": "717f7b4e72d30c193e99b2b8a046c52922b9f81c5a3c43e168c27694dcfc7f3e",
+    "frontend/web-app/src/lib/deviceOrganizationalUnits.ts": "76fe9c6dea51780863d38a2a60627ebf0aa2245e3e396e092ba6bdd11091462c",
+    "packages/device-ou-contract.js": "a827c344531bf032055cdc66204d5662d73cd170bea10bf876527fb9ead16a1d",
+    "scripts/lib/device-inventory-fixture.cjs": "ce5eacd6366f8d1a268be649e66456b100bb60b7dc86d741e587825df841c7a5",
+    "services/core/device-service/Dockerfile": "0c61c1587f7fc72c37f3fa704f711957704c4c2eca69d8b6f8855c973173e1a8",
+    "services/core/device-service/migrations/013_device_organizational_units.sql": "996877d80c5c291576d20bd9fad4e7c680c624fb1b890f067c6c93aacfeadd78",
+    "services/core/device-service/scripts/device-ou-openapi.js": "2ba9644282ba494c46f44d95b78a5c21d5e334dae924c5c704264a7f69a20438",
+    "services/core/device-service/src/DeviceOrganizationalUnits.js": "cee9ff336938db679073ca5817962cfe9f97de2dcbe01e4e594911c0e0da125d",
+    "services/core/device-service/src/DeviceOuSource.js": "b48bce00fcb55600b73e93b11681b12287ed341836f695f943478743fbf5fe7a",
+    "services/core/device-service/src/InventoryAuthority.js": "f13df561f65321f9d0d4682332f4badaf146261886a459a02fcc64cc1b6bbb7a",
+    "services/core/device-service/src/__tests__/DeviceOuSource.test.js": "ec0692fb5cfded55ddf937ac81c1e7dd17613076103e9b6dd6fa051feb652fea",
+    "services/core/device-service/src/__tests__/inventoryDb.test.js": "b7e471a156b2cde02f0f8bd79793610a285da1b3a17bb86afbd86b33b559d55d",
+    "services/core/device-service/src/inventoryServer.js": "b0199f5b498b797bfa62b283f7d527304fb85a94cd5d2420c541955c4c8c58fa",
+    "services/core/identity-service/Dockerfile": "37226407ffda911ce49e08f13e46fd4f380bec8c7c2e216489b5fba7b20312fa",
+    "services/core/identity-service/scripts/organization-openapi.js": "9ad11c35c4cf7935885d5db62fbb4e2b41399f4840c419d3150c08025e01e7d3",
+    "services/core/identity-service/scripts/test-postgres.js": "ebcf7db29f94639fd048ad1f2fbcdcdc92eee362824ec845c81c01302c7ed081",
+    "services/core/identity-service/src/DeviceOuAuthority.js": "3b288d217e19c994b981da35f1ab0f0d909bc2b056846380cd849886c0029cb2",
+    "services/core/identity-service/src/__tests__/OrganizationProfileContract.test.js": "e7d298e58f7d0319bbf593044a062f3d9eb166991b48e1a6282ea699b0988a38",
+    "services/core/identity-service/src/__tests__/deviceOrganizationalUnits.postgres.cjs": "2dfd0708ef4885b5fa817fecff1271d4ffcd141ab172286240507837719de658",
+    "services/core/identity-service/src/__tests__/identityAccess.test.js": "9006bc4f77cae963403169b36787409aae37809ceb1e47333b631ec9d2ea5ef1",
+    "services/core/identity-service/src/index.js": "93cbef5a592a49108bd289e5c2a68bf8d2b6e55469ab33a5e1e88f4a385818e8",
+    "services/core/identity-service/src/middleware/identityAccess.js": "589abd0ea5b7ecc4a8bd3447bc47444e4aa6afff325071361ca199166dd27169",
+    "services/core/oauth-provider/src/__tests__/browser.postgres.cjs": "279ec0ce14bda4f99c21e5873129ff3c6567a370c02d2a78beb7b2d692081276",
+    "services/core/policy-service/src/__tests__/CompanyBlueprintAssignmentOpenApi.test.js": "24767714f6049e90c25b84bc4d0941169064f6f95215d7c8822542e184c34813"
+  },
+  "limits": [
+    "The complete Linux CI for this feature source has not run.",
+    "This feature has not been deployed; the separately verified production release is Helm revision 86 / application 1.0.53.",
+    "OU/group role and PIM device scopes, current OU status/deletion dependencies and distributed immediate revocation remain open.",
+    "No live external provider, hardware enrollment, full-platform recovery or WCAG acceptance is established by these tests."
+  ],
+  "ciFollowup": {
+    "initialRunId": 43674585621,
+    "failedJobId": 132692100251,
+    "sourceCommit": "e7330395e10cb58525186804d0f9a36117523d32",
+    "job": "Service Tests",
+    "service": "policy-service",
+    "passedBeforeFailure": 1470,
+    "failed": 1,
+    "cause": "One additional global OpenAPI version assertion in the Policy test still expected 1.39.0 after the generated public contract moved to 1.40.0. The exact assertion is now updated; canonical document equality and reference/operation checks remain unchanged.",
+    "verification": "All 1471 Policy unit cases passed with the canonical service dependencies.",
+    "completeLinuxFollowup": "pending next source run"
+  },
+  "latestBaseCommit": "d97f70a2cca0dac1d611bdb4468631034b00a2f3",
+  "productionPrerequisite": {
+    "release": 86,
+    "appVersion": "1.0.53",
+    "pimPullRequest": 5,
+    "merged": true,
+    "deviceOuFeatureDeployed": false
+  }
+}

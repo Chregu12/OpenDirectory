@@ -122,3 +122,20 @@ test('user group memberships require both user and group read duties before the 
   if(permissions.length===2)expect(next).toHaveBeenCalledTimes(1);else{expect(next).not.toHaveBeenCalled();expect(response.status).toHaveBeenCalledWith(403);}
  }
 });
+
+test.each([
+  ['GET', '/identity/device-organizational-units', 'user', 200],
+  ['POST', '/identity/device-organizational-units', 'user', 200],
+  ['POST', '/identity/device-organizational-units/status', 'user', 200],
+  ['GET', '/identity/device-organizational-units/status', 'user', 404],
+  ['POST', '/identity/device-organizational-units/status', 'application', 403],
+  ['GET', '/identity/device-organizational-units', 'application', 403],
+  ['POST', '/identity/device-organizational-units', 'application', 403],
+  ['PUT', '/identity/device-organizational-units', 'user', 404],
+  ['GET', '/identity/device-organizational-units-forged', 'user', 404],
+])('device OU source admits only its exact human handler: %s %s %s', (method, path, actor_type, status) => {
+  const next = jest.fn(), response = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  requireIdentityAccess({ method, path, user: { sub: 'ordinary-original', actor_type, permissions: [] }, body: {}, query: {}, headers: {} }, response, next);
+  if (status === 200) { expect(next).toHaveBeenCalledTimes(1); expect(response.status).not.toHaveBeenCalled(); }
+  else { expect(next).not.toHaveBeenCalled(); expect(response.status).toHaveBeenCalledWith(status); }
+});
