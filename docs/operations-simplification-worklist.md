@@ -22,7 +22,7 @@ Die Bestandsaufnahme umfasst die vorhandenen erreichbaren Funktionen und ihre Au
 
 | Bereich | Zu vereinfachender Ablauf | Stand |
 | --- | --- | --- |
-| Mitarbeiteraufnahme | Person erfassen, Gruppen vorbereiten und Einladung in einem zusammenhängenden Auftrag erstellen; Passwort und MFA richtet die Person selbst ein | Umgesetzt, CI ausstehend |
+| Mitarbeiteraufnahme | Person erfassen, Gruppen vorbereiten und Einladung in einem zusammenhängenden Auftrag erstellen; Passwort und MFA richtet die Person selbst ein | Umgesetzt und ausgerollt (1.0.56) |
 | Benutzer, Gruppen und Organisation | Kontextbezogene Änderungen, Vorlagen und nachvollziehbare Mitgliedschafts-/Rollenwirkungen | Bestandsaufnahme |
 | PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Bestandsaufnahme |
 | Apps, Lizenzen und Blueprints | Bestehende Regeln einmal einrichten, Zuweisungen und Bestände zusammen prüfen, erlaubte Folgeschritte mit klarer Herkunft | Bestandsaufnahme |
@@ -35,6 +35,8 @@ Ein Bereich ist erst erledigt, wenn seine tatsächlichen Aufrufer umgestellt sin
 
 ## Mitarbeiteraufnahme: umgesetzter Stand
 
+Im produktiven System: **Mitarbeitende → Mitarbeiter aufnehmen** oder **Einladungen → Mitarbeiter aufnehmen**.
+
 „Mitarbeiter aufnehmen“ ist für den aktuellen Firmeninhaber aus der Benutzerverwaltung, der Dashboard-Aktion und den Einladungen erreichbar. Name und E-Mail genügen für die Vorgaben; der vorgeschlagene Benutzername bleibt änderbar. Eigene Gruppen werden ausgewählt. Weitere Angaben bleiben optional. Vor dem Start zeigt eine gemeinsame Vorschau den vollständigen Auftrag.
 
 Nach der Bestätigung werden die aktuelle Einladungsberechtigung mit frischer MFA, der gesperrte Verzeichniseintrag, die ausgewählten Gruppenstände und die ursprüngliche Einladung nacheinander geprüft beziehungsweise verarbeitet. Bereits vorhandene gesperrte Personen verwenden denselben Ablauf. Ein bestätigter Zwischenstand wird bei Fehlern beibehalten; ein unklarer Schreibausgang löst keinen erneuten Anlage- oder Versandversuch aus. Eine bestätigte Ablehnung erlaubt nach erneuter Prüfung die Fortsetzung für genau dieselbe Person. Die gesonderte Erstellung eines Verzeichniseintrags bleibt unter „Weitere Benutzeraktionen“ verfügbar.
@@ -46,6 +48,7 @@ Lokal geprüft am 19. November 2026 (Europe/Zurich):
 - Frontend: 166 Jest-Suiten / 3.346 Tests erfolgreich; TypeScript ohne Fehler; beide Lockfiles konsistent, npm-ci-Trockenlauf erfolgreich.
 - Einladungen: 39 PostgreSQL-Fälle erfolgreich, anschließend neun gezielte Fälle auf dem endgültigen Gruppen-Fix einschließlich Migration-Wiederholung, unterdrückter Outbox und veränderter Empfängerfunktionen; zusammen 43 unterschiedliche Fälle.
 - Produktionsbuild mit Next.js 16.4.5 und tatsächlichem Chrome: vollständige Aufnahme mit bestehender Gruppe, Passwortvergabe, abgewiesenem falschem Passwort und erzwungener erster MFA-Anmeldung erfolgreich. Desktop- und Mobilvorschau geprüft.
-- Der zusätzliche Browsertest der bestehenden Firmenverwaltung ist erfolgreich (zwei ausgewählte echte Browserfälle, keine Fehler). GitHub CI steht für diesen Stand noch aus.
+- Der zusätzliche Browsertest der bestehenden Firmenverwaltung ist erfolgreich. [GitHub CI 44425660338](https://github.com/Chregu12/OpenDirectory/actions/runs/44425660338) ist mit allen 15 Jobs grün: zusätzlich 112 Playwright-Fälle und alle 62 tatsächlichen Browserfälle genau einmal in neun bereinigten Testgruppen; Identity 816, OAuth 306, Lizenzen 599 und Zugangsdaten/Einladungen 65 Fälle.
+- Version 1.0.56 läuft unter Helm-Revision 89 mit elf bereiten Deployments. Web- und Identity-Dateien, Next.js 16.4.5, Einladungsfreigabe mit Pflicht-MFA, anonymer Zugriffsschutz und die tatsächliche Datenbank-Schutzregel sind geprüft. Neun andere Deployment-Spezifikationen bleiben gleich. [Release-Nachweis](deployment/employee-intake-1.0.56-2026-11-19.json).
 
-Die Prüfung verwendet isolierte Datenbanken, Dienste und Testkonten. Externe Mailzustellung, echte Herstellerlizenzen und die laufende Harbor-Installation werden damit nicht als geprüft erklärt. Next.js und die passende ESLint-Konfiguration wurden auf die benötigte Sicherheitsversion 16.4.5 aktualisiert; beide Paket-Lockfiles sind mitgeführt.
+Die Prüfung verwendet isolierte Datenbanken, Dienste und Testkonten. Ein tatsächlicher Mitarbeiterstart mit einem Firmenkonto, externe Mailzustellung und echte Herstellerlizenzen werden durch die isolierten fachlichen Testabläufe nicht bestätigt. Der produktive Rollout und seine Zustandsprüfungen sind im Release-Nachweis getrennt dokumentiert. Next.js und die passende ESLint-Konfiguration wurden auf die benötigte Sicherheitsversion 16.4.5 aktualisiert; beide Paket-Lockfiles sind mitgeführt.

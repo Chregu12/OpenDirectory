@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "status": "deployed-and-verified",
+  "release": {
+    "version": "1.0.56",
+    "chartVersion": "0.1.59",
+    "helmRevisionBefore": 88,
+    "namespace": "opendirectory",
+    "automaticRollbackEnabled": true,
+    "helmRevisionAfter": 89,
+    "automaticRollbackUsed": false,
+    "newSqlMigrationFiles": [],
+    "changedSqlMigrationFiles": [
+      "055_employee_enrollments.sql"
+    ]
+  },
+  "source": {
+    "applicationImages": "3b8261f8607df0f06bb59697568ca28f34a7b1b6",
+    "testedCiHead": "36568f49a114a23a8615c5ca3d432c3acd508d76",
+    "pullRequest": "https://github.com/Chregu12/OpenDirectory/pull/12",
+    "runtimeSourcesUnchangedAfterImage": true,
+    "postImageChanges": [
+      "services/core/oauth-provider/src/__tests__/browser.postgres.cjs"
+    ],
+    "mergeCommit": "38d3283a75d2048bf13215a83b51f5514b3e6e04",
+    "mergeTreeEqualsTestedTree": true,
+    "testedAndMergedTree": "b7daed12d124252519464683f47b7bd4cd8a02d6",
+    "checkpointChangesRuntimeSources": false,
+    "postDeploymentCheckpointChanges": [
+      "deploy/helm/opendirectory-lite/Chart.yaml",
+      "deploy/helm/opendirectory-lite/values.k3s.yaml",
+      "deploy/helm/opendirectory-lite/README.md",
+      "docs/operations-simplification-worklist.md",
+      "docs/deployment/employee-intake-1.0.56-2026-11-19.json"
+    ]
+  },
+  "ci": {
+    "run": 44425660338,
+    "url": "https://github.com/Chregu12/OpenDirectory/actions/runs/44425660338",
+    "status": "completed",
+    "actualBrowserCases": 62,
+    "actualBrowserUniqueNames": 62,
+    "browserFixtureGroupsCleaned": 9,
+    "credentialAndInvitationCases": 65,
+    "licenseCases": 599,
+    "frontendUnitTests": 3346,
+    "frontendPlaywrightCases": 112,
+    "conclusion": "success",
+    "successfulJobs": 15,
+    "totalJobs": 15,
+    "identityCases": 816,
+    "oauthCasesIncludingSixNestedCases": 306
+  },
+  "images": {
+    "identity-service": {
+      "reference": "harbor.heusser.local/opendirectory/identity-service:1.0.56-people-3b8261f",
+      "imageId": "sha256:0ec74b5608ec0c83dac139a1abfa618684621aaa1fdd486f32a6f0ba6d2299bb",
+      "platform": "linux/amd64",
+      "user": "appuser",
+      "sourceCommit": "3b8261f8607df0f06bb59697568ca28f34a7b1b6",
+      "sourceFilesMatched": 233,
+      "allSourceHashesMatch": true,
+      "registryDigest": "sha256:3c1ba3e4910cb930bde9d7526753304f6e977f5255086d7f541aaa99016ae6d8",
+      "remoteConfigurationDigest": "sha256:0ec74b5608ec0c83dac139a1abfa618684621aaa1fdd486f32a6f0ba6d2299bb"
+    },
+    "web-app": {
+      "reference": "harbor.heusser.local/opendirectory/web-app:1.0.56-people-3b8261f",
+      "imageId": "sha256:a4ff03f25874dc34dc30db4f985b76fcce9dd1f27dd00df61137ccc04d805267",
+      "platform": "linux/amd64",
+      "user": "nextjs",
+      "sourceCommit": "3b8261f8607df0f06bb59697568ca28f34a7b1b6",
+      "sourceFilesMatched": 454,
+      "allSourceHashesMatch": true,
+      "registryDigest": "sha256:fc6d00ecc3feb9efcf65d80b0e24d9aa75c9fc49d6f8a8afcbede22b556f2fc1",
+      "remoteConfigurationDigest": "sha256:a4ff03f25874dc34dc30db4f985b76fcce9dd1f27dd00df61137ccc04d805267"
+    }
+  },
+  "scope": {
+    "employeeIntake": "One reviewed person/group/invitation workflow with retained partial outcomes and no automatic ambiguous write retry",
+    "existingDirectoryCreation": "Still available under advanced user actions",
+    "activationFix": "Tenant-bound derived group snapshot invalidation with paired audit/outbox; group metadata and memberships retained",
+    "firstLoginMfa": "Required; verified through the actual confidential browser callback",
+    "broaderOperationSimplification": "Other workflow families remain open"
+  },
+  "localValidation": {
+    "frontendJestSuites": 166,
+    "frontendJestTests": 3346,
+    "typescript": "passed",
+    "npmCiDryRun": "passed",
+    "invitationPostgresUniqueCases": 43,
+    "actualBrowserIntake": "passed on final application head",
+    "existingCompanyManagementBrowser": "passed",
+    "pimReadinessBrowser": "passed",
+    "pimRunnerPartitionTests": 2,
+    "desktopAndMobileReview": "inspected",
+    "webImageStartup": "passed; login 200, anonymous session 401 with no-store"
+  },
+  "identityMigrationRehearsal": {
+    "status": "passed",
+    "sourceCommit": "3b8261f8607df0f06bb59697568ca28f34a7b1b6",
+    "phases": [
+      {
+        "phase": "upgrade",
+        "actualImageMigrationRunnerPassed": true,
+        "originalManifestShape": 23,
+        "tablesUnchanged": 132,
+        "rowsUnchanged": 252
+      },
+      {
+        "phase": "rollback",
+        "actualImageMigrationRunnerPassed": true,
+        "originalManifestShape": 23,
+        "tablesUnchanged": 132,
+        "rowsUnchanged": 252
+      },
+      {
+        "phase": "upgrade-again",
+        "actualImageMigrationRunnerPassed": true,
+        "originalManifestShape": 23,
+        "tablesUnchanged": 132,
+        "rowsUnchanged": 252
+      }
+    ],
+    "database": "Isolated PostgreSQL 15 restored from private identity backup",
+    "manifestMetadataExcluded": true,
+    "productionChanged": false,
+    "checkedAt": "2026-11-18T23:54:27.682573+00:00"
+  },
+  "preparedManifest": {
+    "resourcesCompared": 49,
+    "changedDeployments": [
+      "opendirectory-identity-service",
+      "opendirectory-web-app"
+    ],
+    "otherDeploymentSpecsUnchanged": 9,
+    "deploymentApplied": true
+  },
+  "externalAcceptance": {
+    "realMailDelivery": "not confirmed",
+    "manufacturerLicensing": "not confirmed by isolated intake tests",
+    "productionHumanIntake": "not executed"
+  },
+  "checkedAt": "2026-11-19T00:51:47.188944+00:00",
+  "liveVerification": {
+    "status": "passed",
+    "checkedAt": "2026-11-19T00:51:47.188944+00:00",
+    "helmRevision": 89,
+    "readyDeployments": 11,
+    "otherDeploymentSpecsUnchanged": 9,
+    "actualSourceHashesMatch": true,
+    "nextVersion": "16.4.5",
+    "originalEnrollmentManifestShape": 23,
+    "employeeReceiving": "passed",
+    "http": {
+      "/login": 200,
+      "/api/employee-invitations": 200,
+      "/api/identity/access": 401
+    },
+    "humanProductionLoginExecuted": false
+  },
+  "backup": {
+    "private": true,
+    "databaseArchives": 6,
+    "uploadsSaved": true,
+    "completedAt": "2026-11-19T00:50:20.676362+00:00",
+    "consistentAcrossDatabases": false
+  }
+}
