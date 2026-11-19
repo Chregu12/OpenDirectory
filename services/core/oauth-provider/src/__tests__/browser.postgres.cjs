@@ -359,10 +359,12 @@ async function openLicenseSettings(page, panel) {
 }
 
 async function openPimRoles(page) {
-  // A server-rendered button can appear before its client handler is attached.
+  // Wait for the PIM view's data, then use the keyboard so loading panels above
+  // the disclosure cannot move a pointer click onto a different element.
   const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/identity/pim/groups' && response.request().method() === 'GET');
   await page.goto(origin + '/pim'); await initialized;
-  await page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true }).click();
+  const disclosure = page.getByRole('button', { name: 'Weitere Rollen und Richtlinien', exact: true });
+  await disclosure.press('Enter');
   const panel = page.locator('#pim-advanced');
   await panel.waitFor().catch(async error => { throw new Error(error.message + '\nPIM page: ' + (await page.locator('body').innerText()).slice(0,3000)); });
   return panel;
