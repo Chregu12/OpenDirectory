@@ -1,4 +1,5 @@
 'use strict';
+const Scope=require('./DeviceScope');
 const {randomUUID,randomBytes,createHash}=require('node:crypto');
 const {validUuid}=require('../../../../packages/identity-authorization-contract');
 const {DeviceInventory}=require('./DeviceInventory');
@@ -18,18 +19,18 @@ class DeviceSync {
  async connection(client,deviceId,tenantId){return (await client.query('SELECT connection.*,device_sync_generation(connection) AS generation FROM device_agent_connections connection WHERE device_id=$1 AND tenant_id=$2',[deviceId,tenantId])).rows[0];}
  async list(deviceId,query,user,authorization){
   id(deviceId);if(Object.keys(query).some(key=>key!=='page')||query.page!==undefined&&(typeof query.page!=='string'||!/^[1-9][0-9]*$/.test(query.page)||Number(query.page)>1000000))fail(400,'Exact sync page required');
-  const source=await this.inventory.authorized(user,authorization,'devices.inventory.read');const page=Number(query.page||1);
-  const result=await this.database.transaction(async client=>{await this.receiving(client);await this.inventory.current(client,source.tenant.id,deviceId);const connection=await this.connection(client,deviceId,source.tenant.id);const checkedAt=iso((await client.query('SELECT clock_timestamp() AS moment')).rows[0].moment);
+  const source=await this.inventory.authorized(user,authorization,'devices.inventory.read');const page=Number(query.page||1);let scope;
+  const result=await this.database.transaction(async client=>{await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',deviceId);await this.inventory.current(client,source.tenant.id,deviceId);const connection=await this.connection(client,deviceId,source.tenant.id);const checkedAt=iso((await client.query('SELECT clock_timestamp() AS moment')).rows[0].moment);
    const active=Boolean(connection?.credential_hash&&!connection.revoked_at&&new Date(connection.credential_expires_at).getTime()>Date.parse(checkedAt));
    const total=Number((await client.query('SELECT count(*) AS count FROM device_sync_requests WHERE device_id=$1 AND tenant_id=$2',[deviceId,source.tenant.id])).rows[0].count);
    const rows=(await client.query('SELECT request.*,device_sync_status(request,connection,$3::timestamptz) AS effective_status FROM device_sync_requests request LEFT JOIN device_agent_connections connection ON connection.device_id=request.device_id AND connection.tenant_id=request.tenant_id WHERE request.device_id=$1 AND request.tenant_id=$2 ORDER BY request.created_at DESC,request.id DESC LIMIT 10 OFFSET $4',[deviceId,source.tenant.id,checkedAt,(page-1)*10])).rows;
-   return {schemaVersion:1,syncProtocol:1,actorUserId:source.actorUserId,tenantId:source.tenant.id,deviceId,checkedAt,connectionEtag:active?connectionEtag(deviceId,connection.generation):null,page,limit:10,total,requests:rows.map(job)};
-  },{readOnly:true});await this.inventory.checkpoint(source,user,authorization);return result;
+   scope=await Scope.pin(client,source,'devices.inventory.read',[deviceId]);return {schemaVersion:1,syncProtocol:1,actorUserId:source.actorUserId,tenantId:source.tenant.id,deviceId,checkedAt,connectionEtag:active?connectionEtag(deviceId,connection.generation):null,page,limit:10,total,requests:rows.map(job)};
+  },{readOnly:true});await this.inventory.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
  }
  async write(deviceId,input,expected,user,authorization,correlationId,requestId=null){
   id(deviceId);if(requestId)id(requestId);const reason=decision(input);if(!expected)fail(428,'Current sync connection or request version required');
-  const source=await this.inventory.authorized(user,authorization,'devices.inventory.create');
-  return this.database.transaction(async client=>{await this.receiving(client);await this.inventory.current(client,source.tenant.id,deviceId,true);await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 FOR UPDATE',[deviceId]);
+  let source=await this.inventory.authorized(user,authorization,'devices.inventory.create');
+  return this.database.transaction(async client=>{await this.receiving(client);const current=await this.inventory.current(client,source.tenant.id,deviceId,true);source=await Scope.bind(client,this.inventory,source,'devices.inventory.create',user,authorization,deviceId,String(current.row.inventory_revision));await client.query('SELECT device_id FROM device_agent_connections WHERE device_id=$1 FOR UPDATE',[deviceId]);
    let prior=null;
    if(requestId){prior=(await client.query('SELECT * FROM device_sync_requests WHERE id=$1 AND device_id=$2 AND tenant_id=$3 FOR UPDATE',[requestId,deviceId,source.tenant.id])).rows[0];if(!prior)fail(404,'Own sync request not found');if(expected!==requestEtag(prior))fail(412,'Sync request changed; reload');}
    const connection=await this.connection(client,deviceId,source.tenant.id);
@@ -41,11 +42,11 @@ class DeviceSync {
   },{beforeCommit:()=>this.inventory.checkpoint(source,user,authorization)});
  }
  async history(deviceId,requestId,query,user,authorization){
-  id(deviceId);id(requestId);if(Object.keys(query).length)fail(400,'No sync history selectors');const source=await this.inventory.authorized(user,authorization,'devices.inventory.read');
-  const result=await this.database.transaction(async client=>{await this.receiving(client);await this.inventory.current(client,source.tenant.id,deviceId);if(!(await client.query('SELECT id FROM device_sync_requests WHERE id=$1 AND device_id=$2 AND tenant_id=$3',[requestId,deviceId,source.tenant.id])).rows.length)fail(404,'Own sync request not found');
+  id(deviceId);id(requestId);if(Object.keys(query).length)fail(400,'No sync history selectors');const source=await this.inventory.authorized(user,authorization,'devices.inventory.read');let scope;
+  const result=await this.database.transaction(async client=>{await this.receiving(client);await Scope.requireDevice(client,source,'devices.inventory.read',deviceId);await this.inventory.current(client,source.tenant.id,deviceId);if(!(await client.query('SELECT id FROM device_sync_requests WHERE id=$1 AND device_id=$2 AND tenant_id=$3',[requestId,deviceId,source.tenant.id])).rows.length)fail(404,'Own sync request not found');
    const rows=(await client.query('SELECT id,action,actor_user_id,reason,correlation_id,created_at FROM device_sync_events WHERE request_id=$1 AND device_id=$2 AND tenant_id=$3 ORDER BY created_at,id',[requestId,deviceId,source.tenant.id])).rows;if(rows.length>6)fail(503,'Sync transition history unavailable');
-   return {schemaVersion:1,syncProtocol:1,actorUserId:source.actorUserId,tenantId:source.tenant.id,deviceId,requestId,events:rows.map(row=>({id:row.id,action:row.action,actorUserId:row.actor_user_id,reason:row.reason,correlationId:row.correlation_id,createdAt:iso(row.created_at)}))};
-  },{readOnly:true});await this.inventory.checkpoint(source,user,authorization);return result;
+   scope=await Scope.pin(client,source,'devices.inventory.read',[deviceId]);return {schemaVersion:1,syncProtocol:1,actorUserId:source.actorUserId,tenantId:source.tenant.id,deviceId,requestId,events:rows.map(row=>({id:row.id,action:row.action,actorUserId:row.actor_user_id,reason:row.reason,correlationId:row.correlation_id,createdAt:iso(row.created_at)}))};
+  },{readOnly:true});await this.inventory.checkpoint(source,user,authorization);await Scope.verify(this.database,source,'devices.inventory.read',scope);return result;
  }
  async claim(input,authorization,correlationId){
   if(!input||Array.isArray(input)||Object.keys(input).length!==1)fail(400,'Exact sync device required');id(input.deviceId);const tokenHash=credential(authorization);const token='odsl_'+this.secret();

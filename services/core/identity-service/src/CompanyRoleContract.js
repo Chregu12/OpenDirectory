@@ -6,7 +6,9 @@ const { INVENTORY_PERMISSIONS } = require('../../../../packages/device-inventory
 const { PERMISSIONS: COMPLIANCE_PERMISSIONS } = require('../../../../packages/device-compliance-contract');
 const DEVICE_PERMISSIONS = Object.freeze([...INVENTORY_PERMISSIONS, ...COMPLIANCE_PERMISSIONS]);
 const PERMISSIONS = Object.freeze([...COMPANY_DIRECTORY_PERMISSIONS, ...DEVICE_PERMISSIONS]);
+const SCOPE_TYPES = Object.freeze(['tenant', 'ou', 'device-ou']);
 const OU_PERMISSIONS = Object.freeze(['users.read', 'users.update', 'users.status.manage']);
+const DEVICE_OU_PERMISSIONS = Object.freeze(['devices.inventory.read', 'devices.inventory.create', 'devices.inventory.assign', 'devices.compliance.read']);
 function fail(status, code) { throw Object.assign(new Error(code), { status, code }); }
 function exact(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length
@@ -32,8 +34,8 @@ function definition(input, creating = false) {
 }
 function assignment(input) {
   exact(input, ['targetType', 'targetId', 'scopeType', 'ouId', 'durationSeconds', 'reason', 'confirm']);
-  if (!['user', 'group'].includes(input.targetType) || !['tenant', 'ou'].includes(input.scopeType)
-    || input.scopeType === 'tenant' && input.ouId !== null || input.scopeType === 'ou' && !validUuid(input.ouId)
+  if (!['user', 'group'].includes(input.targetType) || !SCOPE_TYPES.includes(input.scopeType)
+    || input.scopeType === 'tenant' && input.ouId !== null || input.scopeType !== 'tenant' && !validUuid(input.ouId)
     || !Number.isInteger(input.durationSeconds) || input.durationSeconds < 60 || input.durationSeconds > 36000) fail(400, 'invalid_company_role_assignment');
   return { targetType: input.targetType, targetId: identifier(input.targetId), scopeType: input.scopeType,
     ouId: input.ouId === null ? null : identifier(input.ouId), durationSeconds: input.durationSeconds, reason: explanation(input), confirm: true };
@@ -62,4 +64,4 @@ function page(input = {}) {
   if (typeof selected !== 'string' || !/^[1-9][0-9]*$/u.test(selected) || Number(selected) > 1000000 || input.limit !== undefined && input.limit !== '25') fail(400, 'invalid_company_role_page');
   return { page: Number(selected), limit: 25, search: input.search === undefined ? '' : text(input.search, 0, 255) };
 }
-module.exports = { PERMISSIONS, DEVICE_PERMISSIONS, OU_PERMISSIONS, identifier, definition, assignment, eligibility, activation, decision, group, etag, expected, page, fail };
+module.exports = { PERMISSIONS, DEVICE_PERMISSIONS, DEVICE_OU_PERMISSIONS, SCOPE_TYPES, OU_PERMISSIONS, identifier, definition, assignment, eligibility, activation, decision, group, etag, expected, page, fail };

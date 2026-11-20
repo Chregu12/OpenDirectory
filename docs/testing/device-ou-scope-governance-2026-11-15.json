@@ -1,0 +1,80 @@
+{
+  "checkedAt": "2026-11-15T16:11:51.089258+00:00",
+  "status": "six-native-governance-cases-and-three-six-case-linux-groups-pass-full-ci-pending",
+  "baseSource": "c3aba45924b0fea6fcd3b2a183402f4fd3c582d8",
+  "productionCodeChanged": false,
+  "productionTouched": false,
+  "finding": "The existing identity_company_role_ous marker, identity_company_role_protected check and directory guard already protect device OU grant/eligibility roots, their descendants and new parents. No duplicate governance table or permission bypass is necessary.",
+  "verification": {
+    "native": {
+      "tests": 186,
+      "pass": 6,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 180,
+      "totalMilliseconds": 38945.7805
+    },
+    "runtime": "Actual isolated PostgreSQL16.15; Node20.20.2; existing canonical Identity/Device classes",
+    "baseline": "All original180 native case definitions remain byte-identical to c3aba45, whose full native180-case run passed separately. This focused run is not a complete186-case run.",
+    "linux": {
+      "run": "https://github.com/Chregu12/OpenDirectory/actions/runs/43731688390",
+      "head": "3d4367867c218e17700f6ae2659e69da6bfd60e6",
+      "source": "a3ff91c88e9d061d6a96446ac55404e4d4a976fe",
+      "treeDifference": "Only .github/workflows/ci.yml; product and test sources unchanged",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 132865318706,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 57255.059467
+        },
+        {
+          "id": 132865318883,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 57449.935498
+        },
+        {
+          "id": 132865319060,
+          "tests": 186,
+          "pass": 6,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 180,
+          "totalMilliseconds": 41312.604621
+        }
+      ]
+    }
+  },
+  "cases": [
+    "Ordinary and claimed admin labels cannot import an outside OU, export a child, rename a device role root or remove a protected child",
+    "A separate canonical OU and role manager changes current scope only via actual OU mutation with actor, original MFA, before/after and pending outbox; it gains no inventory rights",
+    "An eligibility-only PIM root is protected before activation and after eligibility withdrawal",
+    "Withdrawing the last grant retains the protected namespace; only a new explicit grant returns authority",
+    "An active directory PIM editor cannot borrow its lease as independent role-management authority",
+    "A genuine original manager MFA deadline expiring after DML rolls back the hierarchy change and its evidence at physical commit"
+  ],
+  "fixtureNotes": [
+    "The first run referenced an absent role-use outbox and the wrong directory list field. Both fixture assumptions were corrected against the actual schema/DTO before the successful run. No product safeguard changed."
+  ],
+  "sourceSha256": {
+    "services/core/identity-service/src/__tests__/companyRoles.postgres.cjs": "40370760345d645f4241169d1fb0e8d00d92571ff3c095ff0c7977e42097f1fa",
+    "services/core/identity-service/src/CompanyRoleAuthority.js": "a15dd4e4afd2bd831a0a754e07186172d0e07f977b8e60c7c540d2e8ed4195ea",
+    "services/core/identity-service/migrations/057_company_roles.sql": "447ecce9593dc4323748e882abffc2906afca262a1b3edce8d7e08e823cee3fa",
+    "services/core/identity-service/migrations/062_device_ou_scopes.sql": "52f85ee22477cd9f5cc9b3b5310c59e9763adc908247b95e7ff46cc96916a4ac"
+  },
+  "limits": [
+    "The complete newest-source CI remains pending; each targeted Linux group intentionally skips the other180 cases.",
+    "Cross-service device references and OU deletion coordination are still open. An OU hierarchy governance check is not a Device-database deletion fence.",
+    "Default scoped reception, public scoped capabilities, GUI scope selection and actual signed scoped browser acceptance remain unreleased.",
+    "Native fixture actors are not an actual signed OAuth/browser acceptance test.",
+    "The full original BR/WF objective remains open."
+  ]
+}

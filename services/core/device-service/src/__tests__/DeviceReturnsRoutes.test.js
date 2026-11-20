@@ -53,13 +53,21 @@ test('returns default derives only the trusted existing inventory origin', () =>
   const inventory = { authority: { endpoint: new URL('https://canonical.identity.test/api/identity/device-inventory') } };
   const service = new DeviceReturns({}, { inventory }); expect(service.authority.endpoint.href).toBe('https://canonical.identity.test/api/identity/device-offboarding'); expect(service.inventory).toBe(inventory);
 });
+test('an upgraded return receiver requires the actual SQL protocol and never falls back to legacy readiness', async () => {
+  const inventory = { authority: { scoped: true, endpoint: new URL('https://canonical.identity.test/api/identity/device-inventory') } };
+  const service = new DeviceReturns({}, { inventory }); expect(service.authority.scoped).toBe(true);
+  const client = { query: jest.fn().mockResolvedValue({ rows: [] }) };
+  await service.receiving(client); expect(client.query).toHaveBeenCalledWith('SELECT device_returns_receiving(2)');
+  client.query.mockReset().mockRejectedValue(Object.assign(new Error('Missing SQL protocol'), { code: '42883' }));
+  await expect(service.receiving(client)).rejects.toMatchObject({ status: 503 }); expect(client.query).toHaveBeenCalledTimes(1);
+});
 test('history exposes the stored event version separately from the envelope schema version', async () => {
-  const source = { actorUserId: randomUUID(), tenant: { id: randomUUID() } }; const eventId = randomUUID(); const deviceId = randomUUID(); const assignmentId = randomUUID(); const correlationId = randomUUID();
+  const source = { schemaVersion:1,permissions:['devices.inventory.read'],actorUserId: randomUUID(), tenant: { id: randomUUID() } }; const eventId = randomUUID(); const deviceId = randomUUID(); const assignmentId = randomUUID(); const correlationId = randomUUID();
   const createdAt = new Date('2026-10-19T12:00:00.000Z'); const after = { revision: '1', status: 'requested' };
   const client = { query: jest.fn().mockResolvedValueOnce({ rows: [{ count: '1' }] }).mockResolvedValueOnce({ rows: [{ id: eventId, tenant_id: source.tenant.id, request_id: requestId, device_id: deviceId, assignment_id: assignmentId,
     type: 'device.return.requested', version: 1, actor_user_id: source.actorUserId, correlation_id: correlationId, created_at: createdAt, before_state: null, after_state: after, inventory_operation_id: null, reason: 'Collect original laptop' }] }) };
   const service = new DeviceReturns({ transaction: operation => operation(client) }, { inventory: {}, authority: {} });
-  jest.spyOn(service, 'initial').mockResolvedValue(source); jest.spyOn(service, 'receiving').mockResolvedValue(); jest.spyOn(service, 'readTask').mockResolvedValue(); jest.spyOn(service, 'checkpoint').mockResolvedValue();
+  jest.spyOn(service, 'initial').mockResolvedValue(source); jest.spyOn(service, 'receiving').mockResolvedValue(); jest.spyOn(service, 'visibleTask').mockResolvedValue({state:{device_id:deviceId}}); jest.spyOn(service, 'checkpoint').mockResolvedValue();
   expect(await service.history(requestId, {}, user, 'Bearer original')).toEqual({ schemaVersion: 1, actorUserId: source.actorUserId, tenantId: source.tenant.id, requestId,
     events: [{ id: eventId, tenantId: source.tenant.id, requestId, deviceId, assignmentId, type: 'device.return.requested', version: 1, actorUserId: source.actorUserId, correlationId, createdAt: createdAt.toISOString(), before: null, after,
       inventoryOperationId: null, reason: 'Collect original laptop', deliveryStatus: 'pending' }], total: 1, page: 1, limit: 25 });
