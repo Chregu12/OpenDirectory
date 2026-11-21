@@ -23,15 +23,36 @@ Die Bestandsaufnahme umfasst die vorhandenen erreichbaren Funktionen und ihre Au
 | Bereich | Zu vereinfachender Ablauf | Stand |
 | --- | --- | --- |
 | Mitarbeiteraufnahme | Person erfassen, Gruppen vorbereiten und Einladung in einem zusammenhängenden Auftrag erstellen; Passwort und MFA richtet die Person selbst ein | Umgesetzt und ausgerollt (1.0.56) |
-| Benutzer, Gruppen und Organisation | Kontextbezogene Änderungen, Vorlagen und nachvollziehbare Mitgliedschafts-/Rollenwirkungen | Bestandsaufnahme |
-| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Firmenrollen-Kontext und Dauervorgaben ausgerollt (1.0.57); weitere MFA-Abläufe offen |
-| Apps, Lizenzen und Blueprints | Bestehende Regeln einmal einrichten, Zuweisungen und Bestände zusammen prüfen, erlaubte Folgeschritte mit klarer Herkunft | Bestandsaufnahme |
-| Geräte | Registrierung, Benutzerzuordnung, automatische Inventar-/Statusmeldungen, Compliance, Synchronisierung und Rückgabe | Bestandsaufnahme |
-| Austritt und Wiederherstellung | Bestehenden Austrittsablauf mit vollständiger Vorschau, nachvollziehbaren Teilständen und gezielter Wiederaufnahme bedienen | Bestandsaufnahme |
-| App-Konten und Automationen | Delegationen und Zeitpläne verständlich einrichten; Ergebnisse und erforderliche Eingriffe statt technischer Einzelschritte zeigen | Bestandsaufnahme |
-| Einstellungen, Richtlinien und Betrieb | Vorhandene Authentifizierungs-, Organisations-, Integrations-, Richtlinien-, Audit- und Betriebsaktionen anhand ihrer tatsächlichen Möglichkeiten vereinheitlichen | Bestandsaufnahme |
+| Benutzer, Gruppen und Organisation | Kontextbezogene Änderungen, Vorlagen und nachvollziehbare Mitgliedschafts-/Rollenwirkungen | Geprüft: Gruppenpflege per Namen und erklärende Formularhinweise offen (U04, U08) |
+| PIM und MFA | Passende Aufgabe finden, gezielt aktivieren, erforderliche Freigaben verstehen; Ablauf und Entzug automatisch verfolgen | Firmenrollen-Kontext und Dauervorgaben ausgerollt (1.0.57); Anmeldung, MFA-Einrichtung und Rückkehr vereinfachen (U02, U03, U11) |
+| Apps, Lizenzen und Blueprints | Bestehende Regeln einmal einrichten, Zuweisungen und Bestände zusammen prüfen, erlaubte Folgeschritte mit klarer Herkunft | Geprüft: Bestandsquellen klarer trennen und Wiederanmeldung vereinheitlichen (U07, U11) |
+| Geräte | Registrierung, Benutzerzuordnung, automatische Inventar-/Statusmeldungen, Compliance, Synchronisierung und Rückgabe | Geprüft: Inventar und Agent-Verbindung führen; Homelab-Sonderanleitung abgrenzen (U10, U12) |
+| Austritt und Wiederherstellung | Bestehenden Austrittsablauf mit vollständiger Vorschau, nachvollziehbaren Teilständen und gezielter Wiederaufnahme bedienen | Geprüft: ein personenbezogener Einstieg statt manueller Übernahme von Vorgangs-IDs (U05) |
+| App-Konten und Automationen | Delegationen und Zeitpläne verständlich einrichten; Ergebnisse und erforderliche Eingriffe statt technischer Einzelschritte zeigen | Geprüft: App-/Regelauswahl und tatsächliche Worker-Bereitschaft führen (U06) |
+| Einstellungen, Richtlinien und Betrieb | Vorhandene Authentifizierungs-, Organisations-, Integrations-, Richtlinien-, Audit- und Betriebsaktionen anhand ihrer tatsächlichen Möglichkeiten vereinheitlichen | Geprüft: fehlende Funktionen vor dem Klick erklären; technische Nachweise gezielt anbieten (U08, U09) |
 
 Ein Bereich ist erst erledigt, wenn seine tatsächlichen Aufrufer umgestellt sind, die vorhandenen Wirkungen erhalten bleiben und Erfolgs-, Teilfehler-, Rechte- und Wiederaufnahmefälle angemessen geprüft wurden. Ein neuer Dialog allein erfüllt den Auftrag nicht.
+
+## Bedienungsprüfung vom 21. November 2026
+
+**Ergebnis: Die Bedienung ist noch nicht durchgängig einfach.** Mitarbeiteraufnahme, personenbezogene Gruppen-/PIM-Aufgaben und die Inventarformulare bieten eine gute Grundlage. Anmeldung, MFA-Einrichtung, die Gruppenansicht, Austritt und Automationsfreigaben verlangen weiterhin zu viel technisches Vorwissen.
+
+Das aktuelle Inventar umfasst **60 registrierte Ansichten**, davon 43 grundsätzlich für die Navigation vorgesehen. Die tatsächlich sichtbaren Einträge bleiben von Rechten, Modulen und verfügbaren Diensten abhängig. Zusätzlich wurden elf öffentliche beziehungsweise weiterleitende Einstiege im Quelltext erfasst; die öffentliche Anmeldung und das tatsächliche Autorisierungsformular wurden im nativen Chrome betrachtet. Die Zuordnung verwendet die tatsächlich importierten Komponenten, auch bei Aliasnamen. Alte, nicht aufgerufene Komponenten wurden nicht als aktuelle Bedienoberfläche bewertet.
+
+Der [strukturierte Prüfbericht](usability-audit-2026-11-21.json) enthält alle Routen, die Prüftiefe sowie zwölf belegte Punkte mit Fundstellen und Abnahmekriterien. U01 ist im Prüfbranch umgesetzt: **Übersicht, Personen, Geräte, Apps & Lizenzen** ersetzen die gemischten englischen Hauptbereichsnamen. Zielrouten, Kontexte und Rechtefilter bleiben gleich. Diese kleine Änderung ist geprüft und noch nicht produktiv ausgerollt. Elf Punkte bleiben offen.
+
+| Reihenfolge | Zu verbessernder Ablauf | Konkrete Abnahme |
+| --- | --- | --- |
+| 1 | Anmeldung und MFA (U02, U03, U11) | Benötigten Code erkennen; Authenticator geführt einrichten; nach erneuter MFA zur ursprünglichen Aufgabe zurückkehren. |
+| 2 | Gruppenpflege und Formulare (U04, U08) | Namen auswählen, sofern Profil-Leserecht vorhanden; gesperrte Bestätigung erklärt die fehlende Eingabe oder Berechtigung. |
+| 3 | Austritt (U05) | Von der ausgewählten Person oder einem bestehenden Vorgang aus mit den ursprünglichen Nachweisen fortsetzen; keine IDs abschreiben. |
+| 4 | Automationen (U06) | App, Aufgabe und Regel geführt wählen; gespeicherten Zeitplan von tatsächlich betriebsbereitem Worker und ausgeführtem Job unterscheiden. |
+| 5 | Apps, Lizenzen und Geräte (U07, U10, U12) | Bestandsquelle und nächsten Verbindungsschritt erkennen; reguläre Geräteaufnahme von Homelab-DNS-/Zertifikatsänderungen trennen. |
+| 6 | Erweiterte Verwaltung (U09) | Nicht unterstützte Bearbeitung vor dem Klick erkennen; Erreichbarkeitstest und produktive Webhook-Zustellung unterscheiden. |
+
+Neu ausgeführt mit Next.js 16.4.5: **169 Frontend-Suiten / 3.367 Fälle**, **114 Playwright-Fälle** einschließlich aller 60 registrierten Seitenaufrufe, **75 Browser-Anmeldetests** und TypeScript erfolgreich. Die Hauptnavigation ist bei 320, 768, 1280 und 1920 Pixeln geprüft. Die Browserfälle verwenden einen echten Next-Server und Chrome mit abgefangenen API-Testantworten; sie prüfen nicht jede Aktion jeder Ansicht und bestätigen keine echten Anbieter-, Mail-, MDM- oder Hardwarewirkungen. Die beiden passenden Selektoren der nativen Dienst-Browsertests sind ebenfalls angepasst und syntaktisch geprüft; die vollständige Backend-/PostgreSQL-Browsersuite wurde für diese Bedienungsprüfung nicht erneut lokal ausgeführt.
+
+Eine angemeldete Produktivsitzung stand für diese Prüfung nicht zur Verfügung. Es wurden keine produktiven Konten, Berechtigungen, Geräte oder Einstellungen verändert. Ein vollständiger Screenreader-/Kontrasttest und eine formale WCAG-Abnahme sind nicht erfolgt. Die Prüfung und die kleine Navigationskorrektur sind kein Abschluss des gesamten Vereinfachungsauftrags.
 
 ## Mitarbeiteraufnahme: umgesetzter Stand
 

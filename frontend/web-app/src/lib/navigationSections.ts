@@ -1,9 +1,9 @@
 import type { ViewDefinition } from "./views";
 export const MAIN_SECTIONS = [
-  { id: "home", label: "Home", primary: "dashboard" },
-  { id: "people", label: "People", primary: "users" },
-  { id: "devices", label: "Devices", primary: "devices" },
-  { id: "apps", label: "Apps & Services", primary: "licenses" },
+  { id: "home", label: "Übersicht", primary: "dashboard" },
+  { id: "people", label: "Personen", primary: "users" },
+  { id: "devices", label: "Geräte", primary: "devices" },
+  { id: "apps", label: "Apps & Lizenzen", primary: "licenses" },
   { id: "automation", label: "Automationen", primary: "integrations" },
   { id: "administration", label: "Administration", primary: "servicehealth" },
 ] as const;

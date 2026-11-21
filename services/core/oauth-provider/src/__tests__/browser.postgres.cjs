@@ -2324,7 +2324,7 @@ test('real company registration UI persists one disabled tenant and candidate th
       const operatorPage = await accessContext.newPage(); await login(operatorPage, 'company-access-operator');
       const accessCalls = []; const profileCalls = [];
       operatorPage.on('request', request => { const pathname = new URL(request.url()).pathname; if (pathname.startsWith(accessRoute)) accessCalls.push(request); if (pathname === '/api/users' || pathname === '/api/users/' + employeeIds[0]) profileCalls.push(request); });
-      await operatorPage.getByRole('navigation', { name: 'Hauptbereiche' }).getByRole('button', { name: 'People', exact: true }).click();
+      await operatorPage.getByRole('navigation', { name: 'Hauptbereiche' }).getByRole('button', { name: 'Personen', exact: true }).click();
       await operatorPage.waitForURL(url => url.pathname !== '/dashboard');
       if (new URL(operatorPage.url()).pathname !== '/offboarding-access') {
         await operatorPage.getByRole('navigation', { name: 'Bereichsnavigation' }).getByRole('button', { name: 'Offboarding: Rollen & PIM', exact: true }).click();
@@ -2482,7 +2482,7 @@ test('real company registration UI persists one disabled tenant and candidate th
       const beforeRecovery = await allReturnState(); await returnPanel.getByRole('button', { name: 'Ursprünglichen Versuch wiederherstellen', exact: true }).click(); const recovery = page.getByRole('alertdialog', { name: 'Ursprüngliche Rückgabeaufträge bestätigen', exact: true }); await recovery.waitFor(); await recovery.getByRole('checkbox', { name: 'Ich bestätige genau diese ursprünglichen Gerätezuweisungen.', exact: true }).check();
       const recoveringRequests = page.waitForResponse(response => new URL(response.url()).pathname === deviceOffboardingRoute && response.request().method() === 'POST'); await recovery.getByRole('button', { name: 'Bestätigen', exact: true }).click(); const recovered = await recoveringRequests; assert.equal(recovered.status(), 200, await recovered.text()); assert.deepEqual(recovered.request().postDataJSON(), requestInput); assert.deepEqual((await recovered.json()).results, requestedReturns.results.map(result => ({ ...result, status: 'already_requested' }))); assert.deepEqual(await allReturnState(), beforeRecovery);
     }
-    await page.getByRole('navigation', { name: 'Hauptbereiche' }).getByRole('button', { name: 'Devices', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Hauptbereiche' }).getByRole('button', { name: 'Geräte', exact: true }).click();
     await page.waitForURL(url => url.pathname === '/devices' || url.pathname === '/device-returns');
     const readingGeneralReturns = page.waitForResponse(response => new URL(response.url()).pathname === deviceReturnBase && response.request().method() === 'GET');
     if (new URL(page.url()).pathname !== '/device-returns') await page.getByRole('navigation', { name: 'Bereichsnavigation' }).getByRole('button', { name: 'Geräterückgaben', exact: true }).click();
