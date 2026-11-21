@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import UnifiLayout from '@/components/layout/UnifiLayout';
 import { api } from '@/lib/api';
 
@@ -12,13 +12,13 @@ test('keeps the active chapter open and unavailable extensions out of navigation
   render(<UnifiLayout activeView="users" currentUser={user} onViewChange={jest.fn()}>Content</UnifiLayout>);
   expect((await screen.findByText('Unternehmen & Personen')).closest('details')).toHaveAttribute('open');
   expect(screen.queryByText('Apps & Lizenzen', { selector: 'summary' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'People' })).toHaveAttribute('aria-current','true');
+  expect(screen.getByRole('button', { name: 'Personen' })).toHaveAttribute('aria-current','true');
   expect(screen.queryByRole('button', { name: 'Antivirus' })).not.toBeInTheDocument();
 });
 test('opening a chapter survives header updates and links navigate', async () => {
   const navigate = jest.fn();
   render(<UnifiLayout activeView="dashboard" currentUser={user} onViewChange={navigate}>Content</UnifiLayout>);
-  fireEvent.click(await screen.findByRole('button',{name:'Apps & Services'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Apps & Lizenzen'}));
   const summary = await screen.findByText('Apps & Lizenzen', { selector: 'summary' });
   fireEvent.click(summary); fireEvent.click(summary);
   expect(summary.closest('details')).toHaveAttribute('open');
@@ -41,9 +41,9 @@ test('failed notification queries never announce healthy services', async () => 
 
 test('main areas and contextual dropdowns preserve the currently authorized task set', async()=>{
  const navigate=jest.fn();const {rerender}=render(<UnifiLayout activeView="users" currentUser={user} onViewChange={navigate}>Content</UnifiLayout>);
- await screen.findByRole('button',{name:'Apps & Services'});
+ await screen.findByRole('button',{name:'Apps & Lizenzen'});
  expect(screen.queryByRole('button',{name:'Brands'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Ads'})).not.toBeInTheDocument();
- fireEvent.click(screen.getByRole('button',{name:'Devices'}));expect(await screen.findByText('Geräte',{selector:'summary'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Mitarbeitende'})).not.toBeInTheDocument();
+ fireEvent.click(within(screen.getByRole('navigation',{name:'Hauptbereiche'})).getByRole('button',{name:'Geräte',exact:true}));expect(await screen.findByText('Geräte',{selector:'summary'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Mitarbeitende'})).not.toBeInTheDocument();
  rerender(<UnifiLayout activeView="devices" currentUser={user} onViewChange={navigate}>Content</UnifiLayout>);
- fireEvent.click(screen.getByRole('button',{name:'People'}));expect(navigate).toHaveBeenLastCalledWith('users');expect(screen.getByRole('button',{name:'Mitarbeitende'})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Personen'}));expect(navigate).toHaveBeenLastCalledWith('users');expect(screen.getByRole('button',{name:'Mitarbeitende'})).toBeInTheDocument();
 });

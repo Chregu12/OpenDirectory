@@ -1,0 +1,1736 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-21",
+  "baseCommit": "5068c28df70227eb6b48f95970e070738ea75644",
+  "scope": "All registered routes, public sign-in and eight workflow families",
+  "routeCount": 60,
+  "mainNavigationCount": 43,
+  "routes": [
+    {
+      "route": "/dashboard",
+      "name": "Übersicht",
+      "group": "Übersicht",
+      "audience": "self",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/DashboardView.tsx",
+        "frontend/web-app/src/components/views/WorkspaceOverview.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/organization",
+      "name": "Organisation",
+      "group": "Unternehmen & Personen",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/OrganizationView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/registration-reviews",
+      "name": "Firmenprüfung",
+      "group": "Administration",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyRegistrationReviewsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/users",
+      "name": "Mitarbeitende",
+      "group": "Unternehmen & Personen",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/UsersView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/UsersView.tsx",
+          "line": 77
+        }
+      ],
+      "findingIds": [
+        "U04",
+        "U05"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/employee-invitations",
+      "name": "Einladungen",
+      "group": "Unternehmen & Personen",
+      "audience": "owner",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/EmployeeInvitationManager.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/usergroups",
+      "name": "Gruppen",
+      "group": "Unternehmen & Personen",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/UserGroupsView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/UserGroupsView.tsx",
+          "line": 91
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/UserGroupsView.tsx",
+          "line": 92
+        }
+      ],
+      "findingIds": [
+        "U04"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/company-roles",
+      "name": "Firmenrollen",
+      "group": "Administration",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyRolesView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyRolesView.tsx",
+          "line": 117
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyRolesView.tsx",
+          "line": 119
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/permissions",
+      "name": "Rollen & Rechte",
+      "group": "Administration",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/RolesView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/pim",
+      "name": "PIM",
+      "group": "Administration",
+      "audience": "self",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/PIMView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/offboarding-access",
+      "name": "Offboarding: Rollen & PIM",
+      "group": "Unternehmen & Personen",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyOffboardingAccessView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyOffboardingAccessView.tsx",
+          "line": 23
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyOffboardingAccessView.tsx",
+          "line": 39
+        }
+      ],
+      "findingIds": [
+        "U05"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/mfa",
+      "name": "MFA / 2FA",
+      "group": "Administration",
+      "audience": "self",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/MFAView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/MFAView.tsx",
+          "line": 70
+        }
+      ],
+      "findingIds": [
+        "U03"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/sspr",
+      "name": "Passwort zurücksetzen",
+      "group": "Administration",
+      "audience": "self",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/SSPRView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/identity",
+      "name": "Identitätsanbieter",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/IdentityProviderView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U02"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/sync",
+      "name": "Verzeichnis-Sync",
+      "group": "Automatisierung & Integrationen",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/SyncView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/SyncView.tsx",
+          "line": 523
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/SyncView.tsx",
+          "line": 527
+        }
+      ],
+      "findingIds": [
+        "U06"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/devices",
+      "name": "Geräte",
+      "group": "Geräte",
+      "audience": "owner-or-admin",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/DeviceInventoryView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/DeviceInventoryView.tsx",
+          "line": 100
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/DeviceInventoryView.tsx",
+          "line": 275
+        }
+      ],
+      "findingIds": [
+        "U10"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/device-returns",
+      "name": "Geräterückgaben",
+      "group": "Geräte",
+      "audience": "owner-or-admin",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/DeviceReturnsView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/DeviceReturnsView.tsx",
+          "line": 124
+        }
+      ],
+      "findingIds": [
+        "U05",
+        "U10"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/enrollment",
+      "name": "Enrollment",
+      "group": "Geräte",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "quick-actions",
+      "primarySources": [
+        "frontend/web-app/src/components/views/EnrollmentHubView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U10",
+        "U12"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/blueprints",
+      "name": "Plattform-Blueprints",
+      "group": "Blueprints",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 19
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 20
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 33
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 35
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 38
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/BlueprintConfigurationView.tsx",
+          "line": 40
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/company-blueprints",
+      "name": "Firmen-Blueprints",
+      "group": "Blueprints",
+      "audience": "owner-or-admin",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 31
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 141
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 187
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 189
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 192
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 205
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 220
+        }
+      ],
+      "findingIds": [
+        "U08",
+        "U11"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/printers",
+      "name": "Drucker",
+      "group": "Geräte",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "printer-service",
+      "primarySources": [
+        "frontend/web-app/src/components/views/PrintersView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PrintersView.tsx",
+          "line": 1997
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PrintersView.tsx",
+          "line": 2342
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PrintersView.tsx",
+          "line": 2383
+        }
+      ],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/applications",
+      "name": "Apps & Lizenzen",
+      "group": "Apps & Lizenzen",
+      "audience": "owner-or-admin",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyApplicationsView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyApplicationsView.tsx",
+          "line": 334
+        }
+      ],
+      "findingIds": [
+        "U05",
+        "U07"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/appstore",
+      "name": "App Store",
+      "group": "Apps & Lizenzen",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "app-store",
+      "primarySources": [
+        "frontend/web-app/src/components/views/AppStoreView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U07"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/licenses",
+      "name": "Lizenzverwaltung",
+      "group": "Apps & Lizenzen",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/LicenseKioskView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/LicenseKioskView.tsx",
+          "line": 249
+        }
+      ],
+      "findingIds": [
+        "U07",
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/monitoring",
+      "name": "Monitoring",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/MonitoringView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/servicehealth",
+      "name": "Dienstzustand",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/ServiceHealthView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/audit",
+      "name": "Audit Log",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/AuditView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/AuditView.tsx",
+          "line": 73
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/AuditView.tsx",
+          "line": 219
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/alerting",
+      "name": "Benachrichtigungen",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/AlertingView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/AlertingView.tsx",
+          "line": 108
+        }
+      ],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/integrations",
+      "name": "Integrationen",
+      "group": "Automatisierung & Integrationen",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/IntegrationsView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "unfinishedControl",
+          "file": "frontend/web-app/src/components/views/IntegrationsView.tsx",
+          "line": 521
+        }
+      ],
+      "findingIds": [
+        "U07",
+        "U09"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/backup",
+      "name": "Sicherung & Wiederherstellung",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/BackupView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/settings",
+      "name": "Einstellungen",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/SettingsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/topology",
+      "name": "Netzwerk",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "network-infrastructure",
+      "primarySources": [
+        "frontend/web-app/src/components/views/TopologyView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/infrastructure",
+      "name": "Infrastruktur",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "network-infrastructure",
+      "primarySources": [
+        "frontend/web-app/src/components/views/InfrastructureView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/radius",
+      "name": "RADIUS / 802.1X",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "network-infrastructure",
+      "primarySources": [
+        "frontend/web-app/src/components/views/RadiusView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "unfinishedControl",
+          "file": "frontend/web-app/src/components/views/RadiusView.tsx",
+          "line": 562
+        }
+      ],
+      "findingIds": [
+        "U09"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/security",
+      "name": "Security",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/SecurityView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/antivirus",
+      "name": "Antivirus",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "antivirus-protection",
+      "primarySources": [
+        "frontend/web-app/src/components/views/AntivirusView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/conditionalaccess",
+      "name": "Conditional Access",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "conditional-access",
+      "primarySources": [
+        "frontend/web-app/src/components/views/ConditionalAccessView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/certificates",
+      "name": "Zertifikate / PKI",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "certificate-authority",
+      "primarySources": [
+        "frontend/web-app/src/components/views/CertificatesView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/compliance",
+      "name": "Compliance",
+      "group": "Administration",
+      "audience": "owner-or-admin",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/DeviceComplianceView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U10"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/scanner",
+      "name": "Security Scanner",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "security-scanner",
+      "primarySources": [
+        "frontend/web-app/src/components/views/SecurityScannerView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/secrets",
+      "name": "Secrets",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": true,
+      "canonical": null,
+      "service": "vault-integration",
+      "primarySources": [
+        "frontend/web-app/src/components/views/SecretsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/roadmap",
+      "name": "Roadmap & TODO",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/RoadmapView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/policies",
+      "name": "Richtlinien",
+      "group": "Blueprints",
+      "audience": "permissions",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/PolicyGovernanceView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 40
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 43
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 76
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 84
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 86
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 91
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/company-apps",
+      "name": "Firmen-App-Konten",
+      "group": "Automatisierung & Integrationen",
+      "audience": "owner",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyAppsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U06"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/automation",
+      "name": "Automationen",
+      "group": "Automatisierung & Integrationen",
+      "audience": "owner",
+      "navigation": true,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/CompanyAutomationView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 89
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 97
+        }
+      ],
+      "findingIds": [
+        "U06",
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/fleet",
+      "name": "Erweiterte Geräteansicht",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": "/devices",
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/DeviceInventoryView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/DeviceInventoryView.tsx",
+          "line": 100
+        },
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/DeviceInventoryView.tsx",
+          "line": 275
+        }
+      ],
+      "findingIds": [
+        "U10"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/serviceprincipals",
+      "name": "Service Principals",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/ServicePrincipalsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U06"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/subscription",
+      "name": "Abonnement",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/SubscriptionView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/activity",
+      "name": "Aktivitäten",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/ActivityView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/locations",
+      "name": "Standorte",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/LocationsView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/roles",
+      "name": "Rollen & Rechte",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": "/permissions",
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/RolesView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/assignment",
+      "name": "Zuweisungshistorie",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": "/devices",
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/AssignmentView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U10"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/appsbooks",
+      "name": "Apps und Bücher",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/AppsBooksView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [
+        "U07"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/gpo",
+      "name": "Gruppenrichtlinien",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": "/policies",
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/PolicyGovernanceView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 40
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 43
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 76
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 84
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 86
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicyGovernanceView.tsx",
+          "line": 91
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/ldap-schema",
+      "name": "LDAP-Schema",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/LDAPSchemaBrowserView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/trusts",
+      "name": "Vertrauensstellungen",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/TrustManagementView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/kerberos",
+      "name": "Kerberos",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/KerberosAdminView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/KerberosAdminView.tsx",
+          "line": 517
+        }
+      ],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/replication",
+      "name": "Replikation",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/ReplicationView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/ReplicationView.tsx",
+          "line": 432
+        }
+      ],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/graph",
+      "name": "Objektgraph",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/GraphExplorerView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/simulator",
+      "name": "Richtliniensimulation",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/PolicySimulatorView.tsx"
+      ],
+      "sourceSignals": [
+        {
+          "kind": "technicalIdentifier",
+          "file": "frontend/web-app/src/components/views/PolicySimulatorView.tsx",
+          "line": 123
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicySimulatorView.tsx",
+          "line": 155
+        },
+        {
+          "kind": "technicalPayload",
+          "file": "frontend/web-app/src/components/views/PolicySimulatorView.tsx",
+          "line": 166
+        }
+      ],
+      "findingIds": [
+        "U08"
+      ],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    },
+    {
+      "route": "/threats",
+      "name": "Bedrohungen",
+      "group": "Administration",
+      "audience": "platform",
+      "navigation": false,
+      "canonical": null,
+      "service": null,
+      "primarySources": [
+        "frontend/web-app/src/components/views/ThreatDashboardView.tsx"
+      ],
+      "sourceSignals": [],
+      "findingIds": [],
+      "reviewDepth": "source surface and registered-route rendering with API fixtures; production business actions not exercised",
+      "noFindingDoesNotMeanFullAcceptance": true
+    }
+  ],
+  "conclusion": "Not consistently simple yet. Employee intake, person-context PIM and typed inventory forms provide a useful foundation; authentication setup, reverse group membership, offboarding and automation still demand technical knowledge.",
+  "method": {
+    "routeResolution": "TypeScript AST of the current VIEWS registry and actual page imports, including component aliases; unused legacy component files are not substituted for reachable routes.",
+    "sourceSignals": "Mechanical scan of primary sources; technical IDs can be valid fallbacks when profile access is absent and are not automatically defects.",
+    "workflowReview": "Targeted code review across the eight families in operations-simplification-worklist.md, including relevant child panels.",
+    "browserTests": "Real Next dev server and installed Chrome; API responses intercepted by repository fixtures. All registered routes render, but not every action of every route is exercised.",
+    "nativeBrowser": "Public login and actual authorize form viewed in native Chrome. No authenticated production session was available.",
+    "usabilityCriteria": [
+      "recognizable task and next step",
+      "names and retained context instead of copying identifiers",
+      "safe defaults and limited initial choices",
+      "visible validation and reasons for disabled actions",
+      "honest confirmed, pending, partial and unknown results",
+      "keyboard and small-screen navigation",
+      "current permissions, MFA and explicit consequential confirmations preserved"
+    ],
+    "visualSpotChecks": {
+      "scope": "Fixture screenshots, not authenticated production",
+      "reviewed": [
+        "device hardware at mobile width",
+        "provider inventory at mobile width",
+        "PIM desktop light theme"
+      ]
+    }
+  },
+  "validation": {
+    "nextVersion": "16.4.5",
+    "frontendSuites": 169,
+    "frontendTests": 3367,
+    "playwrightCases": 114,
+    "registeredRouteRenderCases": 60,
+    "navigationWidths": [
+      320,
+      768,
+      1280,
+      1920
+    ],
+    "browserAuthCases": 75,
+    "typescript": "passed",
+    "allListedLocalChecks": "passed"
+  },
+  "production": {
+    "authenticatedBusinessFlowsReviewedLive": false,
+    "productionWritesPerformed": false,
+    "deploymentPerformed": false,
+    "versionObserved": "1.0.57",
+    "helmRevisionObserved": 90,
+    "releaseStatusObserved": "deployed",
+    "observationMethod": "Read-only Helm release query on 2026-11-21"
+  },
+  "findings": [
+    {
+      "id": "U01",
+      "priority": 2,
+      "status": "fixed-in-branch",
+      "title": "Hauptnavigation verwendet mehrere Sprachen",
+      "effect": "Home, People, Devices und Apps & Services passen nicht zu den deutschen Aufgabenbezeichnungen.",
+      "change": "Gemeinsame Hauptnavigation: Übersicht, Personen, Geräte, Apps & Lizenzen. IDs, Zielrouten und Rechtefilter bleiben erhalten.",
+      "acceptance": "Die aktuelle Aufgabe bleibt markiert; dieselben berechtigten Ziele sind bei 320, 768, 1280 und 1920 Pixeln erreichbar.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/lib/navigationSections.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "id": "U02",
+      "priority": 1,
+      "status": "open",
+      "title": "Zwei Einmalcode-Felder bei der normalen Anmeldung",
+      "effect": "Schon die erste Anmeldung verlangt die Unterscheidung zwischen Passwortanbieter-Code und OpenDirectory-Code. Beide Felder werden zugleich gezeigt.",
+      "change": "Den benötigten Authenticator im konkreten Anmeldeschritt verständlich erklären; zusätzliche Anbieteroptionen gezielt führen. Keine Benutzer- oder Richtlinieninformationen vor erfolgreicher Berechtigungsprüfung offenlegen.",
+      "acceptance": "Eine Person mit einem Faktor erkennt ohne Fachwissen, in welches Feld ihr Code gehört. Beide Faktoren bleiben bei tatsächlich erforderlicher Mehrfachprüfung wirksam.",
+      "evidence": [
+        {
+          "file": "services/core/oauth-provider/src/index.js",
+          "line": 483
+        }
+      ],
+      "liveEvidence": "Öffentliche Login- und Autorisierungsseite im nativen Chrome betrachtet; keine Anmeldedaten eingegeben."
+    },
+    {
+      "id": "U03",
+      "priority": 1,
+      "status": "open",
+      "title": "MFA-Einrichtung erfordert manuelle Schlüsselübernahme",
+      "effect": "Der angemeldete MFA-Bereich erklärt SHA-1, sechs Stellen und 30 Sekunden und zeigt einen geheimen Textschlüssel. Ein QR-Code wird dort nicht gerendert.",
+      "change": "Eine geführte Einrichtung mit QR-Code, Bestätigung und anschließenden Notfallcodes; manuelle Einrichtung als Alternative. Vorhandene otpauthUri geschützt lokal verwenden, keinen externen QR-Dienst.",
+      "acceptance": "Scan → sechsstelligen Code bestätigen → Notfallcodes sichern → erneut anmelden; Geheimnisse werden nicht protokolliert oder dauerhaft im Browser gespeichert.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/MFAView.tsx",
+          "line": 70
+        },
+        {
+          "file": "frontend/web-app/src/lib/verifiedMfa.ts",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "id": "U04",
+      "priority": 1,
+      "status": "open",
+      "title": "Gruppenpflege verlangt weiterhin Benutzer-IDs",
+      "effect": "In den Gruppendetails werden Mitglieder als UUIDs dargestellt; Hinzufügen verlangt eine bekannte Benutzer-ID. Der bereits bessere Personenweg ist nicht in beiden Richtungen verfügbar.",
+      "change": "Bei vorhandenem users.read Namen suchen und auswählen; bestehende Mitglieder verständlich benennen. Für Personen ohne Profil-Leserecht bleibt der ausdrücklich benannte ID-Weg erhalten.",
+      "acceptance": "Mitglied aus der Gruppe heraus per Namen auswählen, Wirkung vor Bestätigung erklären und anschließend den bestätigten Mitgliedschaftsstand zeigen. Kein zusätzlicher Profilzugriff ohne bestehendes Recht.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/UserGroupsView.tsx",
+          "line": 83
+        },
+        {
+          "file": "frontend/web-app/src/components/views/UserGroupsView.tsx",
+          "line": 91
+        }
+      ]
+    },
+    {
+      "id": "U05",
+      "priority": 1,
+      "status": "open",
+      "title": "Austritt ist über mehrere Arbeitsbereiche verteilt",
+      "effect": "Rollen-/PIM-Entzug verlangt Benutzer-ID und ursprüngliche Kontosperr-Vorgangs-ID. Lizenz- und Blueprint-Rückgaben haben zusätzliche Einstiege im App-Bereich.",
+      "change": "Vom gewählten Mitarbeiter oder bestehenden Austrittsvorgang aus fortsetzen; bestätigte Originalnachweise übernehmen und alle Teilschritte mit Ergebnis anzeigen.",
+      "acceptance": "Person → Austritt prüfen → bestätigte Schritte fortsetzen, ohne UUIDs abzuschreiben. Ursprüngliche Kontogeneration, unabhängige Rechte, Teilfehler und unbekannte Schreibausgänge bleiben verbindlich.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/CompanyOffboardingAccessView.tsx",
+          "line": 23
+        },
+        {
+          "file": "frontend/web-app/src/components/views/CompanyOffboardingV2Panel.tsx",
+          "line": 93
+        }
+      ]
+    },
+    {
+      "id": "U06",
+      "priority": 2,
+      "status": "open",
+      "title": "Automationen sind noch ein technischer Einrichtungsprozess",
+      "effect": "App-Anmeldungs-ID, Client-Generation, Regel-IDs und ein separat zu startender CLI-Worker müssen zusammengebracht werden. Ein gespeicherter Zeitplan allein führt noch nichts aus.",
+      "change": "App, erlaubte Aufgabe und benannte Regel in einem Ablauf auswählen; tatsächliche Worker-Bereitschaft und letzte Ausführung sichtbar machen.",
+      "acceptance": "App → Aufgabe → Freigabe → Zeitplan. Ohne beobachteten Worker wird verständlich angezeigt, weshalb noch keine Ausführung erfolgen kann. Keine automatische Ausweitung von App-Rechten.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 74
+        },
+        {
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "id": "U07",
+      "priority": 2,
+      "status": "open",
+      "title": "Firmenbestand und zentrale Lizenzverwaltung sind schwer zu unterscheiden",
+      "effect": "Apps & Lizenzen, Lizenzverwaltung und App Store bedienen verschiedene Rechte und Datenquellen. Ähnliche Bezeichnungen vermitteln zu leicht einen gemeinsamen Bestand oder eine bestätigte Herstellerwirkung.",
+      "change": "Firmenlizenzen, Plattformverwaltung und externe Anbieter klar benennen; aus der konkreten App zum passenden vorhandenen Ablauf führen.",
+      "acceptance": "Vor jeder Zuweisung sind Firma, Quelle, Empfänger, Bestandswirkung und beobachteter Anbieterstatus verständlich. Getrennte Berechtigungen und Bestände werden nicht zusammengelegt.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/CompanyApplicationsView.tsx",
+          "line": 228
+        },
+        {
+          "file": "frontend/web-app/src/components/views/LicenseKioskView.tsx",
+          "line": 788
+        }
+      ]
+    },
+    {
+      "id": "U08",
+      "priority": 1,
+      "status": "open",
+      "title": "Gesperrte Bestätigungen erklären nicht immer die fehlende Eingabe",
+      "effect": "Beispiel Automationsfreigabe: Der Bestätigungsbutton bleibt bei einer Begründung unter zehn Zeichen gesperrt, ohne dass dieses Minimum direkt am Eingabefeld erklärt wird. Technische Bezeichnungen erhöhen die Sucharbeit zusätzlich.",
+      "change": "Erforderliche Angaben, Mindestlängen und konkrete nächste Schritte direkt am Feld beziehungsweise an der gesperrten Aktion erklären; technische Nachweise in Details belassen.",
+      "acceptance": "Bei jeder gesperrten Bestätigung ist ohne Ausprobieren erkennbar, welche Angabe oder welches Recht fehlt. Pflichtbegründungen, Nachweise und Bestätigung werden nicht entfernt.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 79
+        },
+        {
+          "file": "frontend/web-app/src/components/views/CompanyAutomationView.tsx",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "id": "U09",
+      "priority": 2,
+      "status": "open",
+      "title": "Nicht verfügbare Funktionen sind unterschiedlich dargestellt",
+      "effect": "RADIUS besitzt einen klickbaren Bearbeiten-Knopf, der nur einen Nicht-implementiert-Hinweis zeigt. Bei Webhooks wird dagegen korrekt erklärt, dass produktive signierte Ereigniszustellung noch fehlt.",
+      "change": "Nicht unterstützte Aktionen vor dem Klick eindeutig kennzeichnen; bei Integrationen Einrichtung, Erreichbarkeitstest und echte Ereigniszustellung klar trennen.",
+      "acceptance": "Kein aktiver Knopf verspricht eine nicht umgesetzte Bearbeitung. Ein gespeicherter Webhook oder erfolgreicher Test wird nicht als produktive Ereigniszustellung dargestellt.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/RadiusView.tsx",
+          "line": 562
+        },
+        {
+          "file": "frontend/web-app/src/components/views/IntegrationsView.tsx",
+          "line": 520
+        }
+      ]
+    },
+    {
+      "id": "U10",
+      "priority": 2,
+      "status": "open",
+      "title": "Geräteinventar und tatsächliche Verbindung benötigen mehr Führung",
+      "effect": "Inventarerfassung ist ein normaler Formularablauf; Agent-Registrierung und Installation verlangen anschließend Paketwahl, Terminalbefehle und Administratorrechte.",
+      "change": "Inventar, Registrierung, Agent-Verbindung und erste Meldung als zusammenhängende Schritte zeigen. Beobachtete Hardwaredaten nur aus verifizierten Meldungen übernehmen.",
+      "acceptance": "Nach der Erfassung ist der nächste Schritt klar; ein Inventareintrag wird erst nach tatsächlicher Meldung als verbunden dargestellt. Paket- und Geräteauthentifizierung bleiben erhalten.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/DeviceInventoryEditor.tsx",
+          "line": 15
+        },
+        {
+          "file": "frontend/web-app/src/components/views/DeviceAgentPanel.tsx",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "id": "U11",
+      "priority": 1,
+      "status": "open",
+      "title": "Erneute MFA-Anmeldung führt nicht überall gleich gut zurück",
+      "effect": "Firmenlizenzen und kontextbezogene PIM-Zuweisung bieten konkrete Wiederanmeldewege. Der Fehlerbereich der Firmen-Blueprints zeigt dagegen Fehlertext und Neuladen, ohne eigenen Wiederanmelde-Link.",
+      "change": "Aktuelle lokale Aufgabe nach erneuter Anmeldung gezielt wieder öffnen; Gegenstand und geprüften Zwischenstand übernehmen, keine Passwörter oder Geheimnisse speichern und keine Schreibaktion automatisch wiederholen.",
+      "acceptance": "Bei abgelaufener MFA ist Anmeldung bestätigen direkt erreichbar. Rückkehrziele bleiben streng lokal erlaubt und werden nach der Anmeldung erneut auf aktuelle Rechte geprüft.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/components/views/CompanyApplicationsView.tsx",
+          "line": 232
+        },
+        {
+          "file": "frontend/web-app/src/components/views/CompanyBlueprintsView.tsx",
+          "line": 151
+        }
+      ]
+    },
+    {
+      "id": "U12",
+      "priority": 1,
+      "status": "open",
+      "title": "Öffentlicher Enrollment-Einstieg ist eine Homelab-Sonderanleitung",
+      "effect": "/enroll enthält feste DNS-/Druckerwerte, sudo-Befehle und einen ungesicherten Zertifikatsdownload mit anschließendem Root-CA-Import. Das ist kein allgemeiner, einfacher Geräte-Onboardingweg.",
+      "change": "Homelab-Systemadministration und reguläre Geräteaufnahme getrennt benennen; Einrichtungsdaten aus bestätigter Konfiguration beziehen und Zertifikatsvertrauen nachvollziehbar prüfen.",
+      "acceptance": "Ein normaler Gerätebenutzer erhält keine ungeprüften Root-CA-Import- oder fest verdrahteten DNS-Befehle als Standardweg. Systemweite Änderungen bleiben ausdrücklich sichtbar und geschützt.",
+      "evidence": [
+        {
+          "file": "frontend/web-app/src/app/enroll/page.tsx",
+          "line": 4
+        },
+        {
+          "file": "frontend/web-app/src/app/enroll/page.tsx",
+          "line": 6
+        }
+      ]
+    }
+  ],
+  "publicEntries": [
+    {
+      "route": "/",
+      "source": "frontend/web-app/src/app/page.tsx",
+      "findingIds": [],
+      "evidence": "redirect"
+    },
+    {
+      "route": "/login",
+      "source": "frontend/web-app/src/app/login/page.tsx",
+      "findingIds": [
+        "U02"
+      ],
+      "evidence": "native-browser-read-only"
+    },
+    {
+      "route": "/oauth/authorize",
+      "source": "services/core/oauth-provider/src/index.js",
+      "findingIds": [
+        "U02"
+      ],
+      "evidence": "native-browser-read-only"
+    },
+    {
+      "route": "/register",
+      "source": "frontend/web-app/src/app/register/page.tsx",
+      "findingIds": [],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/forgot-password",
+      "source": "frontend/web-app/src/app/forgot-password/page.tsx",
+      "findingIds": [],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/reset-password",
+      "source": "frontend/web-app/src/app/reset-password/page.tsx",
+      "findingIds": [],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/enroll",
+      "source": "frontend/web-app/src/app/enroll/page.tsx",
+      "findingIds": [
+        "U12"
+      ],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/employees/accept",
+      "source": "frontend/web-app/src/app/employees/accept/page.tsx",
+      "findingIds": [],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/auth/mfa-enroll",
+      "source": "frontend/web-app/src/app/auth/mfa-enroll/page.tsx",
+      "findingIds": [
+        "U02"
+      ],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/auth/mfa-recovery",
+      "source": "frontend/web-app/src/app/auth/mfa-recovery/page.tsx",
+      "findingIds": [],
+      "evidence": "source-only"
+    },
+    {
+      "route": "/unifi",
+      "source": "frontend/web-app/src/app/unifi/page.tsx",
+      "findingIds": [],
+      "evidence": "redirect"
+    }
+  ],
+  "limitations": [
+    "No authenticated production business actions were performed; public forms were only viewed.",
+    "Fixture browser tests are technical regression checks, not a user study or proof of external-provider, mail, MDM or hardware behavior.",
+    "Full screen-reader, color-contrast and complete WCAG acceptance were not performed.",
+    "An empty route finding list means no additional issue was recorded in this scoped review; it does not certify every interaction."
+  ],
+  "proposedWorkOrder": [
+    [
+      "U02",
+      "U03",
+      "U11"
+    ],
+    [
+      "U04",
+      "U08"
+    ],
+    [
+      "U05"
+    ],
+    [
+      "U06"
+    ],
+    [
+      "U07"
+    ],
+    [
+      "U10",
+      "U12"
+    ],
+    [
+      "U09"
+    ]
+  ]
+}
