@@ -1390,7 +1390,10 @@
     ],
     "browserAuthCases": 75,
     "typescript": "passed",
-    "allListedLocalChecks": "passed"
+    "allListedLocalChecks": "passed",
+    "applicationChangesTestedAt": "7d5d374f5d5a148132324cab7f6ce608290028f4",
+    "postValidationRuntimeChanges": false,
+    "nativeBackendBrowserSuite": "Not rerun locally; its two main-navigation selectors were updated to the tested German labels and the fixture passed node --check"
   },
   "production": {
     "authenticatedBusinessFlowsReviewedLive": false,
